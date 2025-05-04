@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { loadData, saveData, exportData } from '@/lib/storage';
+import { loadData, saveData, exportData, exportDataCSV } from '@/lib/storage';
 import MetricGrid from './MetricGrid';
 import FileImport from './FileImport';
 import { useToast } from '@/components/ui/use-toast';
@@ -8,6 +8,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 const MidnightTracker: React.FC = () => {
   const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
+  const [exportFormat, setExportFormat] = useState<'json' | 'csv'>('json');
   const { toast } = useToast();
 
   // Register keyboard shortcuts
@@ -38,7 +39,7 @@ const MidnightTracker: React.FC = () => {
     
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [exportFormat]);
 
   const handleAddMetric = () => {
     const data = loadData();
@@ -81,10 +82,15 @@ const MidnightTracker: React.FC = () => {
   };
 
   const handleExport = () => {
-    exportData();
+    if (exportFormat === 'json') {
+      exportData();
+    } else {
+      exportDataCSV();
+    }
+    
     toast({
       title: "Export started",
-      description: "Your data is being downloaded as a JSON file."
+      description: `Your data is being downloaded as a ${exportFormat.toUpperCase()} file.`
     });
   };
 
@@ -93,44 +99,44 @@ const MidnightTracker: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col min-h-screen">
-      <header className="py-4 px-6 border-b border-terminal-accent">
-        <div className="flex items-center justify-between">
-          <h1 className="text-terminal-text text-2xl font-mono font-bold">Midnight Tracker</h1>
-          <div className="text-sm text-terminal-accent">
-            <div className="animate-pulse-subtle">Personal metric tracking system</div>
-            <div className="mt-1 text-xs">
-              Keyboard shortcuts: Ctrl+M (New Metric), Ctrl+N (New Day), Ctrl+E (Export), Ctrl+I (Import)
-            </div>
+    <div className="flex flex-col min-h-full">
+      <div className="mb-4 flex flex-wrap gap-2">
+        <button className="terminal-button" onClick={handleAddMetric}>
+          Add Metric
+        </button>
+        <button className="terminal-button" onClick={handleAddDay}>
+          New Day
+        </button>
+        <div className="flex items-center">
+          <div className="flex border border-terminal-accent mr-2">
+            <button 
+              className={`px-2 py-1 ${exportFormat === 'json' ? 'bg-terminal-accent text-terminal-bg' : ''}`}
+              onClick={() => setExportFormat('json')}
+            >
+              JSON
+            </button>
+            <button 
+              className={`px-2 py-1 ${exportFormat === 'csv' ? 'bg-terminal-accent text-terminal-bg' : ''}`}
+              onClick={() => setExportFormat('csv')}
+            >
+              CSV
+            </button>
           </div>
-        </div>
-      </header>
-
-      <main className="flex-1 p-6">
-        <div className="mb-4 flex flex-wrap gap-2">
-          <button className="terminal-button" onClick={handleAddMetric}>
-            Add Metric
-          </button>
-          <button className="terminal-button" onClick={handleAddDay}>
-            New Day
-          </button>
           <button className="terminal-button" onClick={handleExport}>
-            Export JSON
+            Export {exportFormat.toUpperCase()}
           </button>
-          <div id="import-button">
-            <FileImport onImportSuccess={handleImportSuccess} />
-          </div>
         </div>
+        <div id="import-button">
+          <FileImport onImportSuccess={handleImportSuccess} />
+        </div>
+      </div>
 
-        <div className="bg-terminal-highlight p-1">
+      <div className="flex-1">
+        <div className="bg-terminal-highlight p-1 h-full">
           {/* This key forces the component to re-render when data changes */}
           <MetricGrid key={refreshTrigger} onAddMetric={handleAddMetric} onAddDay={handleAddDay} />
         </div>
-      </main>
-
-      <footer className="py-3 px-6 border-t border-terminal-accent text-sm text-terminal-accent/70 text-center">
-        <p>Midnight Tracker • Terminal-based personal metrics • Data stored locally</p>
-      </footer>
+      </div>
     </div>
   );
 };

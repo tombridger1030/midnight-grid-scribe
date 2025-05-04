@@ -58,6 +58,10 @@ export default {
 					text: '#CFCFCF',
 					accent: '#888888',
 					highlight: '#444444',
+					green: '#00FF00',
+					cyan: '#00FFFF',
+					yellow: '#FFFF00',
+					red: '#FF5555'
 				},
 				sidebar: {
 					DEFAULT: 'hsl(var(--sidebar-background))',
@@ -98,12 +102,39 @@ export default {
 				'pulse-subtle': {
 					'0%, 100%': { opacity: '1' },
 					'50%': { opacity: '0.8' },
+				},
+				'typewriter': {
+					'0%': { width: '0%' },
+					'100%': { width: '100%' }
+				},
+				'blink-cursor': {
+					'0%, 100%': { opacity: '0' },
+					'50%': { opacity: '1' },
+				},
+				'flicker': {
+					'0%': { opacity: '1.0' },
+					'49%': { opacity: '1.0' },
+					'50%': { opacity: '0.8' },
+					'51%': { opacity: '1.0' },
+					'80%': { opacity: '1.0' },
+					'81%': { opacity: '0.9' },
+					'82%': { opacity: '1.0' },
+					'83%': { opacity: '0.95' },
+					'84%': { opacity: '1.0' },
+				},
+				'scan-line': {
+					'0%': { transform: 'translateY(0)' },
+					'100%': { transform: 'translateY(100vh)' }
 				}
 			},
 			animation: {
 				'accordion-down': 'accordion-down 0.2s ease-out',
 				'accordion-up': 'accordion-up 0.2s ease-out',
 				'pulse-subtle': 'pulse-subtle 2s ease-in-out infinite',
+				'typewriter': 'typewriter 2s steps(40, end) both',
+				'blink-cursor': 'blink-cursor 0.75s step-end infinite',
+				'flicker': 'flicker 0.3s ease-in-out 1',
+				'scan-line': 'scan-line 5s linear infinite'
 			}
 		}
 	},
