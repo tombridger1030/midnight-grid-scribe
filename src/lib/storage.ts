@@ -166,9 +166,23 @@ export const importDataCSV = (fileContent: string): boolean => {
       const values = lines[i].split(',');
       const metricName = values[0];
       
+      // Check if any value can be parsed as a number
+      let valueType: 'number' | 'boolean' | 'text' = 'text';
+      for (let j = 1; j < values.length && j <= dates.length; j++) {
+        const rawValue = values[j].trim();
+        if (rawValue === 'true' || rawValue === 'false') {
+          valueType = 'boolean';
+          break;
+        } else if (!isNaN(parseFloat(rawValue)) && rawValue !== '') {
+          valueType = 'number';
+          break;
+        }
+      }
+      
       const metric: MetricData = {
         id: `csv-import-${i}-${Date.now()}`, // Generate a unique ID
         name: metricName,
+        type: valueType, // Added the missing 'type' property
         values: {}
       };
       
