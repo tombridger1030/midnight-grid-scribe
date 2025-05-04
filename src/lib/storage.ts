@@ -9,7 +9,8 @@
 export interface MetricData {
   id: string;
   name: string;
-  values: Record<string, string | number>;
+  type: 'number' | 'boolean' | 'text';
+  values: Record<string, string | number | boolean>;
 }
 
 export interface TrackerData {
@@ -19,9 +20,26 @@ export interface TrackerData {
 
 const STORAGE_KEY = 'midnight-tracker-data';
 
+// Predefined metrics
+const predefinedMetrics: MetricData[] = [
+  { id: 'deepWork', name: 'Deep Work (hrs)', type: 'number', values: {} },
+  { id: 'jiuJitsuSessions', name: 'Jiu-Jitsu Sessions', type: 'number', values: {} },
+  { id: 'jiuJitsuDrills', name: 'Jiu-Jitsu Tech Drills', type: 'number', values: {} },
+  { id: 'sleepHours', name: 'Sleep (hrs)', type: 'number', values: {} },
+  { id: 'calories', name: 'Calories (kcal)', type: 'number', values: {} },
+  { id: 'waterIntake', name: 'Water Intake (oz)', type: 'number', values: {} },
+  { id: 'readingHours', name: 'Reading (hrs)', type: 'number', values: {} },
+  { id: 'echoMVP', name: 'Echo MVP Deployed', type: 'boolean', values: {} },
+  { id: 'echoSkillTree', name: 'Echo Skill Tree Built', type: 'boolean', values: {} },
+  { id: 'echoRAG', name: 'Echo RAG Integration Done', type: 'boolean', values: {} },
+  { id: 'echoTutor', name: 'Echo AI Study Assistant Ready', type: 'boolean', values: {} },
+  { id: 'echoBeta', name: 'Echo Beta Launch', type: 'boolean', values: {} },
+  { id: 'jiuJitsuBeltProgress', name: 'Jiu-Jitsu Belt Progress', type: 'text', values: {} },
+];
+
 // Initial data structure
 const initialData: TrackerData = {
-  metrics: [],
+  metrics: predefinedMetrics,
   dates: []
 };
 
@@ -32,7 +50,19 @@ export const loadData = (): TrackerData => {
   try {
     const storedData = localStorage.getItem(STORAGE_KEY);
     if (!storedData) return initialData;
-    return JSON.parse(storedData);
+
+    const parsedData = JSON.parse(storedData);
+    
+    // Ensure all predefined metrics exist
+    const existingMetricIds = parsedData.metrics.map((m: MetricData) => m.id);
+    const missingMetrics = predefinedMetrics.filter(metric => !existingMetricIds.includes(metric.id));
+    
+    if (missingMetrics.length > 0) {
+      // Add any missing predefined metrics
+      parsedData.metrics = [...parsedData.metrics, ...missingMetrics];
+    }
+    
+    return parsedData;
   } catch (error) {
     console.error("Failed to load data from storage:", error);
     return initialData;
