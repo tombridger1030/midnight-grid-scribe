@@ -1,6 +1,6 @@
-
 import React, { useState, useEffect } from 'react';
-import { loadData, saveData, MetricData, TrackerData } from '@/lib/storage';
+import { loadData, saveData, MetricData, TrackerData, predefinedMetrics } from '@/lib/storage';
+import { useDate } from '@/contexts/DateContext';
 import { useToast } from '@/components/ui/use-toast';
 import SparkLine from './SparkLine';
 
@@ -11,6 +11,7 @@ interface MetricGridProps {
 const MetricGrid: React.FC<MetricGridProps> = ({ onAddDay }) => {
   const [data, setData] = useState<TrackerData>({ metrics: [], dates: [] });
   const { toast } = useToast();
+  const { currentDate } = useDate();
 
   // Load data on component mount
   useEffect(() => {
@@ -23,6 +24,24 @@ const MetricGrid: React.FC<MetricGridProps> = ({ onAddDay }) => {
     saveData(data);
   }, [data]);
 
+  // Filter metrics to only those still in predefinedMetrics
+  const validMetricIds = predefinedMetrics.map(m => m.id);
+  const metricsToShow = data.metrics.filter(m => validMetricIds.includes(m.id));
+
+  // If currentDate isn't tracked, show New Day prompt
+  if (!data.dates.includes(currentDate)) {
+    return (
+      <div className="w-full text-center py-8">
+        <p className="text-terminal-text/70">No entry for selected date. Add a day to start tracking.</p>
+        <div className="mt-4">
+          <button className="terminal-button" onClick={onAddDay}>
+            New Day
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // Handle cell value changes
   const handleCellChange = (metricId: string, date: string, value: string) => {
     setData(prevData => {
@@ -32,12 +51,8 @@ const MetricGrid: React.FC<MetricGridProps> = ({ onAddDay }) => {
           
           // Convert value based on metric type
           if (metric.type === 'number') {
-            const numValue = parseFloat(value);
-            if (!isNaN(numValue)) {
-              processedValue = numValue;
-            } else if (value === '') {
-              processedValue = '';
-            }
+            // allow decimals and store raw input
+            processedValue = value;
           } else if (metric.type === 'boolean') {
             processedValue = value.toLowerCase() === 'true';
           }
@@ -86,78 +101,67 @@ const MetricGrid: React.FC<MetricGridProps> = ({ onAddDay }) => {
     }
   };
 
-  // Get cell input type based on metric type
+  // Get cell input based on metric type (number, time, boolean, or text)
   const getCellInput = (metric: MetricData, date: string) => {
-    const value = metric.values[date];
-    
+    const rawValue = metric.values[date];
+    const valueStr = rawValue === undefined ? '' : rawValue.toString();
+    const commonProps = {
+      className: 'terminal-input text-center w-full',
+      value: valueStr,
+      onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => handleCellChange(metric.id, date, e.target.value),
+    };
     if (metric.type === 'boolean') {
       return (
-        <select
-          className="terminal-input text-center w-full"
-          value={value === true ? 'true' : value === false ? 'false' : ''}
-          onChange={(e) => handleCellChange(metric.id, date, e.target.value)}
-        >
+        <select {...commonProps}>
           <option value=""></option>
           <option value="true">✓</option>
           <option value="false">✗</option>
         </select>
       );
-    } else {
+    }
+    if (metric.type === 'number') {
       return (
-        <input
-          type={metric.type === 'number' ? 'text' : 'text'}
-          className="terminal-input text-center w-full"
-          value={value !== undefined ? value.toString() : ''}
-          onChange={(e) => handleCellChange(metric.id, date, e.target.value)}
-        />
+        <input type="number" step="any" {...commonProps} />
       );
     }
+    if (metric.type === 'time') {
+      return (
+        <input type="time" {...commonProps} />
+      );
+    }
+    // fallback to text
+    return <input type="text" {...commonProps} />;
   };
 
   return (
     <div className="w-full overflow-x-auto">
-      {data.metrics.length === 0 && data.dates.length === 0 ? (
-        <div className="text-center py-8">
-          <p className="text-terminal-text/70">No data yet. Add a day to start tracking.</p>
-          <div className="mt-4">
-            <button className="terminal-button" onClick={onAddDay}>
-              New Day
-            </button>
-          </div>
-        </div>
-      ) : (
-        <table className="w-full border-collapse min-w-full">
-          <thead>
-            <tr>
-              <th className="terminal-cell w-48">Metric</th>
-              {data.dates.map(date => (
-                <th key={date} className="terminal-cell text-center" style={{ minWidth: '100px' }}>
-                  {formatDate(date)}
-                </th>
-              ))}
-              <th className="terminal-cell w-24 text-center">Trend</th>
+      <table className="w-full border-collapse min-w-full">
+        <thead>
+          <tr>
+            <th className="terminal-cell w-48">Metric</th>
+            <th className="terminal-cell text-center border-accent-pink" style={{ minWidth: '100px' }}>
+              {currentDate}
+            </th>
+            <th className="terminal-cell w-24 text-center">Trend</th>
+          </tr>
+        </thead>
+        <tbody>
+          {metricsToShow.map(metric => (
+            <tr key={metric.id}>
+              <td className="terminal-cell">
+                <div className="text-sm">{metric.name}</div>
+                <div className="text-xs text-terminal-accent/50">{metric.type}</div>
+              </td>
+              <td className="terminal-cell text-center border-accent-pink">
+                {getCellInput(metric, currentDate)}
+              </td>
+              <td className="terminal-cell">
+                <SparkLine data={getSparkLineData(metric)} />
+              </td>
             </tr>
-          </thead>
-          <tbody>
-            {data.metrics.map(metric => (
-              <tr key={metric.id}>
-                <td className="terminal-cell">
-                  <div className="text-sm">{metric.name}</div>
-                  <div className="text-xs text-terminal-accent/50">{metric.type}</div>
-                </td>
-                {data.dates.map(date => (
-                  <td key={`${metric.id}-${date}`} className="terminal-cell text-center">
-                    {getCellInput(metric, date)}
-                  </td>
-                ))}
-                <td className="terminal-cell">
-                  <SparkLine data={getSparkLineData(metric)} />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 };

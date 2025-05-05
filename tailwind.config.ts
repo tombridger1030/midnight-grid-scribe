@@ -1,5 +1,5 @@
-
 import type { Config } from "tailwindcss";
+import tailwindcssAnimate from "tailwindcss-animate";
 
 export default {
 	darkMode: ["class"],
@@ -54,25 +54,35 @@ export default {
 					foreground: 'hsl(var(--card-foreground))'
 				},
 				terminal: {
-					bg: '#2E2E2E',
-					text: '#CFCFCF',
-					accent: '#888888',
-					highlight: '#444444',
-					green: '#00FF00',
-					cyan: '#00FFFF',
-					yellow: '#FFFF00',
-					red: '#FF5555'
+					bg: 'var(--bg-panel)',
+					text: 'var(--text-main)',
+					accent: 'var(--accent-red)',
+					highlight: 'var(--accent-amber)',
+					green: 'var(--accent-cyan)',
+					cyan: 'var(--accent-cyan)',
+					red: 'var(--accent-red)',
 				},
 				sidebar: {
-					DEFAULT: 'hsl(var(--sidebar-background))',
-					foreground: 'hsl(var(--sidebar-foreground))',
-					primary: 'hsl(var(--sidebar-primary))',
-					'primary-foreground': 'hsl(var(--sidebar-primary-foreground))',
-					accent: 'hsl(var(--sidebar-accent))',
-					'accent-foreground': 'hsl(var(--sidebar-accent-foreground))',
-					border: 'hsl(var(--sidebar-border))',
-					ring: 'hsl(var(--sidebar-ring))'
-				}
+					DEFAULT: 'var(--bg-sidebar)',
+					foreground: 'var(--text-muted)',
+					border: 'var(--accent-red)',
+				},
+				'bg-primary': 'var(--bg-primary)',
+				'bg-panel': 'var(--bg-panel)',
+				'bg-sidebar': 'var(--bg-sidebar)',
+				'text-main': 'var(--text-main)',
+				'text-secondary': 'var(--text-muted)',
+				'accent-primary': 'var(--accent-red)',
+				'accent-secondary': 'var(--accent-orange)',
+				'accent-highlight': 'var(--accent-amber)',
+				'hover-bg': 'var(--accent-red)',
+				'hover-text': 'var(--bg-primary)',
+				'cursor-color': 'var(--accent-red)',
+				'accent-red': 'var(--accent-red)',
+				'accent-orange': 'var(--accent-orange)',
+				'accent-amber': 'var(--accent-amber)',
+				'accent-cyan': 'var(--accent-cyan)',
+				'line-faint': 'var(--line-faint)',
 			},
 			fontFamily: {
 				'mono': ['Fira Mono', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'Liberation Mono', 'Courier New', 'monospace'],
@@ -138,5 +148,5 @@ export default {
 			}
 		}
 	},
-	plugins: [require("tailwindcss-animate")],
+	plugins: [tailwindcssAnimate],
 } satisfies Config;

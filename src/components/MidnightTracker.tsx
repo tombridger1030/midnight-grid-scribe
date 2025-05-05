@@ -1,116 +1,66 @@
-
 import React, { useState, useEffect } from 'react';
-import { loadData, saveData, exportData, exportDataCSV } from '@/lib/storage';
+import { loadData, saveData } from '@/lib/storage';
 import MetricGrid from './MetricGrid';
-import FileImport from './FileImport';
 import { useToast } from '@/components/ui/use-toast';
-import { Plus, Calendar, Download, Upload, GitBranch } from 'lucide-react';
+import { Plus, Calendar, GitBranch } from 'lucide-react';
+import { useDate } from '@/contexts/DateContext';
+import CalendarNavigator from './CalendarNavigator';
 
 const MidnightTracker: React.FC = () => {
   const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
-  const [exportFormat, setExportFormat] = useState<'json' | 'csv'>('json');
   const [showRoadmap, setShowRoadmap] = useState<boolean>(false);
   const { toast } = useToast();
+  const { currentDate, setCurrentDate } = useDate();
 
-  // Register keyboard shortcuts
+  // Register keyboard shortcuts (Ctrl+N adds entry for selected date)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Only respond to key combinations with Ctrl
       if (!e.ctrlKey) return;
-      
       switch (e.key.toLowerCase()) {
-        case 'n': // Ctrl+N: New Day
+        case 'n': // Ctrl+N: New Day for selected date
           e.preventDefault();
-          handleAddDay();
-          break;
-        case 'e': // Ctrl+E: Export
-          e.preventDefault();
-          handleExport();
+          handleAddDay(currentDate);
           break;
         case 'g': // Ctrl+G: Toggle Roadmap
           e.preventDefault();
           setShowRoadmap(prev => !prev);
           break;
-        case 'i': // Ctrl+I: Import (shows file dialog)
-          e.preventDefault();
-          document.getElementById('import-button')?.click();
-          break;
       }
     };
-    
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [exportFormat]);
+  }, [currentDate]);
 
-  const handleAddDay = () => {
+  // Add a Tracker entry for the given date (or selected date by default)
+  const handleAddDay = (dateToAdd?: string) => {
     const data = loadData();
-    const today = new Date().toISOString().split('T')[0];
-    
-    // Only add today if it doesn't exist
-    if (!data.dates.includes(today)) {
-      data.dates.push(today);
+    const dateKey = dateToAdd ?? currentDate;
+    setCurrentDate(dateKey);
+    // Only add the specified date if it doesn't exist
+    if (!data.dates.includes(dateKey)) {
+      data.dates.push(dateKey);
       saveData(data);
       setRefreshTrigger(prev => prev + 1);
-      
       toast({
         title: "New day added",
-        description: `Today (${today}) has been added to your tracker.`
+        description: `Date (${dateKey}) has been added to your tracker.`
       });
     } else {
       toast({
         title: "Already exists",
-        description: "Today's date is already in your tracker."
+        description: `Date (${dateKey}) is already in your tracker.`
       });
     }
   };
 
-  const handleExport = () => {
-    if (exportFormat === 'json') {
-      exportData();
-    } else {
-      exportDataCSV();
-    }
-    
-    toast({
-      title: "Export started",
-      description: `Your data is being downloaded as a ${exportFormat.toUpperCase()} file.`
-    });
-  };
-
-  const handleImportSuccess = () => {
-    setRefreshTrigger(prev => prev + 1);
-  };
-
   return (
     <div className="flex flex-col min-h-full">
-      <div className="mb-4 flex flex-wrap gap-2">
-        <button className="terminal-button flex items-center" onClick={handleAddDay}>
+      <div className="mb-4 flex items-center gap-2">
+        <button className="terminal-button flex items-center" onClick={() => handleAddDay(currentDate)}>
           <Calendar size={14} className="mr-1" />
           New Day
         </button>
-        <div className="flex items-center">
-          <div className="flex border border-terminal-accent mr-2">
-            <button 
-              className={`px-2 py-1 ${exportFormat === 'json' ? 'bg-terminal-accent text-terminal-bg' : ''}`}
-              onClick={() => setExportFormat('json')}
-            >
-              JSON
-            </button>
-            <button 
-              className={`px-2 py-1 ${exportFormat === 'csv' ? 'bg-terminal-accent text-terminal-bg' : ''}`}
-              onClick={() => setExportFormat('csv')}
-            >
-              CSV
-            </button>
-          </div>
-          <button className="terminal-button flex items-center" onClick={handleExport}>
-            <Download size={14} className="mr-1" />
-            Export {exportFormat.toUpperCase()}
-          </button>
-        </div>
-        <div id="import-button">
-          <FileImport onImportSuccess={handleImportSuccess} />
-        </div>
+        <CalendarNavigator />
         <button 
           className={`terminal-button flex items-center ${showRoadmap ? 'bg-terminal-accent text-terminal-bg' : ''}`}
           onClick={() => setShowRoadmap(prev => !prev)}
@@ -122,9 +72,9 @@ const MidnightTracker: React.FC = () => {
 
       <div className={`flex ${showRoadmap ? 'flex-col md:flex-row' : 'flex-col'}`}>
         <div className={`${showRoadmap ? 'flex-1' : 'flex-1'}`}>
-          <div className="bg-terminal-highlight p-1 h-full">
+          <div className="bg-panel p-1 h-full">
             {/* This key forces the component to re-render when data changes */}
-            <MetricGrid key={refreshTrigger} onAddDay={handleAddDay} />
+            <MetricGrid key={refreshTrigger} onAddDay={() => handleAddDay(currentDate)} />
           </div>
         </div>
         

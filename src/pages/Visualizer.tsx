@@ -1,23 +1,36 @@
-
-import React, { useState } from 'react';
-import { loadData } from '@/lib/storage';
+import React, { useState, useEffect } from 'react';
+import { loadData, predefinedMetrics } from '@/lib/storage';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import TypewriterText from '@/components/TypewriterText';
 
 // Period types for the selector
 type PeriodType = 'week' | 'month' | 'quarter' | 'year';
 
+// Define chart data shape
+type ChartData = { date: string; value: number; rollingAvg: number; };
+
 const Visualizer = () => {
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>('week');
   const [selectedMetricId, setSelectedMetricId] = useState<string | null>(null);
+  const [currentMetric, setCurrentMetric] = useState<typeof metrics[0] | null>(null);
   
   const data = loadData();
-  const metrics = data.metrics;
+  const metrics = data.metrics.filter(m => predefinedMetrics.some(pm => pm.id === m.id));
+
+  // Update currentMetric when selectedMetricId changes
+  useEffect(() => {
+    if (selectedMetricId) {
+      const found = metrics.find(m => m.id === selectedMetricId) || null;
+      setCurrentMetric(found);
+    } else {
+      setCurrentMetric(null);
+    }
+  }, [selectedMetricId, metrics]);
 
   // Get date range based on selected period
   const getDateRange = (period: PeriodType): [Date, Date] => {
     const endDate = new Date();
-    let startDate = new Date();
+    const startDate = new Date();
     
     switch (period) {
       case 'week':
@@ -50,19 +63,27 @@ const Visualizer = () => {
   };
 
   // Prepare chart data for a specific metric
-  const getChartData = (metricId: string): any[] => {
+  const getChartData = (metricId: string): ChartData[] => {
     const filteredDates = getFilteredDates(selectedPeriod);
     const metric = metrics.find(m => m.id === metricId);
-    
     if (!metric) return [];
-    
-    return filteredDates.map(date => {
-      const value = metric.values[date] ? parseFloat(metric.values[date] as string) : 0;
+
+    // Build numeric values array
+    const valuesByDate = filteredDates.map(date => {
+      const raw = metric.values[date];
+      const num = raw !== undefined && raw !== '' ? parseFloat(raw as string) : 0;
+      return isNaN(num) ? 0 : num;
+    });
+
+    // Compute moving average up to each index (stable trend)
+    return valuesByDate.map((value, idx) => {
+      const slice = valuesByDate.slice(0, idx + 1);
+      const sum = slice.reduce((acc, v) => acc + v, 0);
+      const avg = slice.length ? sum / slice.length : 0;
       return {
-        date,
+        date: filteredDates[idx],
         value,
-        // You would calculate rolling average here, but for simplicity we're using a placeholder
-        rollingAvg: value * 0.9 + Math.random() * 0.2 * value
+        rollingAvg: parseFloat(avg.toFixed(1))
       };
     });
   };
@@ -147,14 +168,12 @@ const Visualizer = () => {
       </div>
       
       {/* Visualization area */}
-      {selectedMetricId && (
+      {currentMetric && (
         <div className="flex-1 border border-terminal-accent/30 p-4 bg-terminal-bg/30">
           <div className="mb-4">
-            <TypewriterText 
-              text={`${metrics.find(m => m.id === selectedMetricId)?.name || 'Metric'} (${selectedPeriod})`}
-              className="text-lg mb-1"
-              delay={30}
-            />
+            <h1 className="text-lg mb-1">
+              {`${currentMetric.name} (${currentMetric.type} Habit)`}
+            </h1>
             <div className="text-terminal-accent/70 text-xs">
               {formatDateRange(selectedPeriod)}
             </div>
@@ -164,36 +183,36 @@ const Visualizer = () => {
           <div className="h-64 mb-6">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart
-                data={getChartData(selectedMetricId)}
+                data={getChartData(selectedMetricId!)}
                 margin={{ top: 5, right: 20, left: 10, bottom: 5 }}
               >
-                <CartesianGrid strokeDasharray="3 3" stroke="#444444" />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--line-faint)" />
                 <XAxis 
                   dataKey="date" 
-                  stroke="#888888"
+                  stroke="var(--text-muted)"
                   tickFormatter={(date) => new Date(date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} 
                 />
-                <YAxis stroke="#888888" />
+                <YAxis stroke="var(--text-muted)" />
                 <Tooltip 
                   contentStyle={{ 
-                    backgroundColor: '#2E2E2E', 
-                    border: '1px solid #888888',
-                    color: '#CFCFCF'
+                    backgroundColor: 'var(--bg-panel)', 
+                    border: '1px solid var(--line-faint)',
+                    color: 'var(--text-main)'
                   }}
                 />
                 <Legend />
                 <Line 
                   type="monotone" 
                   dataKey="value" 
-                  stroke="#00FF00" 
+                  stroke="var(--accent-orange)" 
                   strokeWidth={2}
-                  dot={{ r: 3 }} 
+                  dot={{ r: 3, fill: 'var(--accent-amber)', stroke: 'none' }} 
                   name="Actual" 
                 />
                 <Line 
                   type="monotone" 
                   dataKey="rollingAvg" 
-                  stroke="#00FFFF" 
+                  stroke="var(--accent-cyan)" 
                   strokeWidth={1.5}
                   strokeDasharray="5 5" 
                   dot={{ r: 0 }} 
@@ -204,7 +223,7 @@ const Visualizer = () => {
           </div>
           
           {/* Summary table */}
-          {getMetricSummary(selectedMetricId) && (
+          {getMetricSummary(selectedMetricId!) && (
             <div className="mb-4">
               <div className="text-sm mb-2 text-terminal-accent">Summary Statistics:</div>
               <table className="w-full border-collapse">
@@ -219,18 +238,18 @@ const Visualizer = () => {
                 <tbody>
                   <tr>
                     <td className="terminal-cell">{selectedPeriod}</td>
-                    <td className="terminal-cell">{getMetricSummary(selectedMetricId)?.current}</td>
-                    <td className="terminal-cell">{getMetricSummary(selectedMetricId)?.previous}</td>
+                    <td className="terminal-cell">{getMetricSummary(selectedMetricId!)?.current}</td>
+                    <td className="terminal-cell">{getMetricSummary(selectedMetricId!)?.previous}</td>
                     <td className="terminal-cell">
                       <span 
                         className={
-                          getMetricSummary(selectedMetricId)?.percentChange === 'N/A' ? '' :
-                          parseFloat(getMetricSummary(selectedMetricId)?.percentChange || '0') > 0 ? 'text-green-400' : 
-                          parseFloat(getMetricSummary(selectedMetricId)?.percentChange || '0') < 0 ? 'text-red-400' : ''
+                          getMetricSummary(selectedMetricId!)?.percentChange === 'N/A' ? '' :
+                          parseFloat(getMetricSummary(selectedMetricId!)?.percentChange || '0') > 0 ? 'text-green-400' : 
+                          parseFloat(getMetricSummary(selectedMetricId!)?.percentChange || '0') < 0 ? 'text-red-400' : ''
                         }
                       >
-                        {getMetricSummary(selectedMetricId)?.percentChange !== 'N/A' ? 
-                          `${getMetricSummary(selectedMetricId)?.percentChange}%` : 'N/A'}
+                        {getMetricSummary(selectedMetricId!)?.percentChange !== 'N/A' ? 
+                          `${getMetricSummary(selectedMetricId!)?.percentChange}%` : 'N/A'}
                       </span>
                     </td>
                   </tr>
@@ -240,7 +259,7 @@ const Visualizer = () => {
           )}
           
           {/* Boolean metrics visualization - basic implementation */}
-          {isMetricBoolean(selectedMetricId) && (
+          {isMetricBoolean(selectedMetricId!) && (
             <div className="mb-4">
               <div className="text-sm mb-2 text-terminal-accent">Habit Tracking:</div>
               <div className="flex flex-wrap gap-1">
@@ -266,7 +285,7 @@ const Visualizer = () => {
         </div>
       )}
       
-      {!selectedMetricId && (
+      {!currentMetric && (
         <div className="flex-1 flex items-center justify-center text-terminal-accent/70">
           Select a metric to visualize data
         </div>

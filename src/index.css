@@ -1,55 +1,59 @@
-
+@import url('https://fonts.googleapis.com/css2?family=Fira+Mono:wght@400;500;700&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Fira+Mono:wght@400;500;700&display=swap');
-
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
-
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
-
-    --radius: 0.5rem;
+    /* Palette & variables */
+    --bg-primary:       #0A0415; /* very dark charcoal-blue */
+    --bg-panel:         #0A0415; /* main background matches primary (#0A0415) */
+    --text-main:        #E8E6E0; /* warm off-white */
+    --text-muted:       #736E63; /* subtle stone-gray */
+    --accent-red:       #D93023; /* molten red */
+    --accent-orange:    #F9581A; /* lava orange */
+    --accent-amber:     #FFC300; /* amber glow */
+    --accent-cyan:      #0AF5E3; /* cool cyan */
+    --line-faint:       rgba(232, 48, 35, 0.2); /* faint red grid lines */
   }
-}
 
-@layer base {
   * {
-    @apply border-border;
+    border-color: var(--line-faint) !important;
   }
 
   body {
-    @apply bg-terminal-bg text-terminal-text font-mono;
+    background: var(--bg-primary);
+    color: var(--text-main);
+    font-family: 'Fira Mono', monospace;
+    margin: 0;
+    padding: 0;
   }
 
   input, textarea {
-    @apply bg-terminal-bg text-terminal-text font-mono border border-terminal-accent;
+    background: var(--bg-primary);
+    color: var(--text-main);
+    font-family: 'Fira Mono', monospace;
+    border: 0.5px solid var(--line-faint);
+    padding: 0.25rem;
+  }
+
+  table {
+    border-collapse: collapse;
+  }
+
+  th, td {
+    border: 0.5px solid var(--line-faint) !important;
+    padding: 0.25rem !important;
+  }
+
+  tr:nth-child(even) {
+    background: var(--bg-primary);
+  }
+
+  hr.section-divider {
+    border: none;
+    border-bottom: 1px solid var(--accent-red) !important;
+    margin: 1rem 0;
   }
 }
 
@@ -60,7 +64,7 @@
   }
   
   .terminal-cell {
-    @apply border border-terminal-accent/50 p-1 transition-colors duration-150 focus-within:border-terminal-accent;
+    @apply border border-terminal-accent border-opacity-50 p-1 transition-colors duration-150 focus-within:border-terminal-accent;
   }
   
   .terminal-input {
@@ -69,5 +73,98 @@
 
   .spark-line {
     @apply h-4 w-20 inline-block;
+  }
+
+  /* Blinking cursor animation */
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+  }
+  .blink {
+    color: var(--accent-red) !important;
+    animation: blink 120ms steps(1) infinite !important;
+  }
+
+  /* Cyberpunk overrides */
+  /* Background overrides */
+  .bg-panel { background-color: var(--bg-panel) !important; }
+  .bg-sidebar { background-color: var(--bg-panel) !important; }
+
+  /* Borders and ASCII box lines */
+  .border-terminal-accent,
+  .terminal-cell { border-color: var(--accent-red) !important; }
+
+  /* Hover states */
+  .terminal-button:hover,
+  input:hover,
+  select:hover { background-color: var(--accent-red) !important; color: var(--bg-primary) !important; transition: background 120ms ease, color 120ms ease; }
+
+  /* Cursor color */
+  .blink { color: var(--cursor-color) !important; }
+
+  /* Sidebar panels */
+  .sidebar {
+    background: var(--bg-panel) !important;
+    color: var(--text-main) !important;
+    border-left: 1px solid var(--accent-red);
+  }
+  .sidebar h2 {
+    color: var(--accent-red) !important;
+    font-size: 14px;
+  }
+  .sidebar > div.mb-4 {
+    padding: 0.5rem !important;
+    border: 1px solid var(--accent-red) !important;
+    margin-bottom: 1rem !important;
+  }
+  .sidebar div[class*="spark-line"] {
+    stroke: var(--accent-cyan) !important;
+    opacity: 0.9 !important;
+  }
+
+  /* KPI block wrapper */
+  .sidebar > div {
+    padding: 0.75rem !important;
+    border: 1px solid var(--accent-red)!important;
+    margin-bottom: 1rem !important;
+  }
+  .sidebar .uppercase {
+    color: var(--accent-red)!important;
+  }
+
+  /* Table & center panel */
+  .terminal-cell {
+    background: var(--bg-primary)!important;
+    border: 0.5px solid var(--line-faint)!important;
+  }
+
+  /* Section divider */
+  .section-divider {
+    border-bottom: 1px solid var(--accent-red)!important;
+    padding-bottom: 0.5rem;
+    margin-bottom: 1rem;
+  }
+
+  /* Progress bar gradient */
+  .progress-gradient {
+    background: linear-gradient(90deg, var(--accent-red), var(--accent-cyan))!important;
+  }
+
+  /* Hover / active states */
+  .terminal-button:hover,
+  button:hover {
+    background: var(--accent-red)!important;
+    color: var(--bg-primary)!important;
+    transition: background 120ms ease, color 120ms ease;
+  }
+
+  /* Blink cursor speed */
+  .blink {
+    animation: blink 120ms steps(1) infinite !important;
+  }
+
+  /* Sparklines */
+  .spark-line {
+    opacity: 0.9 !important;
   }
 }

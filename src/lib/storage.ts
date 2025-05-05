@@ -1,4 +1,3 @@
-
 /**
  * Storage abstraction module
  * 
@@ -9,7 +8,7 @@
 export interface MetricData {
   id: string;
   name: string;
-  type: 'number' | 'boolean' | 'text';
+  type: 'number' | 'boolean' | 'text' | 'time';
   values: Record<string, string | number | boolean>;
 }
 
@@ -18,27 +17,29 @@ export interface TrackerData {
   dates: string[];
 }
 
-const STORAGE_KEY = 'midnight-tracker-data';
+const STORAGE_KEY = 'noctisium-tracker-data';
 
 // Predefined metrics
-const predefinedMetrics: MetricData[] = [
+export const predefinedMetrics: MetricData[] = [
   { id: 'deepWork', name: 'Deep Work (hrs)', type: 'number', values: {} },
   { id: 'jiuJitsuSessions', name: 'Jiu-Jitsu Sessions', type: 'number', values: {} },
-  { id: 'jiuJitsuDrills', name: 'Jiu-Jitsu Tech Drills', type: 'number', values: {} },
+  { id: 'weightliftingSessions', name: 'Weightlifting Sessions', type: 'number', values: {} },
+  { id: 'proteinIntake', name: 'Protein Intake (g)', type: 'number', values: {} },
+  { id: 'dailyWeight', name: 'Daily Weight (kg)', type: 'number', values: {} },
+  { id: 'hrv', name: 'HRV (ms)', type: 'number', values: {} },
+  { id: 'wakingTime', name: 'Waking Time', type: 'time', values: {} },
+  { id: 'sleepTime', name: 'Sleep Time', type: 'time', values: {} },
+  { id: 'recovery', name: 'Recovery Score', type: 'number', values: {} },
+  { id: 'coldShower', name: 'Cold Shower Taken', type: 'boolean', values: {} },
+  { id: 'noDopamine', name: 'No Dopamine', type: 'boolean', values: {} },
   { id: 'sleepHours', name: 'Sleep (hrs)', type: 'number', values: {} },
   { id: 'calories', name: 'Calories (kcal)', type: 'number', values: {} },
   { id: 'waterIntake', name: 'Water Intake (oz)', type: 'number', values: {} },
   { id: 'readingHours', name: 'Reading (hrs)', type: 'number', values: {} },
-  { id: 'echoMVP', name: 'Echo MVP Deployed', type: 'boolean', values: {} },
-  { id: 'echoSkillTree', name: 'Echo Skill Tree Built', type: 'boolean', values: {} },
-  { id: 'echoRAG', name: 'Echo RAG Integration Done', type: 'boolean', values: {} },
-  { id: 'echoTutor', name: 'Echo AI Study Assistant Ready', type: 'boolean', values: {} },
-  { id: 'echoBeta', name: 'Echo Beta Launch', type: 'boolean', values: {} },
-  { id: 'jiuJitsuBeltProgress', name: 'Jiu-Jitsu Belt Progress', type: 'text', values: {} },
 ];
 
 // Initial data structure
-const initialData: TrackerData = {
+export const initialData: TrackerData = {
   metrics: predefinedMetrics,
   dates: []
 };
@@ -53,6 +54,10 @@ export const loadData = (): TrackerData => {
 
     const parsedData = JSON.parse(storedData);
     
+    // Remove any metrics that are no longer predefined
+    parsedData.metrics = parsedData.metrics.filter((m: MetricData) =>
+      predefinedMetrics.some(pm => pm.id === m.id)
+    );
     // Ensure all predefined metrics exist
     const existingMetricIds = parsedData.metrics.map((m: MetricData) => m.id);
     const missingMetrics = predefinedMetrics.filter(metric => !existingMetricIds.includes(metric.id));
@@ -62,6 +67,8 @@ export const loadData = (): TrackerData => {
       parsedData.metrics = [...parsedData.metrics, ...missingMetrics];
     }
     
+    // Persist the cleaned and updated metrics list back to storage
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(parsedData));
     return parsedData;
   } catch (error) {
     console.error("Failed to load data from storage:", error);
@@ -88,7 +95,7 @@ export const exportData = (): void => {
   const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(data, null, 2));
   const downloadAnchorNode = document.createElement('a');
   downloadAnchorNode.setAttribute("href", dataStr);
-  downloadAnchorNode.setAttribute("download", "midnight-tracker-data.json");
+  downloadAnchorNode.setAttribute("download", "noctisium-tracker-data.json");
   document.body.appendChild(downloadAnchorNode);
   downloadAnchorNode.click();
   downloadAnchorNode.remove();
@@ -140,7 +147,7 @@ export const exportDataCSV = (): void => {
   const dataStr = "data:text/csv;charset=utf-8," + encodeURIComponent(csv);
   const downloadAnchorNode = document.createElement('a');
   downloadAnchorNode.setAttribute("href", dataStr);
-  downloadAnchorNode.setAttribute("download", "midnight-tracker-data.csv");
+  downloadAnchorNode.setAttribute("download", "noctisium-tracker-data.csv");
   document.body.appendChild(downloadAnchorNode);
   downloadAnchorNode.click();
   downloadAnchorNode.remove();
@@ -167,7 +174,7 @@ export const importDataCSV = (fileContent: string): boolean => {
       const metricName = values[0];
       
       // Check if any value can be parsed as a number
-      let valueType: 'number' | 'boolean' | 'text' = 'text';
+      let valueType: 'number' | 'boolean' | 'text' | 'time' = 'text';
       for (let j = 1; j < values.length && j <= dates.length; j++) {
         const rawValue = values[j].trim();
         if (rawValue === 'true' || rawValue === 'false') {

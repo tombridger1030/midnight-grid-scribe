@@ -1,4 +1,3 @@
-
 import React from 'react';
 import MidnightTracker from '@/components/MidnightTracker';
 import TypewriterText from '@/components/TypewriterText';
@@ -52,14 +51,15 @@ const Index = () => {
         <div className="text-xs mb-1">Sprint Progress</div>
         <Progress 
           value={sprint.isOnPeriod ? (sprint.dayOfSprint / 21) * 100 : 100}
-          className="h-1 bg-terminal-accent/20"
+          className="h-1 bg-panel"
         />
         <div className="flex justify-between text-xs mt-1">
           <span>Day {sprint.dayOfSprint}</span>
           <span>{sprint.isOnPeriod ? `${21 - sprint.dayOfSprint} days left` : 'Rest period'}</span>
         </div>
       </div>
-      
+      {/* Section Divider */}
+      <hr className="section-divider" />
       <div className="flex-1">
         <MidnightTracker />
       </div>

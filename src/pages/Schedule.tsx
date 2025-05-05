@@ -1,6 +1,6 @@
-
 import React, { useState, useEffect } from 'react';
 import TypewriterText from '@/components/TypewriterText';
+import { loadData } from '@/lib/storage';
 
 // Sprint cycle configuration
 const SPRINT_ON_DAYS = 21;
@@ -8,10 +8,10 @@ const SPRINT_OFF_DAYS = 7;
 const SPRINT_CYCLE = SPRINT_ON_DAYS + SPRINT_OFF_DAYS;
 
 const Schedule = () => {
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const currentYear = new Date().getFullYear();
   const [sprintStartDate, setSprintStartDate] = useState(() => {
     // Default to January 1st of current year if not stored
-    const stored = localStorage.getItem('midnight-sprint-start-date');
+    const stored = localStorage.getItem('noctisium-sprint-start-date');
     return stored ? new Date(stored) : new Date(new Date().getFullYear(), 0, 1);
   });
   const [deepWorkBlocks, setDeepWorkBlocks] = useState<string[]>(() => {
@@ -21,13 +21,16 @@ const Schedule = () => {
 
   // Save sprint start date when changed
   useEffect(() => {
-    localStorage.setItem('midnight-sprint-start-date', sprintStartDate.toISOString());
+    localStorage.setItem('noctisium-sprint-start-date', sprintStartDate.toISOString());
   }, [sprintStartDate]);
 
   // Save deep work blocks when changed
   useEffect(() => {
     localStorage.setItem('midnight-deep-work-blocks', JSON.stringify(deepWorkBlocks));
   }, [deepWorkBlocks]);
+
+  // Load tracker data for computing success metrics
+  const trackerData = loadData();
 
   // Generate all months for the selected year
   const getMonthsInYear = (year: number) => {
@@ -125,15 +128,6 @@ const Schedule = () => {
   const daysLeftInPhase = getDaysLeftInCurrentPhase();
   const inOnPhase = isSprintOnDay(new Date());
 
-  // Year navigation
-  const years = [
-    selectedYear - 2, 
-    selectedYear - 1, 
-    selectedYear, 
-    selectedYear + 1, 
-    selectedYear + 2
-  ];
-
   return (
     <div className="flex flex-col h-full">
       <div className="mb-6">
@@ -171,38 +165,11 @@ const Schedule = () => {
             </div>
           </div>
         </div>
-        
-        {/* Year selector */}
-        <div className="flex gap-2 mb-6">
-          <button 
-            className="terminal-button" 
-            onClick={() => setSelectedYear(prev => prev - 1)}
-          >
-            ← Prev
-          </button>
-          
-          {years.map(year => (
-            <button
-              key={year}
-              className={`terminal-button ${selectedYear === year ? 'bg-terminal-accent text-terminal-bg' : ''}`}
-              onClick={() => setSelectedYear(year)}
-            >
-              {year}
-            </button>
-          ))}
-          
-          <button 
-            className="terminal-button" 
-            onClick={() => setSelectedYear(prev => prev + 1)}
-          >
-            Next →
-          </button>
-        </div>
       </div>
       
       {/* Calendar grid */}
       <div className="flex-1 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 overflow-auto pb-12">
-        {getMonthsInYear(selectedYear).map(({ month, name, days }) => (
+        {getMonthsInYear(currentYear).map(({ month, name, days }) => (
           <div key={month} className="border border-terminal-accent/30 p-2">
             <div className="text-center mb-2 text-terminal-accent">{name}</div>
             <div className="grid grid-cols-7 gap-px text-center text-xs mb-1">
@@ -218,28 +185,86 @@ const Schedule = () => {
                 
                 const isOn = isSprintOnDay(day);
                 const isToday = new Date().toDateString() === day.toDateString();
-                const hasWork = hasDeepWork(day);
-                
+                // Compute success metrics
+                const dateKey = day.toISOString().split('T')[0];
+                const metrics = trackerData.metrics;
+                let score = 0;
+                const deepWorkVal = metrics.find(m => m.id === 'deepWork')?.values[dateKey];
+                if (deepWorkVal !== undefined && Number(deepWorkVal) >= 2) score++;
+                const sleepVal = metrics.find(m => m.id === 'sleepHours')?.values[dateKey];
+                if (sleepVal !== undefined && Number(sleepVal) >= 7) score++;
+                const coldVal = metrics.find(m => m.id === 'coldShower')?.values[dateKey];
+                if (coldVal === true) score++;
+                const proteinVal = metrics.find(m => m.id === 'proteinIntake')?.values[dateKey];
+                if (proteinVal !== undefined && Number(proteinVal) >= 100) score++;
+                const recoveryVal = metrics.find(m => m.id === 'recovery')?.values[dateKey];
+                if (recoveryVal !== undefined && Number(recoveryVal) >= 70) score++;
+                const successPercent = Math.round((score / 5) * 100);
+                const hasMetrics = metrics.some(m => m.values[dateKey] !== undefined && m.values[dateKey] !== '');
+                const dotColor = successPercent >= 80
+                  ? 'var(--accent-cyan)'
+                  : successPercent >= 50
+                  ? 'var(--accent-orange)'
+                  : 'var(--accent-red)';
+
                 return (
                   <div
                     key={day.getTime()}
-                    className={`
-                      h-8 flex items-center justify-center border text-xs cursor-pointer
-                      ${isToday ? 'border-terminal-accent' : 'border-terminal-accent/20'}
-                      ${isOn ? 'bg-terminal-accent/20' : 'bg-terminal-bg/70'}
-                      ${hasWork ? 'text-green-400 font-bold' : ''}
-                    `}
+                    className={`h-8 relative flex items-center justify-center text-xs cursor-pointer`}
+                    style={{
+                      border: isOn
+                        ? '1px solid var(--accent-red)'
+                        : '1px solid var(--accent-orange)'
+                    }}
                     onClick={() => toggleDeepWork(day)}
-                    title={`${day.toLocaleDateString()}: ${isOn ? 'Sprint ON' : 'Sprint OFF'}${hasWork ? ', Deep Work' : ''}`}
+                    title={hasMetrics ? `Success: ${successPercent}% — ${successPercent >= 80 ? 'Success' : successPercent >= 50 ? 'Partial' : 'Needs Improvement'}` : undefined}
                   >
-                    {day.getDate()}
-                    {hasWork && <span className="ml-1">•</span>}
+                    <span>{day.getDate()}</span>
+                    {hasMetrics && (
+                      <span
+                        className="absolute bottom-1 left-1/2 transform -translate-x-1/2 w-1.5 h-1.5 rounded-full"
+                        style={{ backgroundColor: dotColor }}
+                      />
+                    )}
                   </div>
                 );
               })}
             </div>
           </div>
         ))}
+      </div>
+      {/* Success Legend */}
+      <div className="mt-4 text-xs">
+        <div className="font-semibold mb-1">Legend:</div>
+        <ul className="space-y-1">
+          <li>
+            <span
+              className="inline-block w-1.5 h-1.5 rounded-full mr-1"
+              style={{ backgroundColor: 'var(--accent-cyan)' }}
+            />
+            Success – met ≥ 4 of 5 criteria (≥ 80%)
+          </li>
+          <li>
+            <span
+              className="inline-block w-1.5 h-1.5 rounded-full mr-1"
+              style={{ backgroundColor: 'var(--accent-orange)' }}
+            />
+            Partial – met 3 of 5 criteria (50–79%)
+          </li>
+          <li>
+            <span
+              className="inline-block w-1.5 h-1.5 rounded-full mr-1"
+              style={{ backgroundColor: 'var(--accent-red)' }}
+            />
+            Needs Improvement – met ≤ 2 criteria (&lt; 50%)
+          </li>
+          <li>
+            <span className="inline-block w-4 h-2 border-[1px] border-[var(--accent-red)] mr-1" />
+            Sprint-on days (days 1–21)
+            <span className="inline-block w-4 h-2 border-[1px] border-[var(--accent-orange)] ml-2 mr-1" />
+            Sprint-off days (days 22–28)
+          </li>
+        </ul>
       </div>
     </div>
   );
