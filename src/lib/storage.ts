@@ -5,6 +5,8 @@
  * Currently it uses localStorage, but can be extended to use other storage methods.
  */
 
+import { supabase } from './supabase';
+
 export interface MetricData {
   id: string;
   name: string;
@@ -136,7 +138,7 @@ export const exportDataCSV = (): void => {
   
   // Add rows for each metric
   data.metrics.forEach(metric => {
-    let row = [metric.name];
+    const row = [metric.name];
     data.dates.forEach(date => {
       const value = metric.values[date] !== undefined ? metric.values[date] : "";
       row.push(value.toString());
@@ -217,8 +219,72 @@ export const importDataCSV = (fileContent: string): boolean => {
   }
 };
 
-// To be implemented when migrating to Supabase
-// export const initSupabase = () => {
-//   // Initialize Supabase client
-//   // Replace localStorage operations with Supabase operations
-// };
+// Supabase-syncing storage functions
+type SupabaseMetricRow = { date: string; data: Record<string, string | number | boolean> };
+
+// Use a fixed Supabase user ID for all sync operations
+const FIXED_USER_ID = '<YOUR-UUID>';
+
+/**
+ * Load all metrics from Supabase (falls back to localStorage)
+ */
+export async function loadMetrics(): Promise<TrackerData> {
+  try {
+    const { data, error } = await supabase
+      .from('metrics')
+      .select('date, data')
+      .eq('user_id', FIXED_USER_ID)
+      .order('date', { ascending: true });
+    if (error || !data || data.length === 0) {
+      return loadData();
+    }
+
+    const rows = data as SupabaseMetricRow[];
+    const metricsByDate = rows.reduce(
+      (acc, row) => {
+        acc[row.date] = row.data;
+        return acc;
+      },
+      {} as Record<string, Record<string, string | number | boolean>>
+    );
+
+    const dates = Object.keys(metricsByDate).sort();
+    const metrics: MetricData[] = predefinedMetrics.map((metric) => ({
+      ...metric,
+      values: dates.reduce((vals, date) => {
+        vals[date] = metricsByDate[date][metric.id] ?? '';
+        return vals;
+      }, {} as Record<string, string | number | boolean>),
+    }));
+
+    const trackerData: TrackerData = { metrics, dates };
+    saveData(trackerData);
+    return trackerData;
+  } catch (e) {
+    console.error('Failed to load metrics:', e);
+    return loadData();
+  }
+}
+
+/**
+ * Save metrics locally and upsert into Supabase
+ */
+export async function saveMetrics(trackerData: TrackerData): Promise<void> {
+  // First, write to localStorage
+  saveData(trackerData);
+  try {
+    const entries = trackerData.dates.map((date) => {
+      const payload: Record<string, string | number | boolean> = {};
+      trackerData.metrics.forEach((metric) => {
+        payload[metric.id] = metric.values[date] ?? null;
+      });
+      return { user_id: FIXED_USER_ID, date, data: payload };
+    });
+    const { error } = await supabase
+      .from('metrics')
+      .upsert(entries, { onConflict: 'user_id,date' });
+    if (error) console.error('Supabase upsert failed', error);
+  } catch (e) {
+    console.error('Failed to save metrics to Supabase:', e);
+  }
+}
