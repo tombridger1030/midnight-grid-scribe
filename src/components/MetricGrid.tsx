@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { loadData, saveData, MetricData, TrackerData, predefinedMetrics } from '@/lib/storage';
+import { loadData, saveData, MetricData, TrackerData, predefinedMetrics, FIXED_USER_ID } from '@/lib/storage';
 import { useDate } from '@/contexts/DateContext';
 import { useToast } from '@/components/ui/use-toast';
 import SparkLine from './SparkLine';
+import { supabase } from '@/lib/supabase';
 
 interface MetricGridProps {
   onAddDay: () => void;
@@ -43,20 +44,16 @@ const MetricGrid: React.FC<MetricGridProps> = ({ onAddDay }) => {
   }
 
   // Handle cell value changes
-  const handleCellChange = (metricId: string, date: string, value: string) => {
+  const handleCellChange = async (metricId: string, date: string, value: string) => {
     setData(prevData => {
       const updatedMetrics = prevData.metrics.map(metric => {
         if (metric.id === metricId) {
           let processedValue: string | number | boolean = value;
-          
-          // Convert value based on metric type
           if (metric.type === 'number') {
-            // allow decimals and store raw input
             processedValue = value;
           } else if (metric.type === 'boolean') {
             processedValue = value.toLowerCase() === 'true';
           }
-          
           return {
             ...metric,
             values: {
@@ -67,12 +64,59 @@ const MetricGrid: React.FC<MetricGridProps> = ({ onAddDay }) => {
         }
         return metric;
       });
-
       return {
         ...prevData,
         metrics: updatedMetrics
       };
     });
+
+    try {
+      // Build the metrics data for the current day
+      const dayData = data.metrics.reduce((acc, metric) => {
+        acc[metric.id] = metric.values[date] ?? null;
+        return acc;
+      }, {} as Record<string, string | number | boolean>);
+
+      // Filter out any non-metric fields
+      const metricsOnly = Object.fromEntries(
+        Object.entries(dayData).filter(([k, v]) => 
+          k !== 'date' && k !== 'user_id'
+        )
+      );
+
+      // Upsert the changed day's data to Supabase
+      const payload = [{
+        user_id: FIXED_USER_ID,
+        date,
+        data: metricsOnly
+      }];
+
+      console.log('🔔 Cell change upsert payload:', payload);
+
+      const { data: upsertResult, error } = await supabase
+        .from('metrics')
+        .upsert(payload, {
+          onConflict: 'user_id,date'
+        });
+
+      console.log('Upsert result:', upsertResult, error);
+
+      if (error) {
+        console.error('Supabase upsert error:', error);
+        toast({
+          title: "Sync failed",
+          description: "Changes saved locally but failed to sync to cloud",
+          variant: "destructive"
+        });
+      }
+    } catch (err) {
+      console.error('handleCellChange threw', err);
+      toast({
+        title: "Sync failed",
+        description: "An unexpected error occurred",
+        variant: "destructive"
+      });
+    }
   };
 
   // Extract values for spark line charts
@@ -133,8 +177,62 @@ const MetricGrid: React.FC<MetricGridProps> = ({ onAddDay }) => {
     return <input type="text" {...commonProps} />;
   };
 
+  const handleTestSave = async () => {
+    console.log('🔔 Test save button clicked');
+    try {
+      const testDate = '2025-05-07';
+      const dayData = data.metrics.reduce((acc, metric) => {
+        acc[metric.id] = metric.values[currentDate] ?? null;
+        return acc;
+      }, {} as Record<string, string | number | boolean>);
+
+      console.log('🔔 Test save payload:', { testDate, dayData });
+
+      const metricsOnly = Object.fromEntries(
+        Object.entries(dayData).filter(([k, v]) => 
+          k !== 'date' && k !== 'user_id'
+        )
+      );
+
+      const { data: upsertData, error } = await supabase
+        .from('metrics')
+        .upsert([{ 
+          user_id: FIXED_USER_ID, 
+          date: testDate, 
+          data: metricsOnly 
+        }], 
+        { onConflict: 'user_id,date' });
+
+      console.log('🔔 Test save result:', { upsertData, error });
+
+      if (error) {
+        throw error;
+      }
+      
+      toast({
+        title: "Test save successful",
+        description: "Data was saved to Supabase for 2025-05-07"
+      });
+    } catch (err) {
+      console.error('Test save failed:', err);
+      toast({
+        title: "Test save failed",
+        description: "Check console for details",
+        variant: "destructive"
+      });
+    }
+  };
+
   return (
     <div className="w-full overflow-x-auto">
+      <div className="mb-4">
+        <button 
+          onClick={handleTestSave}
+          className="terminal-button bg-accent-pink text-white px-4 py-2 rounded"
+        >
+          Test Save (2025-05-07)
+        </button>
+      </div>
       <table className="w-full border-collapse min-w-full">
         <thead>
           <tr>

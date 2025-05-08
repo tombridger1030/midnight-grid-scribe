@@ -4,7 +4,7 @@ interface PinUnlockOverlayProps {
   onUnlock: () => void;
 }
 
-const FIXED_PIN = '1234'; // Obfuscated or replace with your own PIN
+const FIXED_PIN = '2508'; // Obfuscated or replace with your own PIN
 
 export default function PinUnlockOverlay({ onUnlock }: PinUnlockOverlayProps) {
   const [input, setInput] = useState('');

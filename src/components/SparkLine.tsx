@@ -37,7 +37,7 @@ const SparkLine: React.FC<SparkLineProps> = ({ data }) => {
 
     const min = Math.min(...validData);
     const max = Math.max(...validData);
-
+    
     const points = data.map((value, i) => {
       let val = value;
       if (isNaN(val)) {

@@ -223,7 +223,7 @@ export const importDataCSV = (fileContent: string): boolean => {
 type SupabaseMetricRow = { date: string; data: Record<string, string | number | boolean> };
 
 // Use a fixed Supabase user ID for all sync operations
-const FIXED_USER_ID = '<YOUR-UUID>';
+export const FIXED_USER_ID = '0b3c6a14-8d1e-4ca4-b44f-8b89980bc61b';
 
 /**
  * Load all metrics from Supabase (falls back to localStorage)
@@ -270,21 +270,32 @@ export async function loadMetrics(): Promise<TrackerData> {
  * Save metrics locally and upsert into Supabase
  */
 export async function saveMetrics(trackerData: TrackerData): Promise<void> {
+  console.log('🔔 saveMetrics called with data:', trackerData);
   // First, write to localStorage
   saveData(trackerData);
-  try {
-    const entries = trackerData.dates.map((date) => {
-      const payload: Record<string, string | number | boolean> = {};
-      trackerData.metrics.forEach((metric) => {
-        payload[metric.id] = metric.values[date] ?? null;
-      });
-      return { user_id: FIXED_USER_ID, date, data: payload };
+  
+  const entries = trackerData.dates.map((date) => {
+    const payload: Record<string, string | number | boolean> = {};
+    trackerData.metrics.forEach((metric) => {
+      payload[metric.id] = metric.values[date] ?? null;
     });
-    const { error } = await supabase
-      .from('metrics')
-      .upsert(entries, { onConflict: 'user_id,date' });
-    if (error) console.error('Supabase upsert failed', error);
-  } catch (e) {
-    console.error('Failed to save metrics to Supabase:', e);
+    const metricsOnly = Object.fromEntries(
+      Object.entries(payload).filter(([k, v]) => 
+        k !== 'date' && k !== 'user_id'
+      )
+    );
+    return { user_id: FIXED_USER_ID, date, data: metricsOnly };
+  });
+  
+  console.log('🔔 upsert payload:', entries);
+
+  const { data, error } = await supabase
+    .from('metrics')
+    .upsert([...entries], { onConflict: 'user_id,date' });
+  
+  console.log('🔔 upsert result:', { data, error });
+
+  if (error) {
+    throw new Error(`Failed to save metrics to Supabase: ${error.message}`);
   }
 }
