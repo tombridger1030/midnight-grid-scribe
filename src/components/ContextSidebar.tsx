@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import SparkLine from './SparkLine';
-import { getRandomQuote } from '@/lib/quotes';
+import { getRandomQuote, getDynamicQuote, getDailyHeadline } from '@/lib/quotes';
 
 interface FinancialData {
   pct7d: number;
@@ -12,6 +12,8 @@ const ContextSidebar: React.FC = () => {
   const [financial, setFinancial] = useState<FinancialData>({ pct7d: 0, avgSpend: 0, sparkData: [] });
   const [headline, setHeadline] = useState<string>('Loading...');
   const [quote, setQuote] = useState<string>(getRandomQuote());
+  const [isLoadingQuote, setIsLoadingQuote] = useState<boolean>(false);
+  const [isLoadingHeadline, setIsLoadingHeadline] = useState<boolean>(false);
 
   // Fetch financial data from Wealthsimple if API key provided
   useEffect(() => {
@@ -32,9 +34,40 @@ const ContextSidebar: React.FC = () => {
     }
   }, []);
 
-  // Placeholder for daily headline requiring ChatGPT/Perplexity API
+  // Fetch daily headline
   useEffect(() => {
-    setHeadline('🔒 API key not configured');
+    const fetchHeadline = async () => {
+      setIsLoadingHeadline(true);
+      try {
+        const dailyHeadline = await getDailyHeadline();
+        setHeadline(dailyHeadline);
+      } catch (error) {
+        console.error('Error fetching daily headline:', error);
+        setHeadline('Connection to neural feed disrupted');
+      } finally {
+        setIsLoadingHeadline(false);
+      }
+    };
+
+    fetchHeadline();
+  }, []);
+
+  // Fetch dynamic quote on mount
+  useEffect(() => {
+    const fetchQuote = async () => {
+      setIsLoadingQuote(true);
+      try {
+        const dynamicQuote = await getDynamicQuote();
+        setQuote(dynamicQuote);
+      } catch (error) {
+        console.error('Error fetching dynamic quote:', error);
+        // Fallback to static quote is handled in getDynamicQuote
+      } finally {
+        setIsLoadingQuote(false);
+      }
+    };
+
+    fetchQuote();
   }, []);
 
   return (
@@ -49,12 +82,16 @@ const ContextSidebar: React.FC = () => {
       {/* Daily Headline */}
       <div className="mb-4">
         <h2 className="uppercase"><span>Daily Headline</span><span className="blink">_</span></h2>
-        <div className="text-[#5FE3B3]">{headline}</div>
+        <div className="text-[#5FE3B3]">
+          {isLoadingHeadline ? 'Syncing neural feed...' : headline}
+        </div>
       </div>
       {/* Quote of the Day */}
       <div>
         <h2 className="uppercase"><span>Quote of the Day</span><span className="blink">_</span></h2>
-        <div className="italic text-[#5FE3B3]">"{quote}"</div>
+        <div className="italic text-[#5FE3B3]">
+          {isLoadingQuote ? 'Loading...' : `"${quote}"`}
+        </div>
       </div>
     </div>
   );

@@ -100,26 +100,35 @@ const TerminalLayout: React.FC = () => {
 
         <div className="flex-1 flex flex-col">
           {/* Terminal top bar */}
-          <div className="flex items-center justify-between p-1 bg-sidebar border-b border-[#333] text-xs">
-            <div className="flex items-center">
-              <Terminal size={14} className="mr-2 text-[#5FE3B3]" />
-              <span className="mr-4">noctisium@terminal:~$ cd /metrics</span>
-              <span className={cursorVisible ? "opacity-100" : "opacity-0"}>_</span>
+          <div className="flex flex-col p-1 bg-sidebar border-b border-[#333] text-xs">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <Terminal size={14} className="mr-2 text-[#5FE3B3]" />
+                <span className="mr-4">noctisium@terminal:~$ cd /metrics</span>
+                <span className={cursorVisible ? "opacity-100" : "opacity-0"}>_</span>
+              </div>
+              <div className="flex gap-4">
+                <span className="flex items-center">
+                  <Cpu size={12} className="mr-1" /> {systemStats.cpu}%
+                </span>
+                <span>RAM: {systemStats.ram}%</span>
+                <span className="flex items-center">
+                  <HardDrive size={12} className="mr-1" /> {systemStats.disk}%
+                </span>
+                <span className="flex items-center">
+                  <Wifi size={12} className="mr-1" /> {systemStats.net} KB/s
+                </span>
+                <span className={sprint.isOnPeriod ? "text-[#5FE3B3]" : "text-[#53B4FF]"}>
+                  Sprint: {sprint.dayOfSprint}/{sprint.isOnPeriod ? "21" : "28"}
+                </span>
+              </div>
             </div>
-            <div className="flex gap-4">
-              <span className="flex items-center">
-                <Cpu size={12} className="mr-1" /> {systemStats.cpu}%
-              </span>
-              <span>RAM: {systemStats.ram}%</span>
-              <span className="flex items-center">
-                <HardDrive size={12} className="mr-1" /> {systemStats.disk}%
-              </span>
-              <span className="flex items-center">
-                <Wifi size={12} className="mr-1" /> {systemStats.net} KB/s
-              </span>
-              <span className={sprint.isOnPeriod ? "text-[#5FE3B3]" : "text-[#53B4FF]"}>
-                Sprint: {sprint.dayOfSprint}/{sprint.isOnPeriod ? "21" : "28"}
-              </span>
+            {/* Sprint progress bar */}
+            <div className="sprint-progress-container mt-1">
+              <div 
+                className="sprint-progress-bar" 
+                style={{ width: `${(sprint.dayOfSprint / 21) * 100}%` }}
+              ></div>
             </div>
           </div>
 

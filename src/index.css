@@ -15,6 +15,7 @@
     --accent-amber:     #FFC300; /* amber glow */
     --accent-cyan:      #0AF5E3; /* cool cyan */
     --line-faint:       rgba(232, 48, 35, 0.2); /* faint red grid lines */
+    --accent-sprint:    #FF4F2E; /* brighter ember-orange red for sprint days */
   }
 
   * {
@@ -166,5 +167,29 @@
   /* Sparklines */
   .spark-line {
     opacity: 0.9 !important;
+  }
+
+  /* Sprint day styling */
+  .day--sprint-on {
+    border: 2px solid var(--accent-sprint) !important;
+  }
+  
+  .day--sprint-off {
+    border: 1px solid rgba(249, 88, 26, 0.6) !important;
+  }
+
+  /* Sprint progress bar */
+  .sprint-progress-container {
+    width: 100%;
+    height: 4px;
+    background-color: transparent;
+    border: 1px solid var(--accent-orange) !important;
+    overflow: hidden;
+  }
+
+  .sprint-progress-bar {
+    height: 100%;
+    background-color: var(--accent-red);
+    transition: width 0.3s ease;
   }
 }

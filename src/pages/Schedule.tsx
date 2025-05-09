@@ -210,12 +210,9 @@ const Schedule = () => {
                 return (
                   <div
                     key={day.getTime()}
-                    className={`h-8 relative flex items-center justify-center text-xs cursor-pointer`}
-                    style={{
-                      border: isOn
-                        ? '1px solid var(--accent-red)'
-                        : '1px solid var(--accent-orange)'
-                    }}
+                    className={`h-8 relative flex items-center justify-center text-xs cursor-pointer ${
+                      isOn ? 'day--sprint-on' : 'day--sprint-off'
+                    }`}
                     onClick={() => toggleDeepWork(day)}
                     title={hasMetrics ? `Success: ${successPercent}% — ${successPercent >= 80 ? 'Success' : successPercent >= 50 ? 'Partial' : 'Needs Improvement'}` : undefined}
                   >
