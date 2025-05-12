@@ -5,6 +5,11 @@ import { useToast } from '@/components/ui/use-toast';
 import SparkLine from './SparkLine';
 import { supabase } from '@/lib/supabase';
 
+// Sprint cycle configuration
+const SPRINT_ON_DAYS = 21;
+const SPRINT_OFF_DAYS = 7;
+const SPRINT_CYCLE = SPRINT_ON_DAYS + SPRINT_OFF_DAYS;
+
 interface MetricGridProps {
   onAddDay: () => void;
 }
@@ -13,6 +18,11 @@ const MetricGrid: React.FC<MetricGridProps> = ({ onAddDay }) => {
   const [data, setData] = useState<TrackerData>({ metrics: [], dates: [] });
   const { toast } = useToast();
   const { currentDate } = useDate();
+  const [sprintStartDate, setSprintStartDate] = useState<Date>(() => {
+    // Default to January 1st of current year if not stored
+    const stored = localStorage.getItem('noctisium-sprint-start-date');
+    return stored ? new Date(stored) : new Date(new Date().getFullYear(), 0, 1);
+  });
 
   // Load data on component mount
   useEffect(() => {
@@ -24,6 +34,16 @@ const MetricGrid: React.FC<MetricGridProps> = ({ onAddDay }) => {
   useEffect(() => {
     saveData(data);
   }, [data]);
+
+  // Determine if a date is in a sprint ON period
+  const isSprintOnDay = (date: string) => {
+    const dateObj = new Date(date);
+    const diffTime = Math.abs(dateObj.getTime() - sprintStartDate.getTime());
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    const cyclePosition = diffDays % SPRINT_CYCLE;
+    
+    return cyclePosition < SPRINT_ON_DAYS;
+  };
 
   // Filter metrics to only those still in predefinedMetrics
   const validMetricIds = predefinedMetrics.map(m => m.id);
@@ -223,6 +243,15 @@ const MetricGrid: React.FC<MetricGridProps> = ({ onAddDay }) => {
     }
   };
 
+  // Get cell border style based on sprint cycle
+  const getCellBorderStyle = (date: string) => {
+    if (isSprintOnDay(date)) {
+      return { border: '2px solid var(--accent-cyan)' };
+    } else {
+      return { border: '1px solid var(--accent-orange)' };
+    }
+  };
+
   return (
     <div className="w-full overflow-x-auto">
       <div className="mb-4">
@@ -237,7 +266,13 @@ const MetricGrid: React.FC<MetricGridProps> = ({ onAddDay }) => {
         <thead>
           <tr>
             <th className="terminal-cell w-48">Metric</th>
-            <th className="terminal-cell text-center border-accent-pink" style={{ minWidth: '100px' }}>
+            <th 
+              className="terminal-cell text-center border-accent-pink" 
+              style={{ 
+                minWidth: '100px',
+                ...getCellBorderStyle(currentDate)
+              }}
+            >
               {currentDate}
             </th>
             <th className="terminal-cell w-24 text-center">Trend</th>
@@ -250,7 +285,10 @@ const MetricGrid: React.FC<MetricGridProps> = ({ onAddDay }) => {
                 <div className="text-sm">{metric.name}</div>
                 <div className="text-xs text-terminal-accent/50">{metric.type}</div>
               </td>
-              <td className="terminal-cell text-center border-accent-pink">
+              <td 
+                className="terminal-cell text-center" 
+                style={getCellBorderStyle(currentDate)}
+              >
                 {getCellInput(metric, currentDate)}
               </td>
               <td className="terminal-cell">

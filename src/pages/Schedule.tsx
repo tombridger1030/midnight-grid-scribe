@@ -1,14 +1,32 @@
 import React, { useState, useEffect } from 'react';
 import TypewriterText from '@/components/TypewriterText';
-import { loadData } from '@/lib/storage';
+import { loadData, FIXED_USER_ID } from '@/lib/storage';
+import { supabase } from '@/lib/supabase';
+
+// Override console.error to filter out PHANTOM-related errors
+const origConsoleError = console.error;
+console.error = (...args) => {
+  if (typeof args[0] === 'string' && args[0].includes('PHANTOM')) return;
+  origConsoleError(...args);
+};
 
 // Sprint cycle configuration
 const SPRINT_ON_DAYS = 21;
 const SPRINT_OFF_DAYS = 7;
 const SPRINT_CYCLE = SPRINT_ON_DAYS + SPRINT_OFF_DAYS;
 
+// Define Sprint interface
+interface Sprint {
+  sprint_id: string;
+  user_id: string;
+  start_date: string;
+  status: 'active' | 'completed';
+}
+
 const Schedule = () => {
   const currentYear = new Date().getFullYear();
+  const [sprints, setSprints] = useState<Sprint[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [sprintStartDate, setSprintStartDate] = useState(() => {
     // Default to January 1st of current year if not stored
     const stored = localStorage.getItem('noctisium-sprint-start-date');
@@ -18,6 +36,43 @@ const Schedule = () => {
     const stored = localStorage.getItem('midnight-deep-work-blocks');
     return stored ? JSON.parse(stored) : [];
   });
+
+  // Load sprints from Supabase on mount
+  useEffect(() => {
+    const loadSprints = async () => {
+      try {
+        setIsLoading(true);
+        const { data, error } = await supabase
+          .from('sprints')
+          .select('*')
+          .eq('user_id', FIXED_USER_ID)
+          .order('start_date', { ascending: true });
+        
+        if (error) {
+          console.error('Error loading sprints:', error);
+          return;
+        }
+        
+        setSprints(data || []);
+        
+        // If we have sprints, use the most recent active one for sprint start date
+        if (data && data.length > 0) {
+          const activeSprintRecord = data.find(s => s.status === 'active');
+          if (activeSprintRecord) {
+            const activeStartDate = new Date(activeSprintRecord.start_date);
+            setSprintStartDate(activeStartDate);
+            localStorage.setItem('noctisium-sprint-start-date', activeStartDate.toISOString());
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load sprints:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadSprints();
+  }, []);
 
   // Save sprint start date when changed
   useEffect(() => {
@@ -31,6 +86,56 @@ const Schedule = () => {
 
   // Load tracker data for computing success metrics
   const trackerData = loadData();
+
+  // Start a new sprint
+  const handleStartNewSprint = async () => {
+    try {
+      const today = new Date();
+      const todayDate = today.toISOString().split('T')[0];
+      
+      // Mark previous sprint completed
+      const active = sprints.find(s => s.status === 'active');
+      if (active) {
+        await supabase
+          .from('sprints')
+          .update({ status: 'completed' })
+          .eq('sprint_id', active.sprint_id);
+      }
+      
+      // Insert new sprint
+      const { data, error } = await supabase
+        .from('sprints')
+        .insert([
+          { user_id: FIXED_USER_ID, start_date: todayDate, status: 'active' }
+        ]);
+      
+      if (error) {
+        console.error('Error creating new sprint:', error);
+        return;
+      }
+      
+      // Reload sprints to get the newly created sprint with its ID
+      const { data: updatedSprints, error: fetchError } = await supabase
+        .from('sprints')
+        .select('*')
+        .eq('user_id', FIXED_USER_ID)
+        .order('start_date', { ascending: true });
+        
+      if (fetchError) {
+        console.error('Error fetching updated sprints:', fetchError);
+        return;
+      }
+      
+      // Update local state
+      setSprints(updatedSprints || []);
+      
+      // Update sprint start date
+      setSprintStartDate(new Date(todayDate));
+      
+    } catch (err) {
+      console.error('Failed to start new sprint:', err);
+    }
+  };
 
   // Generate all months for the selected year
   const getMonthsInYear = (year: number) => {
@@ -127,6 +232,7 @@ const Schedule = () => {
   const currentSprintNumber = getCurrentSprintNumber();
   const daysLeftInPhase = getDaysLeftInCurrentPhase();
   const inOnPhase = isSprintOnDay(new Date());
+  const activeSprintExists = sprints.some(s => s.status === 'active');
 
   return (
     <div className="flex flex-col h-full">
@@ -135,6 +241,22 @@ const Schedule = () => {
         <p className="text-terminal-accent/70 text-sm">
           {SPRINT_ON_DAYS}-day on / {SPRINT_OFF_DAYS}-day off sprint cycle visualization
         </p>
+        
+        {/* Start New Sprint Button */}
+        <div className="mt-4 mb-4">
+          <button 
+            onClick={handleStartNewSprint}
+            className="terminal-button bg-accent-cyan text-white px-4 py-2 rounded mr-2"
+            disabled={isLoading}
+          >
+            {isLoading ? 'Loading...' : activeSprintExists ? 'Start New Sprint' : 'Start First Sprint'}
+          </button>
+          {activeSprintExists && (
+            <span className="text-sm text-terminal-accent/70 ml-2">
+              (This will complete the current active sprint)
+            </span>
+          )}
+        </div>
         
         {/* Sprint status */}
         <div className="mt-4 mb-6 p-3 border border-terminal-accent/50 inline-block">
@@ -207,12 +329,16 @@ const Schedule = () => {
                   ? 'var(--accent-orange)'
                   : 'var(--accent-red)';
 
+                // Apply border style based on sprint cycle
+                const borderStyle = isOn 
+                  ? { border: '2px solid var(--accent-cyan)' }
+                  : { border: '1px solid var(--accent-orange)' };
+
                 return (
                   <div
                     key={day.getTime()}
-                    className={`h-8 relative flex items-center justify-center text-xs cursor-pointer ${
-                      isOn ? 'day--sprint-on' : 'day--sprint-off'
-                    }`}
+                    className="h-8 relative flex items-center justify-center text-xs cursor-pointer"
+                    style={borderStyle}
                     onClick={() => toggleDeepWork(day)}
                     title={hasMetrics ? `Success: ${successPercent}% — ${successPercent >= 80 ? 'Success' : successPercent >= 50 ? 'Partial' : 'Needs Improvement'}` : undefined}
                   >
@@ -256,7 +382,7 @@ const Schedule = () => {
             Needs Improvement – met ≤ 2 criteria (&lt; 50%)
           </li>
           <li>
-            <span className="inline-block w-4 h-2 border-[1px] border-[var(--accent-red)] mr-1" />
+            <span className="inline-block w-4 h-2 border-[2px] border-[var(--accent-cyan)] mr-1" />
             Sprint-on days (days 1–21)
             <span className="inline-block w-4 h-2 border-[1px] border-[var(--accent-orange)] ml-2 mr-1" />
             Sprint-off days (days 22–28)

@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import SparkLine from './SparkLine';
+import StackedSparkLine from './StackedSparkLine';
 import { getRandomQuote, getDynamicQuote, getDailyHeadline } from '@/lib/quotes';
+import { loadData } from '@/lib/storage';
+import { getStackedSparkData } from '@/lib/chartUtils';
 
 interface FinancialData {
   pct7d: number;
@@ -14,6 +17,14 @@ const ContextSidebar: React.FC = () => {
   const [quote, setQuote] = useState<string>(getRandomQuote());
   const [isLoadingQuote, setIsLoadingQuote] = useState<boolean>(false);
   const [isLoadingHeadline, setIsLoadingHeadline] = useState<boolean>(false);
+  const [habitData, setHabitData] = useState<{ habitData: Record<string, number[]>; otherData?: { id: string; values: number[]; rollingAvg: number[] } }>({ habitData: {} });
+
+  // Load habit data on mount
+  useEffect(() => {
+    const data = loadData();
+    const sparkData = getStackedSparkData(data, 7);
+    setHabitData(sparkData);
+  }, []);
 
   // Fetch financial data from Wealthsimple if API key provided
   useEffect(() => {
@@ -78,6 +89,23 @@ const ContextSidebar: React.FC = () => {
         <div>Δ (7d): {financial.pct7d}%</div>
         <div>Avg Daily Spend: ${financial.avgSpend} CAD</div>
         <SparkLine data={financial.sparkData} />
+      </div>
+      {/* Habit Trends */}
+      <div className="mb-4">
+        <h2 className="uppercase"><span>Habit Trends</span><span className="blink">_</span></h2>
+        <div>
+          <StackedSparkLine 
+            habitData={habitData.habitData} 
+            otherData={habitData.otherData} 
+          />
+        </div>
+        {habitData.otherData && (
+          <div className="text-xs opacity-70 mt-1">
+            {habitData.otherData.id} (4-Day Avg): {habitData.otherData.rollingAvg.length > 0 
+              ? habitData.otherData.rollingAvg[habitData.otherData.rollingAvg.length - 1].toFixed(1)
+              : '0'}
+          </div>
+        )}
       </div>
       {/* Daily Headline */}
       <div className="mb-4">

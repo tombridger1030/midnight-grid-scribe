@@ -3,54 +3,60 @@ import { useDate } from '@/contexts/DateContext';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-const dayNames = ['Su','Mo','Tu','We','Th','Fr','Sa'];
+// Sprint cycle configuration
+const SPRINT_ON_DAYS = 21;
+const SPRINT_OFF_DAYS = 7;
+const SPRINT_CYCLE = SPRINT_ON_DAYS + SPRINT_OFF_DAYS;
 
 const CalendarNavigator: React.FC = () => {
   const { currentDate, setCurrentDate } = useDate();
+  const [viewMonth, setViewMonth] = useState(() => new Date());
+  const [sprintStartDate, setSprintStartDate] = useState<Date>(() => {
+    // Default to January 1st of current year if not stored
+    const stored = localStorage.getItem('noctisium-sprint-start-date');
+    return stored ? new Date(stored) : new Date(new Date().getFullYear(), 0, 1);
+  });
+
+  // Determine if a date is in a sprint ON period
+  const isSprintOnDay = (date: Date) => {
+    const diffTime = Math.abs(date.getTime() - sprintStartDate.getTime());
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    const cyclePosition = diffDays % SPRINT_CYCLE;
+    
+    return cyclePosition < SPRINT_ON_DAYS;
+  };
+
+  // Get cell border style based on sprint cycle
+  const getCellBorderStyle = (date: Date) => {
+    if (isSprintOnDay(date)) {
+      return { border: '2px solid var(--accent-cyan)' };
+    } else {
+      return { border: '1px solid var(--accent-orange)' };
+    }
+  };
+
+  // Parse the current date
   const today = new Date();
-  const [viewMonth, setViewMonth] = useState<Date>(new Date(currentDate));
+  today.setHours(0, 0, 0, 0);
 
-  // Sync viewMonth when currentDate changes
-  useEffect(() => {
-    setViewMonth(new Date(currentDate));
-  }, [currentDate]);
-
-  // Keyboard navigation
-  useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowLeft' && !e.ctrlKey) {
-        const d = new Date(currentDate);
-        d.setDate(d.getDate() - 1);
-        setCurrentDate(d.toISOString().split('T')[0]);
-        e.preventDefault();
-      } else if (e.key === 'ArrowRight' && !e.ctrlKey) {
-        const d = new Date(currentDate);
-        d.setDate(d.getDate() + 1);
-        setCurrentDate(d.toISOString().split('T')[0]);
-        e.preventDefault();
-      } else if (e.key === 'ArrowLeft' && e.ctrlKey) {
-        const m = new Date(viewMonth);
-        m.setMonth(m.getMonth() - 1);
-        setViewMonth(m);
-        e.preventDefault();
-      } else if (e.key === 'ArrowRight' && e.ctrlKey) {
-        const m = new Date(viewMonth);
-        m.setMonth(m.getMonth() + 1);
-        setViewMonth(m);
-        e.preventDefault();
-      }
-    };
-    window.addEventListener('keydown', handleKey);
-    return () => window.removeEventListener('keydown', handleKey);
-  }, [currentDate, viewMonth, setCurrentDate]);
-
-  const year = viewMonth.getFullYear();
+  // Get month and year from viewMonth
   const month = viewMonth.getMonth();
-  const firstDay = new Date(year, month, 1).getDay();
+  const year = viewMonth.getFullYear();
+
+  // Create day name headers
+  const dayNames = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+
+  // Get days in month
   const daysInMonth = new Date(year, month + 1, 0).getDate();
 
-  const dates = [] as (Date | null)[];
+  // Create dates array with padding for first day of month
+  const dates: (Date | null)[] = [];
+  const firstDay = new Date(year, month, 1).getDay();
+  
+  // Add empty slots for padding
   for (let i = 0; i < firstDay; i++) dates.push(null);
+  
+  // Add dates for the month
   for (let d = 1; d <= daysInMonth; d++) dates.push(new Date(year, month, d));
 
   const prevMonth = () => setViewMonth(new Date(year, month - 1, 1));
@@ -87,8 +93,17 @@ const CalendarNavigator: React.FC = () => {
             isToday ? 'outline outline-1 outline-accent-highlight' : '',
             'cursor-pointer hover:bg-accent-primary hover:text-bg-01'
           );
+          
+          // Apply sprint cycle styling
+          const sprintStyle = !isSelected ? getCellBorderStyle(dt) : {};
+          
           return (
-            <div key={idx} className={cls} onClick={() => setCurrentDate(ds)}>
+            <div 
+              key={idx} 
+              className={cls} 
+              onClick={() => setCurrentDate(ds)}
+              style={sprintStyle}
+            >
               {dt.getDate()}
             </div>
           );
