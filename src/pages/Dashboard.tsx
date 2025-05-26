@@ -41,7 +41,9 @@ const Dashboard = () => {
     daysLeft: 0,
     isOnPhase: true,
     sprintName: '',
-    totalDays: 28
+    totalDays: 28,
+    phase: 'ON' as 'ON' | 'OFF' | 'NONE',
+    daysUntilNext: 0
   });
   const [sprints, setSprints] = useState<Sprint[]>([]);
   const { metrics, dates } = useMetrics();
@@ -85,37 +87,68 @@ const Dashboard = () => {
         const isOnPhase = cyclePosition < onDays;
         const daysLeft = isOnPhase ? onDays - cyclePosition : totalCycleDays - cyclePosition;
         
+        let phase: 'ON' | 'OFF' | 'NONE';
+        let daysUntilNext = 0;
+        
+        if (isOnPhase) {
+          phase = 'ON';
+          daysUntilNext = 0; // Not applicable during ON phase
+        } else {
+          phase = 'OFF';
+          daysUntilNext = totalCycleDays - cyclePosition; // Days until next ON phase
+        }
+        
         setSprintData({
           currentSprint,
           daysLeft,
           isOnPhase,
           sprintName: activeSprint.name || `Sprint ${activeSprint.sprint_id.slice(-4)}`,
-          totalDays: totalCycleDays
+          totalDays: totalCycleDays,
+          phase,
+          daysUntilNext
         });
       } else {
-        // Fallback to localStorage calculation if no active sprint
-        const sprintStartDate = localStorage.getItem('noctisium-sprint-start-date');
-        if (sprintStartDate) {
-          const startDate = new Date(sprintStartDate);
-          const diffTime = Math.abs(todayDate.getTime() - startDate.getTime());
-          const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-          const sprintCycle = 28; // 21 on + 7 off
-          const cyclePosition = diffDays % sprintCycle;
-          const currentSprint = Math.floor(diffDays / sprintCycle) + 1;
-          const isOnPhase = cyclePosition < 21;
-          const daysLeft = isOnPhase ? 21 - cyclePosition : sprintCycle - cyclePosition;
-
+        // Check if there's a planned sprint coming up
+        const plannedSprint = data?.find(s => s.status === 'planned');
+        
+        if (plannedSprint) {
+          const sprintStart = new Date(plannedSprint.start_date);
+          const daysUntilStart = Math.ceil((sprintStart.getTime() - todayDate.getTime()) / (1000 * 60 * 60 * 24));
+          
           setSprintData({
-            currentSprint,
-            daysLeft,
-            isOnPhase,
-            sprintName: `Sprint ${currentSprint}`,
-            totalDays: sprintCycle
+            currentSprint: 1,
+            daysLeft: 0,
+            isOnPhase: false,
+            sprintName: plannedSprint.name || 'Upcoming Sprint',
+            totalDays: 28,
+            phase: 'NONE',
+            daysUntilNext: daysUntilStart > 0 ? daysUntilStart : 0
+          });
+        } else {
+          // No active or planned sprint
+          setSprintData({
+            currentSprint: 1,
+            daysLeft: 0,
+            isOnPhase: false,
+            sprintName: 'No Active Sprint',
+            totalDays: 28,
+            phase: 'NONE',
+            daysUntilNext: 0
           });
         }
       }
     } catch (err) {
       console.error('Failed to load sprint data:', err);
+      // Set fallback values on error
+      setSprintData({
+        currentSprint: 1,
+        daysLeft: 0,
+        isOnPhase: false,
+        sprintName: 'Error Loading Sprint',
+        totalDays: 28,
+        phase: 'NONE',
+        daysUntilNext: 0
+      });
     }
   };
 
@@ -298,27 +331,47 @@ const Dashboard = () => {
               <h3 className="text-xs uppercase text-terminal-accent/70 mb-4 tracking-wider">Current Sprint</h3>
               <div className="flex items-baseline gap-2 mb-6">
                 <span className="text-5xl font-bold text-terminal-accent">#{sprintData.currentSprint}</span>
-                <span className={`text-lg font-medium ${sprintData.isOnPhase ? 'text-[#5FE3B3]' : 'text-[#53B4FF]'}`}>
-                  {sprintData.isOnPhase ? 'ON' : 'OFF'}
+                <span className={`text-lg font-medium ${
+                  sprintData.phase === 'ON' ? 'text-[#5FE3B3]' : 
+                  sprintData.phase === 'OFF' ? 'text-[#53B4FF]' : 
+                  'text-[#FFD700]'
+                }`}>
+                  {sprintData.phase}
                 </span>
               </div>
               {sprintData.sprintName && (
                 <div className="text-sm text-terminal-accent/70 mb-4">{sprintData.sprintName}</div>
               )}
               <div className="space-y-3">
-                <div>
-                  <div className="flex justify-between text-xs mb-1">
-                    <span className="text-terminal-accent/70">Phase Progress</span>
-                    <span className="text-terminal-accent">{sprintData.daysLeft} days left</span>
+                {sprintData.phase === 'ON' ? (
+                  <div>
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className="text-terminal-accent/70">Phase Progress</span>
+                      <span className="text-terminal-accent">{sprintData.daysLeft} days left</span>
+                    </div>
+                    <Progress 
+                      value={((21 - sprintData.daysLeft) / 21) * 100} 
+                      className="h-2"
+                    />
                   </div>
-                  <Progress 
-                    value={sprintData.isOnPhase 
-                      ? ((21 - sprintData.daysLeft) / 21) * 100 
-                      : ((7 - sprintData.daysLeft) / 7) * 100
-                    } 
-                    className="h-2"
-                  />
-                </div>
+                ) : sprintData.phase === 'OFF' ? (
+                  <div>
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className="text-terminal-accent/70">Recovery Phase</span>
+                      <span className="text-terminal-accent">{sprintData.daysUntilNext} days until next ON</span>
+                    </div>
+                    <div className="text-sm text-[#53B4FF]">Currently in OFF phase</div>
+                  </div>
+                ) : (
+                  <div>
+                    <div className="text-sm text-[#FFD700]">
+                      {sprintData.daysUntilNext > 0 ? 
+                        `Next sprint starts in ${sprintData.daysUntilNext} days` : 
+                        'No active sprint scheduled'
+                      }
+                    </div>
+                  </div>
+                )}
                 <div className="grid grid-cols-2 gap-4 mt-4">
                   <div>
                     <div className="text-2xl font-bold text-[#FFD700]">{habitCompliance}%</div>
@@ -485,38 +538,6 @@ const Dashboard = () => {
             </div>
           </div>
 
-          {/* Quick Actions - Bottom Row */}
-          <div className="col-span-1 md:col-span-2 lg:col-span-4 grid grid-cols-2 md:grid-cols-4 gap-4">
-            <button 
-              onClick={() => window.location.href = '/metrics'}
-              className="bg-terminal-bg border border-terminal-accent/20 p-4 hover:border-terminal-accent/40 transition-all group"
-            >
-              <BarChart3 size={20} className="mb-2 text-terminal-accent/70 group-hover:text-terminal-accent transition-colors" />
-              <div className="text-xs">Log Metrics</div>
-            </button>
-            <button 
-              onClick={() => window.location.href = '/visualizer'}
-              className="bg-terminal-bg border border-terminal-accent/20 p-4 hover:border-terminal-accent/40 transition-all group"
-            >
-              <Activity size={20} className="mb-2 text-terminal-accent/70 group-hover:text-terminal-accent transition-colors" />
-              <div className="text-xs">View Charts</div>
-            </button>
-            <button 
-              onClick={() => window.location.href = '/kanban'}
-              className="bg-terminal-bg border border-terminal-accent/20 p-4 hover:border-terminal-accent/40 transition-all group"
-            >
-              <Kanban size={20} className="mb-2 text-terminal-accent/70 group-hover:text-terminal-accent transition-colors" />
-              <div className="text-xs">Manage Tasks</div>
-            </button>
-            <button 
-              onClick={() => window.location.href = '/roadmap'}
-              className="bg-terminal-bg border border-terminal-accent/20 p-4 hover:border-terminal-accent/40 transition-all group"
-            >
-              <Target size={20} className="mb-2 text-terminal-accent/70 group-hover:text-terminal-accent transition-colors" />
-              <div className="text-xs">Track Goals</div>
-            </button>
-          </div>
-
           {/* Enhanced Cards Row */}
           <div className="col-span-1 md:col-span-2 lg:col-span-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             
@@ -538,8 +559,23 @@ const Dashboard = () => {
                 <span className="text-xs text-terminal-accent/50">Today</span>
               </div>
               <div className="text-xl font-bold text-[#FF6B00]">{getCurrentLocalDate()}</div>
-              <div className="text-xs text-terminal-accent/70">Sprint Day {sprintData.isOnPhase ? 'ON' : 'OFF'}</div>
-              <div className="text-xs text-terminal-accent/50 mt-1">{sprintData.daysLeft} days left</div>
+              <div className={`text-xs text-terminal-accent/70 ${
+                sprintData.phase === 'ON' ? 'text-[#5FE3B3]' : 
+                sprintData.phase === 'OFF' ? 'text-[#53B4FF]' : 
+                'text-[#FFD700]'
+              }`}>
+                Sprint Day {sprintData.phase}
+              </div>
+              <div className="text-xs text-terminal-accent/50 mt-1">
+                {sprintData.phase === 'ON' ? 
+                  `${sprintData.daysLeft} days left` : 
+                  sprintData.phase === 'OFF' ? 
+                    `${sprintData.daysUntilNext} days until next ON` : 
+                    sprintData.daysUntilNext > 0 ? 
+                      `${sprintData.daysUntilNext} days until start` : 
+                      'No sprint active'
+                }
+              </div>
             </div>
 
             {/* Streak Tracker Card */}

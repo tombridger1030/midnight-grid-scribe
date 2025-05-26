@@ -4,7 +4,21 @@ import { Terminal, LayoutDashboard, Calendar, GitBranch, Square, Cpu, HardDrive,
 import { cn } from '@/lib/utils';
 import PerformanceSidebar from './PerformanceSidebar';
 import ContextSidebar from './ContextSidebar';
-import { syncAllDataToSupabase, loadAllDataFromSupabase, syncAllDataToSupabaseWithTest, testSupabaseConnection, verifySyncFunctionality } from '@/lib/storage';
+import { syncAllDataToSupabase, loadAllDataFromSupabase, syncAllDataToSupabaseWithTest, testSupabaseConnection, verifySyncFunctionality, FIXED_USER_ID } from '@/lib/storage';
+import { supabase } from '@/lib/supabase';
+import { getCurrentLocalDate } from '@/lib/dateUtils';
+
+// Sprint interface
+interface Sprint {
+  sprint_id: string;
+  user_id: string;
+  start_date: string;
+  end_date?: string;
+  status: 'active' | 'completed' | 'planned';
+  name?: string;
+  on_days?: number;
+  off_days?: number;
+}
 
 const TerminalLayout: React.FC = () => {
   const location = useLocation();
@@ -27,20 +41,118 @@ const TerminalLayout: React.FC = () => {
   const [isTesting, setIsTesting] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string>('');
+  const [sprintData, setSprintData] = useState({
+    dayOfSprint: 1,
+    isOnPeriod: true,
+    totalDays: 28,
+    phase: 'ON' as 'ON' | 'OFF' | 'NONE',
+    daysUntilNext: 0
+  });
   
-  // Calculate sprint day
-  const calculateSprintDay = () => {
-    const startDate = new Date(2025, 0, 1); // Jan 1, 2025
-    const today = new Date();
-    const diffTime = Math.abs(today.getTime() - startDate.getTime());
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    
-    const sprintLength = 28; // 21 days on + 7 days off
-    const dayOfSprint = (diffDays % sprintLength) + 1;
-    const isOnPeriod = dayOfSprint <= 21;
-    
-    return { dayOfSprint, isOnPeriod };
+  // Get current page name for terminal prompt
+  const getCurrentPagePath = () => {
+    const path = location.pathname;
+    if (path === '/') return '/dashboard';
+    return path;
   };
+
+  // Load sprint data from Supabase
+  const loadSprintData = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('sprints')
+        .select('*')
+        .eq('user_id', FIXED_USER_ID)
+        .order('start_date', { ascending: true });
+      
+      if (error) {
+        console.error('Error loading sprints:', error);
+        return;
+      }
+      
+      // Calculate current sprint data
+      const today = getCurrentLocalDate();
+      const todayDate = new Date(today);
+      
+      // Find active sprint
+      const activeSprint = data?.find(s => s.status === 'active');
+      
+      if (activeSprint) {
+        const sprintStart = new Date(activeSprint.start_date);
+        const onDays = activeSprint.on_days || 21;
+        const offDays = activeSprint.off_days || 7;
+        const totalCycleDays = onDays + offDays;
+        
+        // Calculate days since sprint start
+        const daysSinceStart = Math.floor((todayDate.getTime() - sprintStart.getTime()) / (1000 * 60 * 60 * 24));
+        
+        // Calculate current cycle position
+        const cyclePosition = daysSinceStart % totalCycleDays;
+        const dayOfSprint = cyclePosition + 1;
+        const isOnPeriod = cyclePosition < onDays;
+        
+        let phase: 'ON' | 'OFF' | 'NONE';
+        let daysUntilNext = 0;
+        
+        if (isOnPeriod) {
+          phase = 'ON';
+          daysUntilNext = 0; // Not applicable during ON phase
+        } else {
+          phase = 'OFF';
+          daysUntilNext = totalCycleDays - cyclePosition; // Days until next ON phase
+        }
+        
+        setSprintData({
+          dayOfSprint,
+          isOnPeriod,
+          totalDays: totalCycleDays,
+          phase,
+          daysUntilNext
+        });
+      } else {
+        // Check if there's a planned sprint coming up
+        const plannedSprint = data?.find(s => s.status === 'planned');
+        
+        if (plannedSprint) {
+          const sprintStart = new Date(plannedSprint.start_date);
+          const daysUntilStart = Math.ceil((sprintStart.getTime() - todayDate.getTime()) / (1000 * 60 * 60 * 24));
+          
+          setSprintData({
+            dayOfSprint: 0,
+            isOnPeriod: false,
+            totalDays: 28,
+            phase: 'NONE',
+            daysUntilNext: daysUntilStart > 0 ? daysUntilStart : 0
+          });
+        } else {
+          // No active or planned sprint
+          setSprintData({
+            dayOfSprint: 0,
+            isOnPeriod: false,
+            totalDays: 28,
+            phase: 'NONE',
+            daysUntilNext: 0
+          });
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load sprint data:', err);
+      setSprintData({
+        dayOfSprint: 0,
+        isOnPeriod: false,
+        totalDays: 28,
+        phase: 'NONE',
+        daysUntilNext: 0
+      });
+    }
+  };
+
+  // Load sprint data on mount and refresh periodically
+  useEffect(() => {
+    loadSprintData();
+    const interval = setInterval(loadSprintData, 60000); // Update every minute
+    return () => clearInterval(interval);
+  }, []);
 
   // Simulate changing system stats
   useEffect(() => {
@@ -88,8 +200,6 @@ const TerminalLayout: React.FC = () => {
     { path: '/roadmap', icon: GitBranch, label: 'Roadmap' },
     { path: '/kanban', icon: Kanban, label: 'Kanban' }
   ];
-
-  const sprint = calculateSprintDay();
 
   // Format time with leading zeros
   const formatTimeComponent = (n: number) => n.toString().padStart(2, '0');
@@ -274,7 +384,7 @@ const TerminalLayout: React.FC = () => {
             <div className="flex items-center justify-between">
               <div className="flex items-center overflow-hidden">
                 <Terminal size={14} className="mr-2 text-[#5FE3B3] shrink-0" />
-                <span className="mr-4 truncate">noctisium@terminal:~$ cd /metrics</span>
+                <span className="mr-4 truncate">noctisium@terminal:~$ cd {getCurrentPagePath()}</span>
                 <span className={cn("shrink-0", cursorVisible ? "opacity-100" : "opacity-0")}>_</span>
               </div>
               <div className="hidden md:flex gap-2 lg:gap-4 text-xs">
@@ -288,18 +398,26 @@ const TerminalLayout: React.FC = () => {
                 <span className="hidden lg:flex items-center">
                   <Wifi size={12} className="mr-1" /> {systemStats.net} KB/s
                 </span>
-                <span className={sprint.isOnPeriod ? "text-[#5FE3B3]" : "text-[#53B4FF]"}>
-                  Sprint: {sprint.dayOfSprint}/{sprint.isOnPeriod ? "21" : "28"}
+                <span className={sprintData.phase === 'ON' ? "text-[#5FE3B3]" : sprintData.phase === 'OFF' ? "text-[#53B4FF]" : "text-[#FFD700]"}>
+                  {sprintData.phase === 'ON' ? (
+                    `Sprint: ${sprintData.dayOfSprint}/${sprintData.totalDays}`
+                  ) : sprintData.phase === 'OFF' ? (
+                    `Sprint: OFF (${sprintData.daysUntilNext}d until next)`
+                  ) : (
+                    sprintData.daysUntilNext > 0 ? `Next Sprint: ${sprintData.daysUntilNext}d` : 'No Sprint'
+                  )}
                 </span>
               </div>
             </div>
-            {/* Sprint progress bar */}
-            <div className="sprint-progress-container mt-1">
-              <div 
-                className="sprint-progress-bar" 
-                style={{ width: `${(sprint.dayOfSprint / 21) * 100}%` }}
-              ></div>
-            </div>
+            {/* Sprint progress bar - only show during ON phase */}
+            {sprintData.phase === 'ON' && (
+              <div className="sprint-progress-container mt-1">
+                <div 
+                  className="sprint-progress-bar" 
+                  style={{ width: `${(sprintData.dayOfSprint / 21) * 100}%` }}
+                ></div>
+              </div>
+            )}
           </div>
 
           {/* Terminal content */}

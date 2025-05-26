@@ -124,7 +124,16 @@ const PerformanceSidebar: React.FC = () => {
   // Echo tasks closed (from roadmap)
   type RoadmapRaw = { id: string; milestones: { completed: boolean }[] };
   const roadmapsRaw = localStorage.getItem('noctisium-roadmaps') || '[]';
-  const roadmaps = JSON.parse(roadmapsRaw) as RoadmapRaw[];
+  
+  let roadmaps: RoadmapRaw[] = [];
+  try {
+    const parsed = JSON.parse(roadmapsRaw);
+    roadmaps = Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    console.warn('Failed to parse roadmaps from localStorage:', error);
+    roadmaps = [];
+  }
+  
   const echo = roadmaps.find(r => r.id === 'echo');
   const echoClosed = echo ? echo.milestones.filter(m => m.completed).length : 0;
   const closures = echo ? echo.milestones.map((_, i) => i + 1) : [];
