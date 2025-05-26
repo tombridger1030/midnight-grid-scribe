@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { loadData, saveData, MetricData, TrackerData, predefinedMetrics, FIXED_USER_ID } from '@/lib/storage';
+import { predefinedMetrics, FIXED_USER_ID, MetricData } from '@/lib/storage';
 import { useDate } from '@/contexts/DateContext';
 import { useToast } from '@/components/ui/use-toast';
+import { useMetrics } from '@/hooks/useTracker';
 import SparkLine from './SparkLine';
 import { supabase } from '@/lib/supabase';
 
@@ -15,7 +16,7 @@ interface MetricGridProps {
 }
 
 const MetricGrid: React.FC<MetricGridProps> = ({ onAddDay }) => {
-  const [data, setData] = useState<TrackerData>({ metrics: [], dates: [] });
+  const { metrics, dates, isLoading, updateMetric } = useMetrics();
   const { toast } = useToast();
   const { currentDate } = useDate();
   const [sprintStartDate, setSprintStartDate] = useState<Date>(() => {
@@ -23,17 +24,6 @@ const MetricGrid: React.FC<MetricGridProps> = ({ onAddDay }) => {
     const stored = localStorage.getItem('noctisium-sprint-start-date');
     return stored ? new Date(stored) : new Date(new Date().getFullYear(), 0, 1);
   });
-
-  // Load data on component mount
-  useEffect(() => {
-    const storedData = loadData();
-    setData(storedData);
-  }, []);
-
-  // Save data whenever it changes
-  useEffect(() => {
-    saveData(data);
-  }, [data]);
 
   // Determine if a date is in a sprint ON period
   const isSprintOnDay = (date: string) => {
@@ -47,10 +37,19 @@ const MetricGrid: React.FC<MetricGridProps> = ({ onAddDay }) => {
 
   // Filter metrics to only those still in predefinedMetrics
   const validMetricIds = predefinedMetrics.map(m => m.id);
-  const metricsToShow = data.metrics.filter(m => validMetricIds.includes(m.id));
+  const metricsToShow = metrics.filter(m => validMetricIds.includes(m.id));
+
+  // Show loading state
+  if (isLoading) {
+    return (
+      <div className="w-full text-center py-8">
+        <p className="text-terminal-text/70">Loading metrics data...</p>
+      </div>
+    );
+  }
 
   // If currentDate isn't tracked, show New Day prompt
-  if (!data.dates.includes(currentDate)) {
+  if (!dates.includes(currentDate)) {
     return (
       <div className="w-full text-center py-8">
         <p className="text-terminal-text/70">No entry for selected date. Add a day to start tracking.</p>
@@ -65,37 +64,27 @@ const MetricGrid: React.FC<MetricGridProps> = ({ onAddDay }) => {
 
   // Handle cell value changes
   const handleCellChange = async (metricId: string, date: string, value: string) => {
-    setData(prevData => {
-      const updatedMetrics = prevData.metrics.map(metric => {
-        if (metric.id === metricId) {
-          let processedValue: string | number | boolean = value;
-          if (metric.type === 'number') {
-            processedValue = value;
-          } else if (metric.type === 'boolean') {
-            processedValue = value.toLowerCase() === 'true';
-          }
-          return {
-            ...metric,
-            values: {
-              ...metric.values,
-              [date]: processedValue
-            }
-          };
-        }
-        return metric;
-      });
-      return {
-        ...prevData,
-        metrics: updatedMetrics
-      };
-    });
+    let processedValue: string | number | boolean = value;
+    const metric = metrics.find(m => m.id === metricId);
+    
+    if (metric?.type === 'number') {
+      processedValue = value;
+    } else if (metric?.type === 'boolean') {
+      processedValue = value.toLowerCase() === 'true';
+    }
+
+    // Update using the hook
+    updateMetric(metricId, date, processedValue);
 
     try {
       // Build the metrics data for the current day
-      const dayData = data.metrics.reduce((acc, metric) => {
+      const dayData = metrics.reduce((acc, metric) => {
         acc[metric.id] = metric.values[date] ?? null;
         return acc;
       }, {} as Record<string, string | number | boolean>);
+
+      // Apply the current change
+      dayData[metricId] = processedValue;
 
       // Filter out any non-metric fields
       const metricsOnly = Object.fromEntries(
@@ -111,15 +100,11 @@ const MetricGrid: React.FC<MetricGridProps> = ({ onAddDay }) => {
         data: metricsOnly
       }];
 
-      console.log('🔔 Cell change upsert payload:', payload);
-
       const { data: upsertResult, error } = await supabase
         .from('metrics')
         .upsert(payload, {
           onConflict: 'user_id,date'
         });
-
-      console.log('Upsert result:', upsertResult, error);
 
       if (error) {
         console.error('Supabase upsert error:', error);
@@ -141,10 +126,10 @@ const MetricGrid: React.FC<MetricGridProps> = ({ onAddDay }) => {
 
   // Extract values for spark line charts
   const getSparkLineData = (metric: MetricData): number[] => {
-    if (!data.dates || data.dates.length === 0) return [];
+    if (!dates || dates.length === 0) return [];
     
     // Get the last 7 dates or fewer
-    const recentDates = data.dates.slice(-7);
+    const recentDates = dates.slice(-7);
     
     return recentDates.map(date => {
       const value = metric.values[date];
@@ -197,52 +182,6 @@ const MetricGrid: React.FC<MetricGridProps> = ({ onAddDay }) => {
     return <input type="text" {...commonProps} />;
   };
 
-  const handleTestSave = async () => {
-    console.log('🔔 Test save button clicked');
-    try {
-      const testDate = '2025-05-07';
-      const dayData = data.metrics.reduce((acc, metric) => {
-        acc[metric.id] = metric.values[currentDate] ?? null;
-        return acc;
-      }, {} as Record<string, string | number | boolean>);
-
-      console.log('🔔 Test save payload:', { testDate, dayData });
-
-      const metricsOnly = Object.fromEntries(
-        Object.entries(dayData).filter(([k, v]) => 
-          k !== 'date' && k !== 'user_id'
-        )
-      );
-
-      const { data: upsertData, error } = await supabase
-        .from('metrics')
-        .upsert([{ 
-          user_id: FIXED_USER_ID, 
-          date: testDate, 
-          data: metricsOnly 
-        }], 
-        { onConflict: 'user_id,date' });
-
-      console.log('🔔 Test save result:', { upsertData, error });
-
-      if (error) {
-        throw error;
-      }
-      
-      toast({
-        title: "Test save successful",
-        description: "Data was saved to Supabase for 2025-05-07"
-      });
-    } catch (err) {
-      console.error('Test save failed:', err);
-      toast({
-        title: "Test save failed",
-        description: "Check console for details",
-        variant: "destructive"
-      });
-    }
-  };
-
   // Get cell border style based on sprint cycle
   const getCellBorderStyle = (date: string) => {
     if (isSprintOnDay(date)) {
@@ -253,51 +192,59 @@ const MetricGrid: React.FC<MetricGridProps> = ({ onAddDay }) => {
   };
 
   return (
-    <div className="w-full overflow-x-auto">
-      <div className="mb-4">
-        <button 
-          onClick={handleTestSave}
-          className="terminal-button bg-accent-pink text-white px-4 py-2 rounded"
-        >
-          Test Save (2025-05-07)
-        </button>
+    <div className="w-full">
+      {/* Mobile-friendly table container */}
+      <div className="overflow-x-auto -mx-2 sm:mx-0">
+        <div className="min-w-max px-2 sm:px-0">
+          <table className="w-full border-collapse">
+            <thead>
+              <tr>
+                <th className="terminal-cell w-48 min-w-[150px] text-left sticky left-0 bg-sidebar z-10">Metric</th>
+                <th 
+                  className="terminal-cell text-center border-accent-pink min-w-[120px]" 
+                  style={{ 
+                    ...getCellBorderStyle(currentDate)
+                  }}
+                >
+                  <div className="flex flex-col items-center">
+                    <span className="text-sm">{currentDate}</span>
+                    <span className="text-xs opacity-70 hidden sm:block">Today</span>
+                  </div>
+                </th>
+                <th className="terminal-cell w-24 min-w-[80px] text-center">Trend</th>
+              </tr>
+            </thead>
+            <tbody>
+              {metricsToShow.map(metric => (
+                <tr key={metric.id}>
+                  <td className="terminal-cell sticky left-0 bg-sidebar z-10">
+                    <div className="text-sm">{metric.name}</div>
+                    <div className="text-xs text-terminal-accent/50">{metric.type}</div>
+                  </td>
+                  <td 
+                    className="terminal-cell text-center" 
+                    style={getCellBorderStyle(currentDate)}
+                  >
+                    <div className="min-w-[100px] px-1">
+                      {getCellInput(metric, currentDate)}
+                    </div>
+                  </td>
+                  <td className="terminal-cell">
+                    <div className="min-w-[60px]">
+                      <SparkLine data={getSparkLineData(metric)} />
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
-      <table className="w-full border-collapse min-w-full">
-        <thead>
-          <tr>
-            <th className="terminal-cell w-48">Metric</th>
-            <th 
-              className="terminal-cell text-center border-accent-pink" 
-              style={{ 
-                minWidth: '100px',
-                ...getCellBorderStyle(currentDate)
-              }}
-            >
-              {currentDate}
-            </th>
-            <th className="terminal-cell w-24 text-center">Trend</th>
-          </tr>
-        </thead>
-        <tbody>
-          {metricsToShow.map(metric => (
-            <tr key={metric.id}>
-              <td className="terminal-cell">
-                <div className="text-sm">{metric.name}</div>
-                <div className="text-xs text-terminal-accent/50">{metric.type}</div>
-              </td>
-              <td 
-                className="terminal-cell text-center" 
-                style={getCellBorderStyle(currentDate)}
-              >
-                {getCellInput(metric, currentDate)}
-              </td>
-              <td className="terminal-cell">
-                <SparkLine data={getSparkLineData(metric)} />
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      
+      {/* Mobile help text */}
+      <div className="mt-4 text-xs text-terminal-text/50 text-center sm:hidden">
+        Swipe horizontally to view all columns
+      </div>
     </div>
   );
 };

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { loadData, predefinedMetrics } from '@/lib/storage';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, 
@@ -9,6 +9,7 @@ import {
   HABIT_COLORS, HABIT_METRICS, computeRollingAverage, 
   prepareCumulativeHabitData 
 } from '@/lib/chartUtils';
+import { formatLocalDate, getCurrentLocalDate, parseLocalDate } from '@/lib/dateUtils';
 
 // Period types for the selector
 type PeriodType = 'week' | 'month' | 'quarter' | 'year';
@@ -22,8 +23,12 @@ const Visualizer = () => {
   const [currentMetric, setCurrentMetric] = useState<typeof metrics[0] | null>(null);
   const [showAllHabits, setShowAllHabits] = useState<boolean>(false);
   
-  const data = loadData();
-  const metrics = data.metrics.filter(m => predefinedMetrics.some(pm => pm.id === m.id));
+  // Memoize data loading to prevent infinite re-renders
+  const data = useMemo(() => loadData(), []);
+  const metrics = useMemo(() => 
+    data.metrics.filter(m => predefinedMetrics.some(pm => pm.id === m.id)), 
+    [data.metrics]
+  );
 
   // Update currentMetric when selectedMetricId changes
   useEffect(() => {
@@ -34,7 +39,7 @@ const Visualizer = () => {
     } else {
       setCurrentMetric(null);
     }
-  }, [selectedMetricId, metrics]);
+  }, [selectedMetricId]); // Removed metrics from dependency array
 
   // Get date range based on selected period
   const getDateRange = (period: PeriodType): [Date, Date] => {
@@ -59,17 +64,42 @@ const Visualizer = () => {
     return [startDate, endDate];
   };
 
+  // Improved date formatting based on period
+  const formatDateForPeriod = (dateStr: string, period: PeriodType): string => {
+    // Use parseLocalDate to avoid timezone issues
+    const date = parseLocalDate(dateStr);
+    
+    switch (period) {
+      case 'week':
+        return date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+      case 'month':
+        return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+      case 'quarter':
+        return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+      case 'year':
+        return date.toLocaleDateString(undefined, { month: 'short', year: '2-digit' });
+      default:
+        return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    }
+  };
+
   // Format date range for display
   const formatDateRange = (period: PeriodType): string => {
     const [startDate, endDate] = getDateRange(period);
-    return `${startDate.toLocaleDateString()} - ${endDate.toLocaleDateString()}`;
+    const options: Intl.DateTimeFormatOptions = period === 'year' 
+      ? { year: 'numeric', month: 'short' }
+      : { month: 'short', day: 'numeric', year: '2-digit' };
+    
+    return `${startDate.toLocaleDateString(undefined, options)} – ${endDate.toLocaleDateString(undefined, options)}`;
   };
 
   // Filter dates based on selected period
   const getFilteredDates = (period: PeriodType): string[] => {
     const [startDate, _] = getDateRange(period);
-    return data.dates.filter(date => new Date(date) >= startDate).sort((a, b) => 
-      new Date(a).getTime() - new Date(b).getTime()
+    const startDateStr = formatLocalDate(startDate);
+    
+    return data.dates.filter(date => date >= startDateStr).sort((a, b) => 
+      a.localeCompare(b) // Use string comparison for YYYY-MM-DD format
     );
   };
 
@@ -95,6 +125,32 @@ const Visualizer = () => {
       value: valuesByDate[idx],
       rollingAvg: rollingAvgs[idx]
     }));
+  };
+
+  // Calculate better Y-axis domain for improved graph fitting
+  const getYAxisDomain = (data: ChartData[], dataKeys: string[] = ['value', 'rollingAvg']): [number, number] => {
+    if (!data || data.length === 0) return [0, 100];
+    
+    const allValues: number[] = [];
+    data.forEach(item => {
+      dataKeys.forEach(key => {
+        const value = item[key as keyof ChartData];
+        if (typeof value === 'number' && !isNaN(value)) {
+          allValues.push(value);
+        }
+      });
+    });
+    
+    if (allValues.length === 0) return [0, 100];
+    
+    const min = Math.min(...allValues);
+    const max = Math.max(...allValues);
+    
+    // Add 10% padding to top and bottom for better visualization
+    const range = max - min;
+    const padding = Math.max(range * 0.1, 1); // At least 1 unit padding
+    
+    return [Math.max(0, min - padding), max + padding];
   };
 
   // Get cumulative habit data
@@ -138,7 +194,7 @@ const Visualizer = () => {
     return (
       <div>
         <h2 className="text-lg mb-2">Habit Streak Progress</h2>
-        <div className="h-64">
+        <div className="h-80">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart
               data={cumulativeData}
@@ -148,7 +204,8 @@ const Visualizer = () => {
               <XAxis 
                 dataKey="date" 
                 stroke="var(--text-muted)"
-                tickFormatter={(date) => new Date(date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} 
+                tickFormatter={(date) => formatDateForPeriod(date, selectedPeriod)}
+                interval="preserveStartEnd"
               />
               <YAxis stroke="var(--text-muted)" />
               <Tooltip 
@@ -157,6 +214,7 @@ const Visualizer = () => {
                   border: '1px solid var(--line-faint)',
                   color: 'var(--text-main)'
                 }}
+                labelFormatter={(date) => formatDateForPeriod(date, selectedPeriod)}
               />
               <Legend />
               
@@ -218,16 +276,11 @@ const Visualizer = () => {
         };
       });
       
-      // Format the dates for display
-      const startDate = new Date(filteredDates[0]);
-      const endDate = new Date(filteredDates[filteredDates.length - 1]);
-      const dateRange = `${startDate.toLocaleDateString()} – ${endDate.toLocaleDateString()}`;
-      
       return (
         <div>
           <h2 className="text-lg mb-1">{metric.name} (Cumulative)</h2>
-          <div className="text-sm text-terminal-accent/70 mb-2">{dateRange}</div>
-          <div className="h-64">
+          <div className="text-sm text-terminal-accent/70 mb-2">{formatDateRange(selectedPeriod)}</div>
+          <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart
                 data={cumulativeData}
@@ -237,7 +290,8 @@ const Visualizer = () => {
                 <XAxis 
                   dataKey="date" 
                   stroke="var(--text-muted)"
-                  tickFormatter={(date) => new Date(date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} 
+                  tickFormatter={(date) => formatDateForPeriod(date, selectedPeriod)}
+                  interval="preserveStartEnd"
                 />
                 <YAxis 
                   stroke="var(--text-muted)" 
@@ -248,6 +302,7 @@ const Visualizer = () => {
                     border: '1px solid var(--line-faint)',
                     color: 'var(--text-main)'
                   }}
+                  labelFormatter={(date) => formatDateForPeriod(date, selectedPeriod)}
                 />
                 <Legend />
                 <Line 
@@ -271,16 +326,11 @@ const Visualizer = () => {
         return <div className="text-center p-4">No data available for this metric</div>;
       }
       
-      // Format the dates for display
-      const startDate = new Date(chartData[0].date);
-      const endDate = new Date(chartData[chartData.length - 1].date);
-      const dateRange = `${startDate.toLocaleDateString()} – ${endDate.toLocaleDateString()}`;
-      
       return (
         <div>
           <h2 className="text-lg mb-1">{metric.name}</h2>
-          <div className="text-sm text-terminal-accent/70 mb-2">{dateRange}</div>
-          <div className="h-64">
+          <div className="text-sm text-terminal-accent/70 mb-2">{formatDateRange(selectedPeriod)}</div>
+          <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart
                 data={chartData}
@@ -290,11 +340,12 @@ const Visualizer = () => {
                 <XAxis 
                   dataKey="date" 
                   stroke="var(--text-muted)"
-                  tickFormatter={(date) => new Date(date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} 
+                  tickFormatter={(date) => formatDateForPeriod(date, selectedPeriod)}
+                  interval="preserveStartEnd"
                 />
                 <YAxis 
                   stroke="var(--text-muted)"
-                  domain={['dataMin', 'dataMax']} 
+                  domain={getYAxisDomain(chartData)}
                 />
                 <Tooltip 
                   contentStyle={{ 
@@ -302,6 +353,7 @@ const Visualizer = () => {
                     border: '1px solid var(--line-faint)',
                     color: 'var(--text-main)'
                   }}
+                  labelFormatter={(date) => formatDateForPeriod(date, selectedPeriod)}
                 />
                 <Legend />
                 <Line 
@@ -346,56 +398,70 @@ const Visualizer = () => {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="mb-6">
+      {/* Compact header section */}
+      <div className="mb-4">
         <TypewriterText text="Metrics Visualizer" className="text-xl mb-2" />
-        <p className="text-terminal-accent/70 text-sm mb-4">Analyze sprint performance and trends.</p>
+        <p className="text-terminal-accent/70 text-sm mb-3">Analyze sprint performance and trends.</p>
         
-        {/* Period selector */}
-        <div className="flex flex-wrap gap-2 mb-6">
-          <div className="text-sm mr-2">Period:</div>
-          {(['week', 'month', 'quarter', 'year'] as PeriodType[]).map((period) => (
+        {/* Compact controls in a single row */}
+        <div className="flex flex-wrap items-center gap-4 mb-4 text-sm">
+          {/* Period selector */}
+          <div className="flex items-center gap-2">
+            <span className="text-terminal-accent/70">Period:</span>
+            {(['week', 'month', 'quarter', 'year'] as PeriodType[]).map((period) => (
+              <button
+                key={period}
+                className={`px-2 py-1 text-xs border border-terminal-accent/30 transition-colors ${
+                  selectedPeriod === period 
+                    ? 'bg-terminal-accent text-terminal-bg' 
+                    : 'hover:border-terminal-accent/50'
+                }`}
+                onClick={() => setSelectedPeriod(period)}
+              >
+                {period.charAt(0).toUpperCase() + period.slice(1)}
+              </button>
+            ))}
+          </div>
+          
+          {/* View selector */}
+          <div className="flex items-center gap-2">
+            <span className="text-terminal-accent/70">View:</span>
             <button
-              key={period}
-              className={`terminal-button ${selectedPeriod === period ? 'bg-terminal-accent text-terminal-bg' : ''}`}
-              onClick={() => setSelectedPeriod(period)}
+              className={`px-2 py-1 text-xs border border-terminal-accent/30 transition-colors ${
+                showAllHabits 
+                  ? 'bg-terminal-accent text-terminal-bg' 
+                  : 'hover:border-terminal-accent/50'
+              }`}
+              onClick={() => {
+                setShowAllHabits(true);
+                setSelectedMetricId(null);
+              }}
             >
-              {period.charAt(0).toUpperCase() + period.slice(1)}
+              All Habits
             </button>
-          ))}
-          <span className="text-terminal-accent/70 text-sm ml-2">
+          </div>
+          
+          {/* Date range display */}
+          <div className="text-terminal-accent/50 text-xs ml-auto">
             {formatDateRange(selectedPeriod)}
-          </span>
+          </div>
         </div>
         
-        {/* View selector */}
-        <div className="flex flex-wrap gap-2 mb-6">
-          <div className="text-sm mr-2">View:</div>
-          <button
-            className={`terminal-button ${showAllHabits ? 'bg-terminal-accent text-terminal-bg' : ''}`}
-            onClick={() => {
-              setShowAllHabits(true);
-              setSelectedMetricId(null);
-            }}
-          >
-            All Habits
-          </button>
-          {selectedMetricId && (
-            <span className="text-terminal-accent/70 text-sm ml-2">
-              or select a metric below
-            </span>
-          )}
-        </div>
-        
-        {/* Metric selector */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 mb-6">
+        {/* Compact metric selector - smaller buttons in tighter grid */}
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-1 mb-4">
           {metrics.map(metric => (
             <button 
               key={metric.id}
-              className={`terminal-button text-left overflow-hidden overflow-ellipsis whitespace-nowrap ${selectedMetricId === metric.id ? 'bg-terminal-accent text-terminal-bg' : ''}`}
+              className={`px-2 py-1 text-xs border border-terminal-accent/30 text-left truncate transition-colors ${
+                selectedMetricId === metric.id 
+                  ? 'bg-terminal-accent text-terminal-bg' 
+                  : 'hover:border-terminal-accent/50'
+              }`}
               onClick={() => {
                 setSelectedMetricId(metric.id);
                 setShowAllHabits(false);
               }}
+              title={metric.name} // Show full name on hover
             >
               {metric.name}
             </button>
@@ -403,9 +469,9 @@ const Visualizer = () => {
         </div>
       </div>
       
-      {/* Visualization area */}
+      {/* Main visualization area - now takes up more space */}
       <div className="flex-1 border border-terminal-accent/30 p-4 bg-terminal-bg/30 overflow-y-auto">
-        <div className="mb-4">
+        <div className="mb-3">
           <h1 className="text-lg mb-1">
             {showAllHabits ? 'Habit Progress' : selectedMetricId ? metrics.find(m => m.id === selectedMetricId)?.name : 'Select a Metric'}
           </h1>
@@ -414,16 +480,16 @@ const Visualizer = () => {
           </div>
         </div>
         
-        {/* Chart area */}
-        <div className="mb-6">
+        {/* Chart area - larger and more prominent */}
+        <div className="mb-4">
           {renderVisualization()}
         </div>
         
-        {/* Summary table for selected metric */}
+        {/* Summary table for selected metric - more compact */}
         {selectedMetricId && !showAllHabits && getMetricSummary(selectedMetricId) && (
           <div className="mb-4">
             <div className="text-sm mb-2 text-terminal-accent">Summary Statistics:</div>
-            <table className="w-full border-collapse">
+            <table className="w-full border-collapse text-xs">
               <thead>
                 <tr>
                   <th className="terminal-cell">Period</th>

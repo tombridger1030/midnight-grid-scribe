@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useDate } from '@/contexts/DateContext';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { formatLocalDate, getCurrentLocalDate } from '@/lib/dateUtils';
 
 // Sprint cycle configuration
 const SPRINT_ON_DAYS = 21;
@@ -35,9 +36,8 @@ const CalendarNavigator: React.FC = () => {
     }
   };
 
-  // Parse the current date
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  // Get today's date string using local timezone
+  const todayString = getCurrentLocalDate();
 
   // Get month and year from viewMonth
   const month = viewMonth.getMonth();
@@ -81,8 +81,8 @@ const CalendarNavigator: React.FC = () => {
       <div className="grid grid-cols-7 text-center gap-0">
         {dates.map((dt, idx) => {
           if (!dt) return <div key={idx} className="py-2 bg-panel"></div>;
-          const ds = dt.toISOString().split('T')[0];
-          const isToday = ds === today.toISOString().split('T')[0];
+          const ds = formatLocalDate(dt);
+          const isToday = ds === todayString;
           const isSelected = ds === currentDate;
           const base = "py-2 bg-panel rounded";
           const cls = cn(

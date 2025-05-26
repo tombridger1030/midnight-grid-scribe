@@ -1,4 +1,5 @@
 import React, { createContext, useState, useContext, ReactNode } from 'react';
+import { getCurrentLocalDate } from '@/lib/dateUtils';
 
 interface DateContextType {
   currentDate: string;
@@ -8,7 +9,8 @@ interface DateContextType {
 const DateContext = createContext<DateContextType | undefined>(undefined);
 
 export const DateProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [currentDate, setCurrentDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [currentDate, setCurrentDate] = useState<string>(getCurrentLocalDate());
+  
   return (
     <DateContext.Provider value={{ currentDate, setCurrentDate }}>
       {children}

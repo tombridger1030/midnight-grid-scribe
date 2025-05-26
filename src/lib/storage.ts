@@ -19,6 +19,69 @@ export interface TrackerData {
   dates: string[];
 }
 
+// Roadmap interfaces
+export interface Milestone {
+  id: string;
+  name: string;
+  targetDate: string;
+  completed: boolean;
+  quantitativeTarget?: number;
+  currentProgress?: number;
+  unit?: string;
+}
+
+export interface YearlyGoal {
+  id: string;
+  name: string;
+  category: 'professional' | 'fitness' | 'financial' | 'personal';
+  description: string;
+  targetValue: number;
+  currentValue: number;
+  unit: string;
+  deadline: string;
+  milestones: Milestone[];
+}
+
+export interface MonthlyTarget {
+  id: string;
+  month: string; // YYYY-MM format
+  goals: {
+    goalId: string;
+    target: number;
+    achieved: number;
+  }[];
+}
+
+export interface RoadmapData {
+  yearlyGoals: YearlyGoal[];
+  monthlyTargets: MonthlyTarget[];
+}
+
+// New simplified Goal interface for monthly tracking
+export type Month = 'Jan'|'Feb'|'Mar'|'Apr'|'May'|'Jun'|'Jul'|'Aug'|'Sep'|'Oct'|'Nov'|'Dec';
+
+export interface MonthlyGoalTarget {
+  target: number;
+  description?: string;
+}
+
+export interface Goal {
+  id: string;
+  name: string;
+  yearlyTarget: number;
+  unit: string;
+  category: 'professional' | 'fitness' | 'financial' | 'personal';
+  isNumeric: boolean; // whether this goal supports numeric rollup
+  monthly: Partial<Record<Month, number>>; // actual values
+  monthlyTargets: Partial<Record<Month, MonthlyGoalTarget>>; // planned targets
+  currentTotal: number; // derived from monthly values
+  progressPct: number; // derived percentage (0-1)
+}
+
+export interface GoalsData {
+  goals: Goal[];
+}
+
 const STORAGE_KEY = 'noctisium-tracker-data';
 
 // Predefined metrics
@@ -270,32 +333,1745 @@ export async function loadMetrics(): Promise<TrackerData> {
  * Save metrics locally and upsert into Supabase
  */
 export async function saveMetrics(trackerData: TrackerData): Promise<void> {
-  console.log('🔔 saveMetrics called with data:', trackerData);
-  // First, write to localStorage
+  try {
+    console.log('📈 Syncing metrics data...');
+    console.log('📊 Metrics to sync:', trackerData.dates.length, 'days,', trackerData.metrics.length, 'metrics');
+    
+    // First, write to localStorage as backup
   saveData(trackerData);
   
+    if (trackerData.dates.length === 0) {
+      console.log('ℹ️ No metrics data to sync');
+      return;
+    }
+    
+    // Check if the table exists
+    const { data: existingData, error: readError } = await supabase
+      .from('metrics')
+      .select('*')
+      .eq('user_id', FIXED_USER_ID)
+      .limit(1);
+    
+    if (readError) {
+      console.error('❌ Cannot read metrics table:', readError);
+      throw new Error(`Metrics table access error: ${readError.message}`);
+    }
+    
+    // Build entries with only the fields that exist in the metrics table
   const entries = trackerData.dates.map((date) => {
     const payload: Record<string, string | number | boolean> = {};
     trackerData.metrics.forEach((metric) => {
-      payload[metric.id] = metric.values[date] ?? null;
-    });
-    const metricsOnly = Object.fromEntries(
-      Object.entries(payload).filter(([k, v]) => 
-        k !== 'date' && k !== 'user_id'
-      )
-    );
-    return { user_id: FIXED_USER_ID, date, data: metricsOnly };
-  });
-  
-  console.log('🔔 upsert payload:', entries);
+        const value = metric.values[date];
+        if (value !== undefined && value !== '') {
+          payload[metric.id] = value;
+        }
+      });
+      
+      // Only include the three fields that exist in the metrics table
+      return { 
+        user_id: FIXED_USER_ID, 
+        date: date, 
+        data: payload
+      };
+    }).filter(entry => Object.keys(entry.data).length > 0); // Only sync days with actual data
+    
+    console.log('📤 Metrics payload:', entries.length, 'entries');
 
+    if (entries.length === 0) {
+      console.log('ℹ️ No metrics entries to sync');
+      return;
+    }
+
+    // Use standard upsert without returning option
   const { data, error } = await supabase
     .from('metrics')
-    .upsert([...entries], { onConflict: 'user_id,date' });
+      .upsert(entries, { 
+        onConflict: 'user_id,date'
+      });
+    
+    if (error) {
+      console.error('❌ Metrics upsert error:', error);
+      throw new Error(`Failed to save metrics to Supabase: ${error.message}`);
+    }
+
+    console.log('✅ Metrics data synced successfully');
+  } catch (err) {
+    console.error('💥 Error syncing metrics:', err);
+    throw err;
+  }
+}
+
+/**
+ * Load roadmap data from Supabase (falls back to localStorage)
+ */
+export async function loadRoadmapData(): Promise<RoadmapData | null> {
+  try {
+    // Load yearly goals
+    const { data: goalsData, error: goalsError } = await supabase
+      .from('yearly_goals')
+      .select('*')
+      .eq('user_id', FIXED_USER_ID)
+      .order('created_at', { ascending: true });
+
+    // Load monthly targets
+    const { data: targetsData, error: targetsError } = await supabase
+      .from('monthly_targets')
+      .select('*')
+      .eq('user_id', FIXED_USER_ID)
+      .order('month', { ascending: true });
+
+    if (goalsError || targetsError) {
+      console.log('Error loading roadmap data from Supabase, falling back to localStorage');
+      return null;
+    }
+
+    if (!goalsData || !targetsData) {
+      return null;
+    }
+
+    const roadmapData: RoadmapData = {
+      yearlyGoals: goalsData.map(row => ({
+        id: row.goal_id,
+        name: row.name,
+        category: row.category,
+        description: row.description,
+        targetValue: row.target_value,
+        currentValue: row.current_value,
+        unit: row.unit,
+        deadline: row.deadline,
+        milestones: row.milestones || []
+      })),
+      monthlyTargets: targetsData.map(row => ({
+        id: row.id,
+        month: row.month,
+        goals: row.goals || []
+      }))
+    };
+
+    return roadmapData;
+  } catch (e) {
+    console.error('Failed to load roadmap data:', e);
+    return null;
+  }
+}
+
+/**
+ * Save roadmap data to Supabase
+ */
+export async function saveRoadmapData(roadmapData: RoadmapData): Promise<void> {
+  try {
+    // Save yearly goals
+    const goalsPayload = roadmapData.yearlyGoals.map(goal => ({
+      user_id: FIXED_USER_ID,
+      goal_id: goal.id,
+      name: goal.name,
+      category: goal.category,
+      description: goal.description,
+      target_value: goal.targetValue,
+      current_value: goal.currentValue,
+      unit: goal.unit,
+      deadline: goal.deadline,
+      milestones: goal.milestones
+    }));
+
+    const { error: goalsError } = await supabase
+      .from('yearly_goals')
+      .upsert(goalsPayload, { onConflict: 'user_id,goal_id' });
+
+    // Save monthly targets
+    const targetsPayload = roadmapData.monthlyTargets.map(target => ({
+      user_id: FIXED_USER_ID,
+      id: target.id,
+      month: target.month,
+      goals: target.goals
+    }));
+
+    const { error: targetsError } = await supabase
+      .from('monthly_targets')
+      .upsert(targetsPayload, { onConflict: 'user_id,id' });
+
+    if (goalsError) {
+      throw new Error(`Failed to save yearly goals: ${goalsError.message}`);
+    }
+    if (targetsError) {
+      throw new Error(`Failed to save monthly targets: ${targetsError.message}`);
+    }
+
+    console.log('Roadmap data saved to Supabase successfully');
+  } catch (e) {
+    console.error('Failed to save roadmap data:', e);
+    throw e;
+  }
+}
+
+/**
+ * Calculate derived values for a goal based on monthly data
+ */
+export function calculateGoalProgress(goal: Pick<Goal, 'monthly' | 'yearlyTarget' | 'isNumeric'>): { currentTotal: number; progressPct: number } {
+  if (!goal.isNumeric) {
+    // For non-numeric goals, just return 0s
+    return { currentTotal: 0, progressPct: 0 };
+  }
   
-  console.log('🔔 upsert result:', { data, error });
+  const monthlyValues = Object.values(goal.monthly).filter(val => val !== undefined && val !== null);
+  const currentTotal = monthlyValues.reduce((sum, val) => sum + (val || 0), 0);
+  const progressPct = goal.yearlyTarget > 0 ? Math.min(1, currentTotal / goal.yearlyTarget) : 0;
+  
+  return { currentTotal, progressPct };
+}
+
+/**
+ * Update a goal with new derived values
+ */
+export function updateGoalProgress(goal: Goal): Goal {
+  const { currentTotal, progressPct } = calculateGoalProgress(goal);
+  return {
+    ...goal,
+    currentTotal,
+    progressPct
+  };
+}
+
+/**
+ * Convert month name to number (1-12)
+ */
+export function monthNameToNumber(month: Month): number {
+  const months: Month[] = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return months.indexOf(month) + 1;
+}
+
+/**
+ * Convert month number to name
+ */
+export function monthNumberToName(monthNum: number): Month {
+  const months: Month[] = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return months[monthNum - 1];
+}
+
+/**
+ * Get current month as Month type
+ */
+export function getCurrentMonth(): Month {
+  const now = new Date();
+  return monthNumberToName(now.getMonth() + 1);
+}
+
+/**
+ * Load goals data (with fallback to seed data)
+ */
+export function loadGoalsData(): GoalsData {
+  try {
+    const stored = localStorage.getItem('noctisium-goals-data');
+    if (stored) {
+      const data = JSON.parse(stored) as GoalsData;
+      
+      // Check if we need to migrate - if goals don't have monthlyTargets, clear and reload
+      const needsMigration = data.goals.some(goal => !goal.monthlyTargets || Object.keys(goal.monthlyTargets).length === 0);
+      
+      if (needsMigration) {
+        console.log('Goals data needs migration to include monthly targets, clearing...');
+        localStorage.removeItem('noctisium-goals-data');
+      } else {
+        // Recalculate derived values
+        data.goals = data.goals.map(updateGoalProgress);
+        return data;
+      }
+    }
+  } catch (error) {
+    console.error('Failed to load goals data:', error);
+  }
+  
+  // Return seed data
+  const seedGoals: Goal[] = [
+    {
+      id: 'echo-revenue',
+      name: 'Echo Revenue',
+      yearlyTarget: 2000,
+      unit: 'USD',
+      category: 'professional' as const,
+      isNumeric: true,
+      monthly: {},
+      monthlyTargets: {
+        Jun: { target: 0, description: '0% - MVP in users\' hands, no paid plans yet' },
+        Jul: { target: 100, description: '5% ≈ USD 100' },
+        Aug: { target: 200, description: '10% ≈ USD 200' },
+        Sep: { target: 500, description: '25% ≈ USD 500 (launch paid beta)' },
+        Oct: { target: 1000, description: '50% ≈ USD 1 000' },
+        Nov: { target: 1500, description: '75% ≈ USD 1 500' },
+        Dec: { target: 2000, description: '100% USD 2 000' }
+      },
+      currentTotal: 0,
+      progressPct: 0
+    },
+    {
+      id: 'audience-growth',
+      name: 'Audience',
+      yearlyTarget: 25000,
+      unit: 'followers',
+      category: 'professional' as const,
+      isNumeric: true,
+      monthly: { Apr: 2024 },
+      monthlyTargets: {
+        Jun: { target: 3000, description: '12% of target' },
+        Jul: { target: 5000, description: '20%' },
+        Aug: { target: 7500, description: '30%' },
+        Sep: { target: 11250, description: '45%' },
+        Oct: { target: 15000, description: '60%' },
+        Nov: { target: 20000, description: '80%' },
+        Dec: { target: 25000, description: '100%' }
+      },
+      currentTotal: 2024,
+      progressPct: 2024 / 25000
+    },
+    {
+      id: 'deep-work',
+      name: 'Deep Work',
+      yearlyTarget: 900,
+      unit: 'hours',
+      category: 'personal' as const,
+      isNumeric: true,
+      monthly: {},
+      monthlyTargets: {
+        Jun: { target: 130, description: 'pace ≈ 130 hrs each month' },
+        Jul: { target: 260, description: 'cumulative 260 hrs' },
+        Aug: { target: 390, description: 'cumulative 390 hrs' },
+        Sep: { target: 520, description: 'cumulative 520 hrs' },
+        Oct: { target: 650, description: 'cumulative 650 hrs' },
+        Nov: { target: 780, description: 'cumulative 780 hrs' },
+        Dec: { target: 900, description: 'cumulative 900 hrs' }
+      },
+      currentTotal: 0,
+      progressPct: 0
+    },
+    {
+      id: 'bjj-sessions',
+      name: 'BJJ Sessions',
+      yearlyTarget: 100,
+      unit: 'sessions',
+      category: 'fitness' as const,
+      isNumeric: true,
+      monthly: {},
+      monthlyTargets: {
+        Jul: { target: 5, description: 'Blue-belt promotion target' },
+        Aug: { target: 60, description: '60 mat sessions logged (fundamentals mastery)' },
+        Dec: { target: 100, description: '100 sessions + ≥1 competition podium' }
+      },
+      currentTotal: 0,
+      progressPct: 0
+    },
+    {
+      id: 'net-worth',
+      name: 'Net Worth (CAD)',
+      yearlyTarget: 200000,
+      unit: 'CAD',
+      category: 'financial' as const,
+      isNumeric: true,
+      monthly: { Apr: 140000 },
+      monthlyTargets: {
+        Jun: { target: 160000, description: 'CAD 160 000' },
+        Sep: { target: 180000, description: 'CAD 180 000' },
+        Dec: { target: 200000, description: 'CAD 200 000' }
+      },
+      currentTotal: 140000,
+      progressPct: 140000 / 200000
+    }
+  ];
+
+  return {
+    goals: seedGoals.map(updateGoalProgress)
+  };
+}
+
+/**
+ * Save goals data to localStorage
+ */
+export function saveGoalsData(data: GoalsData): void {
+  try {
+    localStorage.setItem('noctisium-goals-data', JSON.stringify(data));
+  } catch (error) {
+    console.error('Failed to save goals data:', error);
+  }
+}
+
+/**
+ * Update monthly value for a specific goal
+ */
+export function updateGoalMonthly(goalId: string, month: Month, value: number | null): GoalsData {
+  const data = loadGoalsData();
+  const goalIndex = data.goals.findIndex(g => g.id === goalId);
+  
+  if (goalIndex === -1) {
+    throw new Error(`Goal with id ${goalId} not found`);
+  }
+  
+  const goal = { ...data.goals[goalIndex] };
+  
+  if (value === null || value === 0) {
+    // Remove the entry
+    delete goal.monthly[month];
+  } else {
+    // Set the value
+    goal.monthly[month] = value;
+  }
+  
+  // Update derived values
+  const updatedGoal = updateGoalProgress(goal);
+  data.goals[goalIndex] = updatedGoal;
+  
+  saveGoalsData(data);
+  return data;
+}
+
+/**
+ * Load goals data from Supabase (falls back to localStorage)
+ */
+export async function loadGoalsFromSupabase(): Promise<GoalsData> {
+  try {
+    const { data, error } = await supabase
+      .from('goals')
+      .select('*')
+      .eq('user_id', FIXED_USER_ID)
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      console.log('Error loading goals from Supabase, falling back to localStorage:', error);
+      return loadGoalsData();
+    }
+
+    if (!data || data.length === 0) {
+      // No goals in Supabase, return local data
+      return loadGoalsData();
+    }
+
+    const goals: Goal[] = data.map(row => ({
+      id: row.goal_id,
+      name: row.name,
+      yearlyTarget: row.yearly_target,
+      unit: row.unit,
+      category: row.category as Goal['category'],
+      isNumeric: row.is_numeric,
+      monthly: row.monthly || {},
+      monthlyTargets: row.monthly_targets || {},
+      currentTotal: row.current_total,
+      progressPct: row.progress_pct
+    }));
+
+    const goalsData = { goals };
+    saveGoalsData(goalsData); // Cache locally
+    return goalsData;
+  } catch (e) {
+    console.error('Failed to load goals from Supabase:', e);
+    return loadGoalsData();
+  }
+}
+
+/**
+ * Enhanced goals sync with detailed logging
+ */
+export async function saveGoalsToSupabase(data: GoalsData): Promise<void> {
+  try {
+    console.log('🎯 Syncing goals data to Supabase...');
+    console.log('📊 Goals to sync:', data.goals.map(g => ({ id: g.id, name: g.name, yearlyTarget: g.yearlyTarget })));
+    
+    // Check if the table exists
+    const { data: existingData, error: readError } = await supabase
+      .from('goals')
+      .select('*')
+      .eq('user_id', FIXED_USER_ID)
+      .limit(1);
+    
+    if (readError) {
+      console.error('❌ Cannot read goals table:', readError);
+      throw new Error(`Goals table access error: ${readError.message}`);
+    }
+    
+    // Let database defaults handle timestamps - do not include them
+    const payload = data.goals.map(goal => ({
+      user_id: FIXED_USER_ID,
+      goal_id: goal.id,
+      name: goal.name,
+      yearly_target: goal.yearlyTarget,
+      unit: goal.unit,
+      category: goal.category,
+      is_numeric: goal.isNumeric,
+      monthly: goal.monthly || {},
+      monthly_targets: goal.monthlyTargets || {},
+      current_total: goal.currentTotal,
+      progress_pct: goal.progressPct
+    }));
+
+    console.log('📤 Goals payload:', payload);
+
+    const { data: resultData, error } = await supabase
+      .from('goals')
+      .upsert(payload, { onConflict: 'user_id,goal_id' });
+
+    if (error) {
+      console.error('❌ Goals upsert error:', error);
+      throw new Error(`Failed to save goals to Supabase: ${error.message}`);
+    }
+
+    console.log('✅ Goals data saved to Supabase successfully:', resultData);
+  } catch (e) {
+    console.error('💥 Failed to save goals to Supabase:', e);
+    throw e;
+  }
+}
+
+/**
+ * Update monthly value for a goal in Supabase
+ */
+export async function updateGoalMonthlySupabase(goalId: string, month: Month, value: number | null): Promise<GoalsData> {
+  try {
+    // Get current goal data
+    const { data: currentData, error: fetchError } = await supabase
+      .from('goals')
+      .select('monthly')
+      .eq('user_id', FIXED_USER_ID)
+      .eq('goal_id', goalId)
+      .single();
+
+    if (fetchError) {
+      throw new Error(`Failed to fetch current goal: ${fetchError.message}`);
+    }
+
+    // Update monthly data
+    const updatedMonthly = { ...(currentData.monthly || {}) };
+    if (value === null || value === 0) {
+      delete updatedMonthly[month];
+    } else {
+      updatedMonthly[month] = value;
+    }
+
+    // Update in Supabase (triggers will recalculate derived values)
+    const { error: updateError } = await supabase
+      .from('goals')
+      .update({ monthly: updatedMonthly })
+      .eq('user_id', FIXED_USER_ID)
+      .eq('goal_id', goalId);
+
+    if (updateError) {
+      throw new Error(`Failed to update goal monthly value: ${updateError.message}`);
+    }
+
+    // Reload and return updated data
+    return await loadGoalsFromSupabase();
+  } catch (e) {
+    console.error('Failed to update goal monthly value in Supabase:', e);
+    // Fallback to local storage
+    return updateGoalMonthly(goalId, month, value);
+  }
+}
+
+/**
+ * Enhanced financial sync with better error handling
+ */
+export async function syncFinancialData(): Promise<void> {
+  try {
+    console.log('🏦 Syncing financial data...');
+    
+    // Get financial data from localStorage or defaults
+    const storedFinancial = localStorage.getItem('noctisium-financial-data');
+    let financial = { mrr: 0, netWorth: 0 };
+    
+    if (storedFinancial) {
+      financial = JSON.parse(storedFinancial);
+    }
+    
+    console.log('📊 Financial data to sync:', financial);
+    
+    // Check if the table exists by trying to read from it first
+    const { data: existingData, error: readError } = await supabase
+      .from('financial_metrics')
+      .select('*')
+      .eq('user_id', FIXED_USER_ID)
+      .limit(1);
+    
+    if (readError) {
+      console.error('❌ Cannot read financial_metrics table:', readError);
+      throw new Error(`Table access error: ${readError.message}`);
+    }
+    
+    // Let database defaults handle timestamps - do not include them
+    const { data, error } = await supabase
+      .from('financial_metrics')
+      .upsert([{
+        user_id: FIXED_USER_ID,
+        mrr: financial.mrr || 0,
+        net_worth: financial.netWorth || 0
+      }], { onConflict: 'user_id' });
+    
+    if (error) {
+      console.error('❌ Upsert error:', error);
+      throw new Error(`Failed to sync financial data: ${error.message}`);
+    }
+    
+    console.log('✅ Financial data synced successfully:', data);
+  } catch (err) {
+    console.error('💥 Error syncing financial data:', err);
+    throw err;
+  }
+}
+
+/**
+ * Comprehensive Supabase Sync Functions
+ */
+
+// Sync all local data to Supabase
+export async function syncAllDataToSupabase(): Promise<{ success: boolean; message: string }> {
+  try {
+    console.log('🚀 Starting comprehensive data sync to Supabase...');
+    const errors: string[] = [];
+    
+    // 1. Sync financial data first (simplest)
+    try {
+      await syncFinancialData();
+      console.log('✓ Synced financial data');
+    } catch (error) {
+      const msg = `Financial sync failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
+      console.error(msg);
+      errors.push(msg);
+    }
+    
+    // 2. Sync goals data (roadmap goals with monthly targets)
+    try {
+      const goalsData = loadGoalsData();
+      await saveGoalsToSupabase(goalsData);
+      console.log('✓ Synced goals data:', goalsData.goals.length, 'goals');
+    } catch (error) {
+      const msg = `Goals sync failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
+      console.error(msg);
+      errors.push(msg);
+    }
+    
+    // 3. Sync metrics data (daily habit tracking)
+    try {
+      const trackerData = loadData();
+      await saveMetrics(trackerData);
+      console.log('✓ Synced metrics data:', trackerData.dates.length, 'days');
+    } catch (error) {
+      const msg = `Metrics sync failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
+      console.error(msg);
+      errors.push(msg);
+    }
+    
+    // 4. Sync sprint data
+    try {
+      await syncSprintData();
+      console.log('✓ Synced sprint data');
+    } catch (error) {
+      const msg = `Sprint sync failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
+      console.error(msg);
+      errors.push(msg);
+    }
+    
+    // 5. Sync roadmap data (if any legacy data exists)
+    try {
+      const roadmapData = loadRoadmapDataLocal();
+      if (roadmapData && roadmapData.yearlyGoals.length > 0) {
+        await saveRoadmapDataToSupabase(roadmapData);
+        console.log('✓ Synced roadmap data');
+      } else {
+        console.log('ℹ️ No roadmap data to sync');
+      }
+    } catch (error) {
+      const msg = `Roadmap sync failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
+      console.error(msg);
+      errors.push(msg);
+    }
+    
+    // 6. Sync kanban data
+    try {
+      const kanbanDataStored = localStorage.getItem('noctisium-kanban');
+      if (kanbanDataStored) {
+        const kanbanData = JSON.parse(kanbanDataStored) as KanbanData;
+        await saveKanbanToSupabase(kanbanData, 'echo');
+        console.log('✓ Synced kanban data:', Object.keys(kanbanData.tasks).length, 'tasks');
+      } else {
+        console.log('ℹ️ No kanban data to sync');
+      }
+    } catch (error) {
+      const msg = `Kanban sync failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
+      console.error(msg);
+      errors.push(msg);
+    }
+    
+    if (errors.length > 0) {
+      return { 
+        success: false, 
+        message: `Partial sync: ${errors.length} errors occurred. Check console for details.` 
+      };
+    }
+    
+    return { 
+      success: true, 
+      message: 'All data successfully synced to Supabase!' 
+    };
+  } catch (error) {
+    console.error('❌ Critical sync failure:', error);
+    return { 
+      success: false, 
+      message: `Sync failed: ${error instanceof Error ? error.message : 'Unknown error'}` 
+    };
+  }
+}
+
+// Load all data from Supabase (opposite direction)
+export async function loadAllDataFromSupabase(): Promise<{ success: boolean; message: string }> {
+  try {
+    console.log('Loading all data from Supabase...');
+    
+    // 1. Load metrics data
+    const trackerData = await loadMetrics();
+    saveData(trackerData);
+    console.log('✓ Loaded metrics data');
+    
+    // 2. Load goals data  
+    const goalsData = await loadGoalsFromSupabase();
+    saveGoalsData(goalsData);
+    console.log('✓ Loaded goals data');
+    
+    // 3. Load roadmap data
+    const roadmapData = await loadRoadmapData();
+    if (roadmapData) {
+      saveRoadmapDataLocal(roadmapData);
+      console.log('✓ Loaded roadmap data');
+    }
+    
+    // 4. Load kanban data
+    const kanbanData = await loadKanbanFromSupabase('echo');
+    if (kanbanData) {
+      localStorage.setItem('noctisium-kanban', JSON.stringify(kanbanData));
+      console.log('✓ Loaded kanban data');
+    }
+    
+    return { 
+      success: true, 
+      message: 'All data successfully loaded from Supabase!' 
+    };
+  } catch (error) {
+    console.error('Failed to load all data:', error);
+    return { 
+      success: false, 
+      message: `Load failed: ${error instanceof Error ? error.message : 'Unknown error'}` 
+    };
+  }
+}
+
+// Sync sprint data
+export async function syncSprintData(): Promise<void> {
+  try {
+    // Get sprint start date from localStorage
+    const sprintStartDate = localStorage.getItem('noctisium-sprint-start-date');
+    
+    if (sprintStartDate) {
+      // Check if we already have an active sprint
+      const { data: existingSprints } = await supabase
+        .from('sprints')
+        .select('*')
+        .eq('user_id', FIXED_USER_ID)
+        .eq('status', 'active');
+      
+      if (!existingSprints || existingSprints.length === 0) {
+        // Create an active sprint - let database defaults handle timestamps
+        const { error } = await supabase
+          .from('sprints')
+          .insert([{
+            user_id: FIXED_USER_ID,
+            start_date: new Date(sprintStartDate).toISOString().split('T')[0],
+            status: 'active'
+          }]);
+        
+        if (error) {
+          throw new Error(`Failed to sync sprint data: ${error.message}`);
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Error syncing sprint data:', err);
+    throw err;
+  }
+}
+
+// Helper functions for roadmap data
+function loadRoadmapDataLocal(): RoadmapData | null {
+  try {
+    const stored = localStorage.getItem('noctisium-roadmaps');
+    if (!stored) return null;
+    
+    const rawData = JSON.parse(stored);
+    // Convert old format if needed
+    if (Array.isArray(rawData)) {
+      return {
+        yearlyGoals: [],
+        monthlyTargets: []
+      };
+    }
+    return rawData as RoadmapData;
+  } catch (error) {
+    console.error('Failed to load roadmap data:', error);
+    return null;
+  }
+}
+
+function saveRoadmapDataLocal(data: RoadmapData): void {
+  try {
+    localStorage.setItem('noctisium-roadmaps', JSON.stringify(data));
+  } catch (error) {
+    console.error('Failed to save roadmap data locally:', error);
+  }
+}
+
+// Fix financial metrics loading with better error handling
+export async function loadFinancialMetrics(): Promise<{ mrr: number; netWorth: number }> {
+  try {
+    const { data, error } = await supabase
+      .from('financial_metrics')
+      .select('mrr, net_worth')
+      .eq('user_id', FIXED_USER_ID)
+      .maybeSingle(); // Use maybeSingle instead of single to avoid errors when no data
+    
+    if (error) {
+      console.error('Error loading financial metrics:', error);
+      return { mrr: 0, netWorth: 0 };
+    }
+    
+    if (data) {
+      return { mrr: data.mrr || 0, netWorth: data.net_worth || 0 };
+    }
+    
+    // No data found, return defaults
+    return { mrr: 0, netWorth: 0 };
+  } catch (err) {
+    console.error('Failed to load financial metrics:', err);
+    return { mrr: 0, netWorth: 0 };
+  }
+}
+
+// Save financial metrics with proper error handling
+export async function saveFinancialMetrics(mrr: number, netWorth: number): Promise<void> {
+  try {
+    const { error } = await supabase
+      .from('financial_metrics')
+      .upsert([{
+        user_id: FIXED_USER_ID,
+        mrr: mrr,
+        net_worth: netWorth
+      }], { 
+        onConflict: 'user_id',
+        ignoreDuplicates: false 
+      });
+    
+    if (error) {
+      throw new Error(`Failed to save financial metrics: ${error.message}`);
+    }
+    
+    // Also save to localStorage as backup
+    localStorage.setItem('noctisium-financial-data', JSON.stringify({ mrr, netWorth }));
+  } catch (err) {
+    console.error('Error saving financial metrics:', err);
+    throw err;
+  }
+}
+
+// New function to sync roadmap data to a separate table
+export async function saveRoadmapDataToSupabase(roadmapData: RoadmapData): Promise<void> {
+  try {
+    console.log('🗺️ Syncing roadmap data to Supabase...');
+    
+    // Check if the table exists
+    const { data: existingData, error: readError } = await supabase
+      .from('roadmaps')
+      .select('*')
+      .eq('user_id', FIXED_USER_ID)
+      .limit(1);
+    
+    if (readError) {
+      console.error('❌ Cannot read roadmaps table:', readError);
+      throw new Error(`Roadmaps table access error: ${readError.message}`);
+    }
+    
+    // Store the entire roadmap data as JSON - let database defaults handle timestamps
+    const { data, error } = await supabase
+      .from('roadmaps')
+      .upsert([{
+        user_id: FIXED_USER_ID,
+        roadmap_id: 'main',
+        data: roadmapData
+      }], { onConflict: 'user_id,roadmap_id' });
+    
+    if (error) {
+      throw new Error(`Failed to save roadmap data: ${error.message}`);
+    }
+    
+    console.log('✅ Roadmap data saved successfully');
+  } catch (e) {
+    console.error('💥 Failed to save roadmap data:', e);
+    throw e;
+  }
+}
+
+// Test and initialize Supabase tables
+interface TableTestResult {
+  status: 'ok' | 'error';
+  count?: number;
+  error?: string;
+}
+
+interface SupabaseTestResults {
+  [tableName: string]: TableTestResult;
+}
+
+export async function testSupabaseConnection(): Promise<{ success: boolean; message: string; details: SupabaseTestResults }> {
+  try {
+    console.log('🔍 Testing Supabase connection and tables...');
+    
+    const results: SupabaseTestResults = {};
+    
+    // Test each table
+    const tables = ['financial_metrics', 'goals', 'metrics', 'sprints', 'roadmaps', 'kanban_boards', 'kanban_columns', 'kanban_tasks'];
+    
+    for (const table of tables) {
+      try {
+        const { data, error, count } = await supabase
+          .from(table)
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', FIXED_USER_ID)
+          .limit(1);
 
   if (error) {
-    throw new Error(`Failed to save metrics to Supabase: ${error.message}`);
+          results[table] = { status: 'error', error: error.message };
+        } else {
+          results[table] = { status: 'ok', count: count || 0 };
+        }
+      } catch (err) {
+        results[table] = { status: 'error', error: err instanceof Error ? err.message : 'Unknown error' };
+      }
+    }
+    
+    console.log('📊 Table test results:', results);
+    
+    const failedTables = Object.entries(results).filter(([_, result]) => result.status === 'error');
+    
+    if (failedTables.length > 0) {
+      return {
+        success: false,
+        message: `${failedTables.length} tables not accessible: ${failedTables.map(([table]) => table).join(', ')}`,
+        details: results
+      };
+    }
+    
+    return {
+      success: true,
+      message: 'All tables accessible',
+      details: results
+    };
+  } catch (error) {
+    console.error('❌ Supabase connection test failed:', error);
+    return {
+      success: false,
+      message: `Connection failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      details: {}
+    };
+  }
+}
+
+// Enhanced sync function that tests connection first
+export async function syncAllDataToSupabaseWithTest(): Promise<{ success: boolean; message: string }> {
+  try {
+    // First test the connection and tables
+    const testResult = await testSupabaseConnection();
+    
+    if (!testResult.success) {
+      return {
+        success: false,
+        message: `Database not ready: ${testResult.message}`
+      };
+    }
+    
+    console.log('✅ Database connection verified, proceeding with sync...');
+    
+    // Proceed with normal sync
+    return await syncAllDataToSupabase();
+  } catch (error) {
+    console.error('❌ Sync with test failed:', error);
+    return {
+      success: false,
+      message: `Failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+    };
+  }
+}
+
+// Kanban interfaces and functions
+export interface KanbanTask {
+  id: string;
+  title: string;
+  description?: string;
+  assignee?: string;
+  priority: 'low' | 'medium' | 'high' | 'urgent';
+  dueDate?: string;
+  labels: string[];
+  timeSpent: number; // in hours
+  isDeleted?: boolean; // soft delete flag
+  deletedAt?: string; // when the task was deleted
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface KanbanColumn {
+  id: string;
+  title: string;
+  taskIds: string[];
+  color: string;
+}
+
+export interface KanbanData {
+  tasks: { [key: string]: KanbanTask };
+  columns: { [key: string]: KanbanColumn };
+  columnOrder: string[];
+}
+
+/**
+ * Load Kanban data from Supabase
+ */
+export async function loadKanbanFromSupabase(boardId: string = 'echo'): Promise<KanbanData | null> {
+  try {
+    console.log('📋 Loading Kanban data from Supabase...');
+    
+    // Load columns
+    const { data: columnsData, error: columnsError } = await supabase
+      .from('kanban_columns')
+      .select('*')
+      .eq('user_id', FIXED_USER_ID)
+      .eq('board_id', boardId)
+      .order('position', { ascending: true });
+    
+    if (columnsError) {
+      console.error('Error loading kanban columns:', columnsError);
+      return null;
+    }
+    
+    // Load tasks (only non-deleted ones, if soft delete columns exist)
+    const { data: tasksData, error: tasksError } = await supabase
+      .from('kanban_tasks')
+      .select('*')
+      .eq('user_id', FIXED_USER_ID)
+      .eq('board_id', boardId)
+      .order('position', { ascending: true });
+    
+    if (tasksError) {
+      console.error('Error loading kanban tasks:', tasksError);
+      return null;
+    }
+    
+    if (!columnsData || !tasksData) {
+      console.log('No kanban data found in Supabase');
+      return null;
+    }
+    
+    // Transform Supabase data to KanbanData format
+    const columns: { [key: string]: KanbanColumn } = {};
+    const columnOrder: string[] = [];
+    
+    columnsData.forEach(col => {
+      columns[col.column_id] = {
+        id: col.column_id,
+        title: col.title,
+        color: col.color,
+        taskIds: []
+      };
+      columnOrder.push(col.column_id);
+    });
+    
+    const tasks: { [key: string]: KanbanTask } = {};
+    
+    tasksData.forEach(task => {
+      // Handle soft delete fields (may not exist in older schemas)
+      const isDeleted = task.is_deleted !== undefined ? task.is_deleted : false;
+      const deletedAt = task.deleted_at !== undefined ? task.deleted_at : undefined;
+      
+      // Skip deleted tasks if soft delete is enabled
+      if (isDeleted) {
+        return;
+      }
+      
+      const kanbanTask: KanbanTask = {
+        id: task.task_id,
+        title: task.title,
+        description: task.description || undefined,
+        assignee: task.assignee || undefined,
+        priority: task.priority,
+        dueDate: task.due_date || undefined,
+        labels: Array.isArray(task.labels) ? task.labels : [],
+        timeSpent: task.time_spent || 0,
+        isDeleted: isDeleted,
+        deletedAt: deletedAt,
+        createdAt: task.created_at,
+        updatedAt: task.updated_at
+      };
+      
+      tasks[task.task_id] = kanbanTask;
+      
+      // Add task to appropriate column (only if not deleted)
+      if (columns[task.column_id] && !kanbanTask.isDeleted) {
+        columns[task.column_id].taskIds.push(task.task_id);
+      }
+    });
+    
+    const kanbanData: KanbanData = {
+      tasks,
+      columns,
+      columnOrder
+    };
+    
+    console.log('✅ Kanban data loaded successfully');
+    return kanbanData;
+  } catch (error) {
+    console.error('Failed to load kanban data:', error);
+    return null;
+  }
+}
+
+/**
+ * Save Kanban data to Supabase
+ */
+export async function saveKanbanToSupabase(kanbanData: KanbanData, boardId: string = 'echo'): Promise<void> {
+  try {
+    console.log('📋 Saving Kanban data to Supabase...');
+    console.log('📊 Data to save:', {
+      tasks: Object.keys(kanbanData.tasks).length,
+      columns: Object.keys(kanbanData.columns).length,
+      columnOrder: kanbanData.columnOrder
+    });
+    
+    // Ensure board exists
+    const { error: boardError } = await supabase
+      .from('kanban_boards')
+      .upsert({
+        user_id: FIXED_USER_ID,
+        board_id: boardId,
+        name: 'Echo Kanban Board',
+        description: 'Track Echo development tasks and progress'
+      }, {
+        onConflict: 'user_id,board_id'
+      });
+    
+    if (boardError) {
+      console.error('❌ Board save error:', boardError);
+      throw new Error(`Failed to save board: ${boardError.message}`);
+    }
+    console.log('✓ Board saved successfully');
+    
+    // Save columns
+    const columnsPayload = kanbanData.columnOrder.map((columnId, index) => {
+      const column = kanbanData.columns[columnId];
+      return {
+        user_id: FIXED_USER_ID,
+        board_id: boardId,
+        column_id: columnId,
+        title: column.title,
+        color: column.color,
+        position: index + 1
+      };
+    });
+    
+    console.log('📤 Columns payload:', columnsPayload);
+    
+    const { error: columnsError } = await supabase
+      .from('kanban_columns')
+      .upsert(columnsPayload, {
+        onConflict: 'user_id,board_id,column_id'
+      });
+    
+    if (columnsError) {
+      console.error('❌ Columns save error:', columnsError);
+      throw new Error(`Failed to save columns: ${columnsError.message}`);
+    }
+    console.log('✓ Columns saved successfully');
+    
+    // Save tasks
+    const tasksPayload = Object.values(kanbanData.tasks).map((task, index) => {
+      // Find which column this task is in
+      let columnId = 'backlog'; // default
+      for (const [colId, column] of Object.entries(kanbanData.columns)) {
+        if (column.taskIds.includes(task.id)) {
+          columnId = colId;
+          break;
+        }
+      }
+      
+      const basePayload = {
+        user_id: FIXED_USER_ID,
+        board_id: boardId,
+        task_id: task.id,
+        column_id: columnId,
+        title: task.title,
+        description: task.description || null,
+        assignee: task.assignee || null,
+        priority: task.priority,
+        due_date: task.dueDate || null,
+        labels: task.labels || [],
+        time_spent: task.timeSpent || 0,
+        position: index + 1
+      };
+      
+      // Only include soft delete fields if the task has them (for backward compatibility)
+      if (task.isDeleted !== undefined || task.deletedAt !== undefined) {
+        return {
+          ...basePayload,
+          is_deleted: task.isDeleted || false,
+          deleted_at: task.deletedAt || null
+        };
+      }
+      
+      return basePayload;
+    });
+    
+    console.log('📤 Tasks payload:', tasksPayload.length, 'tasks');
+    console.log('📋 Sample task:', tasksPayload[0]);
+    
+    if (tasksPayload.length > 0) {
+      const { error: tasksError } = await supabase
+        .from('kanban_tasks')
+        .upsert(tasksPayload, {
+          onConflict: 'user_id,board_id,task_id'
+        });
+      
+      if (tasksError) {
+        console.error('❌ Tasks save error:', tasksError);
+        throw new Error(`Failed to save tasks: ${tasksError.message}`);
+      }
+      console.log('✓ Tasks saved successfully');
+    } else {
+      console.log('ℹ️ No tasks to save');
+    }
+    
+    // Clean up orphaned tasks (tasks that no longer exist in the data)
+    // Note: We don't clean up soft-deleted tasks, only truly orphaned ones
+    try {
+      // First, get all existing tasks for this board (skip soft delete filter if columns don't exist)
+      const { data: existingTasks, error: fetchError } = await supabase
+        .from('kanban_tasks')
+        .select('task_id')
+        .eq('user_id', FIXED_USER_ID)
+        .eq('board_id', boardId);
+      
+      if (fetchError) {
+        console.warn('⚠️ Warning: Failed to fetch existing tasks for cleanup:', fetchError);
+      } else if (existingTasks && existingTasks.length > 0) {
+        const currentTaskIds = Object.keys(kanbanData.tasks).filter(taskId => !kanbanData.tasks[taskId].isDeleted);
+        const tasksToDelete = existingTasks
+          .map(t => t.task_id)
+          .filter(taskId => !currentTaskIds.includes(taskId));
+        
+        if (tasksToDelete.length > 0) {
+          console.log('🗑️ Cleaning up orphaned tasks:', tasksToDelete);
+          
+          // Try soft delete first, fall back to hard delete if columns don't exist
+          for (const taskId of tasksToDelete) {
+            try {
+              const { error: deleteError } = await supabase
+                .from('kanban_tasks')
+                .update({ 
+                  is_deleted: true, 
+                  deleted_at: new Date().toISOString() 
+                })
+                .eq('user_id', FIXED_USER_ID)
+                .eq('board_id', boardId)
+                .eq('task_id', taskId);
+              
+              if (deleteError) {
+                // If soft delete fails (columns don't exist), try hard delete
+                console.warn(`⚠️ Soft delete failed for ${taskId}, trying hard delete:`, deleteError);
+                const { error: hardDeleteError } = await supabase
+                  .from('kanban_tasks')
+                  .delete()
+                  .eq('user_id', FIXED_USER_ID)
+                  .eq('board_id', boardId)
+                  .eq('task_id', taskId);
+                
+                if (hardDeleteError) {
+                  console.warn(`⚠️ Failed to delete orphaned task ${taskId}:`, hardDeleteError);
+                }
+              }
+            } catch (err) {
+              console.warn(`⚠️ Failed to clean up task ${taskId}:`, err);
+            }
+          }
+          console.log('✓ Orphaned tasks cleaned up');
+        } else {
+          console.log('ℹ️ No orphaned tasks to clean up');
+        }
+      }
+    } catch (cleanupError) {
+      console.warn('⚠️ Warning: Task cleanup failed:', cleanupError);
+    }
+    
+    console.log('✅ Kanban data saved successfully');
+  } catch (error) {
+    console.error('💥 Failed to save kanban data:', error);
+    throw error;
+  }
+}
+
+/**
+ * Soft delete a task from Supabase (marks as deleted instead of removing)
+ * Falls back to hard delete if soft delete columns don't exist
+ */
+export async function deleteKanbanTaskFromSupabase(taskId: string, boardId: string = 'echo'): Promise<void> {
+  try {
+    // Try soft delete first
+    const { error: softDeleteError } = await supabase
+      .from('kanban_tasks')
+      .update({ 
+        is_deleted: true, 
+        deleted_at: new Date().toISOString() 
+      })
+      .eq('user_id', FIXED_USER_ID)
+      .eq('board_id', boardId)
+      .eq('task_id', taskId);
+    
+    if (softDeleteError) {
+      // If soft delete fails (columns don't exist), fall back to hard delete
+      console.warn(`Soft delete failed for ${taskId}, trying hard delete:`, softDeleteError);
+      
+      const { error: hardDeleteError } = await supabase
+        .from('kanban_tasks')
+        .delete()
+        .eq('user_id', FIXED_USER_ID)
+        .eq('board_id', boardId)
+        .eq('task_id', taskId);
+      
+      if (hardDeleteError) {
+        throw new Error(`Failed to delete task: ${hardDeleteError.message}`);
+      }
+      
+      console.log(`✓ Task ${taskId} hard deleted successfully`);
+    } else {
+      console.log(`✓ Task ${taskId} soft deleted successfully`);
+    }
+  } catch (error) {
+    console.error('Failed to delete kanban task:', error);
+    throw error;
+  }
+}
+
+/**
+ * Move task between columns in Supabase
+ */
+export async function moveKanbanTaskInSupabase(taskId: string, newColumnId: string, boardId: string = 'echo'): Promise<void> {
+  try {
+    const { error } = await supabase
+      .from('kanban_tasks')
+      .update({ column_id: newColumnId })
+      .eq('user_id', FIXED_USER_ID)
+      .eq('board_id', boardId)
+      .eq('task_id', taskId);
+    
+    if (error) {
+      throw new Error(`Failed to move task: ${error.message}`);
+    }
+  } catch (error) {
+    console.error('Failed to move kanban task:', error);
+    throw error;
+  }
+}
+
+/**
+ * Restore a soft-deleted task from Supabase
+ */
+export async function restoreKanbanTaskFromSupabase(taskId: string, boardId: string = 'echo'): Promise<void> {
+  try {
+    const { error } = await supabase
+      .from('kanban_tasks')
+      .update({ 
+        is_deleted: false, 
+        deleted_at: null 
+      })
+      .eq('user_id', FIXED_USER_ID)
+      .eq('board_id', boardId)
+      .eq('task_id', taskId);
+    
+    if (error) {
+      throw new Error(`Failed to restore task: ${error.message}`);
+    }
+    
+    console.log(`✓ Task ${taskId} restored successfully`);
+  } catch (error) {
+    console.error('Failed to restore kanban task:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get all deleted tasks for a board (for potential restoration)
+ */
+export async function getDeletedKanbanTasks(boardId: string = 'echo'): Promise<KanbanTask[]> {
+  try {
+    const { data: tasksData, error: tasksError } = await supabase
+      .from('kanban_tasks')
+      .select('*')
+      .eq('user_id', FIXED_USER_ID)
+      .eq('board_id', boardId)
+      .eq('is_deleted', true)
+      .order('deleted_at', { ascending: false });
+    
+    if (tasksError) {
+      console.error('Error loading deleted kanban tasks:', tasksError);
+      return [];
+    }
+    
+    if (!tasksData) {
+      return [];
+    }
+    
+    return tasksData.map(task => ({
+      id: task.task_id,
+      title: task.title,
+      description: task.description || undefined,
+      assignee: task.assignee || undefined,
+      priority: task.priority,
+      dueDate: task.due_date || undefined,
+      labels: Array.isArray(task.labels) ? task.labels : [],
+      timeSpent: task.time_spent || 0,
+      isDeleted: task.is_deleted || false,
+      deletedAt: task.deleted_at || undefined,
+      createdAt: task.created_at,
+      updatedAt: task.updated_at
+    }));
+  } catch (error) {
+    console.error('Failed to load deleted kanban tasks:', error);
+    return [];
+  }
+}
+
+// Interfaces for sync verification
+interface VerificationResults {
+  backup: {
+    metricsCount: number;
+    goalsCount: number;
+    kanbanTasks: number;
+    hasFinancial: boolean;
+    hasSprints: boolean;
+  };
+  upload: { success: boolean; message: string };
+  download: { success: boolean; message: string };
+  validation: {
+    errors: string[];
+    downloadedData: {
+      metricsCount: number;
+      goalsCount: number;
+      kanbanTasks: number;
+      hasFinancial: boolean;
+      hasSprints: boolean;
+    };
+  };
+  restore: { completed: boolean };
+}
+
+interface MigrationResults {
+  localData: {
+    metricsCount: number;
+    metricsTypes: string[];
+    goalsCount: number;
+    goalTypes: string[];
+    kanbanTasks: number;
+    hasFinancial: boolean;
+  };
+  supabaseData: SupabaseTestResults;
+  comparison: {
+    syncSuccess: boolean;
+    syncMessage: string;
+  };
+}
+
+/**
+ * Comprehensive sync verification - tests complete upload/download cycle
+ * This function validates that all data types can be synced correctly
+ */
+export async function verifySyncFunctionality(): Promise<{ success: boolean; message: string; details: VerificationResults }> {
+  try {
+    console.log('🔍 Starting comprehensive sync verification...');
+    
+    const verificationResults: VerificationResults = {
+      backup: {
+        metricsCount: 0,
+        goalsCount: 0,
+        kanbanTasks: 0,
+        hasFinancial: false,
+        hasSprints: false
+      },
+      upload: { success: false, message: '' },
+      download: { success: false, message: '' },
+      validation: {
+        errors: [],
+        downloadedData: {
+          metricsCount: 0,
+          goalsCount: 0,
+          kanbanTasks: 0,
+          hasFinancial: false,
+          hasSprints: false
+        }
+      },
+      restore: { completed: false }
+    };
+    
+    // Step 1: Backup current localStorage data
+    console.log('📦 Step 1: Backing up current data...');
+    const originalData = {
+      metrics: loadData(),
+      goals: loadGoalsData(),
+      financial: {
+        mrr: 0,
+        netWorth: 0,
+        ...JSON.parse(localStorage.getItem('noctisium-financial-data') || '{}')
+      },
+      kanban: localStorage.getItem('noctisium-kanban') ? JSON.parse(localStorage.getItem('noctisium-kanban')!) : null,
+      sprints: localStorage.getItem('noctisium-sprint-start-date'),
+      roadmaps: localStorage.getItem('noctisium-roadmaps') ? JSON.parse(localStorage.getItem('noctisium-roadmaps')!) : null
+    };
+    
+    verificationResults.backup = {
+      metricsCount: originalData.metrics.dates.length,
+      goalsCount: originalData.goals.goals.length,
+      kanbanTasks: originalData.kanban ? Object.keys(originalData.kanban.tasks).length : 0,
+      hasFinancial: !!originalData.financial,
+      hasSprints: !!originalData.sprints
+    };
+    
+    // Step 2: Test upload functionality
+    console.log('⬆️ Step 2: Testing upload to Supabase...');
+    const uploadResult = await syncAllDataToSupabaseWithTest();
+    verificationResults.upload = uploadResult;
+    
+    if (!uploadResult.success) {
+      return {
+        success: false,
+        message: 'Upload verification failed: ' + uploadResult.message,
+        details: verificationResults
+      };
+    }
+    
+    // Step 3: Clear localStorage (simulate fresh device)
+    console.log('🗑️ Step 3: Clearing localStorage to simulate fresh device...');
+    const keysToBackup = [
+      'noctisium-tracker-data',
+      'noctisium-goals-data', 
+      'noctisium-financial-data',
+      'noctisium-kanban',
+      'noctisium-sprint-start-date',
+      'noctisium-roadmaps'
+    ];
+    
+    const backupValues: Record<string, string | null> = {};
+    keysToBackup.forEach(key => {
+      backupValues[key] = localStorage.getItem(key);
+      localStorage.removeItem(key);
+    });
+    
+    // Step 4: Test download functionality
+    console.log('⬇️ Step 4: Testing download from Supabase...');
+    const downloadResult = await loadAllDataFromSupabase();
+    verificationResults.download = downloadResult;
+    
+    if (!downloadResult.success) {
+      // Restore backup before returning
+      Object.entries(backupValues).forEach(([key, value]) => {
+        if (value) localStorage.setItem(key, value);
+      });
+      
+      return {
+        success: false,
+        message: 'Download verification failed: ' + downloadResult.message,
+        details: verificationResults
+      };
+    }
+    
+    // Step 5: Validate downloaded data matches original
+    console.log('✅ Step 5: Validating data integrity...');
+    const downloadedData = {
+      metrics: loadData(),
+      goals: loadGoalsData(),
+      financial: {
+        mrr: 0,
+        netWorth: 0,
+        ...JSON.parse(localStorage.getItem('noctisium-financial-data') || '{}')
+      },
+      kanban: localStorage.getItem('noctisium-kanban') ? JSON.parse(localStorage.getItem('noctisium-kanban')!) : null,
+      sprints: localStorage.getItem('noctisium-sprint-start-date'),
+      roadmaps: localStorage.getItem('noctisium-roadmaps') ? JSON.parse(localStorage.getItem('noctisium-roadmaps')!) : null
+    };
+    
+    const validationErrors: string[] = [];
+    
+    // Validate metrics
+    if (downloadedData.metrics.dates.length !== originalData.metrics.dates.length) {
+      validationErrors.push(`Metrics dates mismatch: ${downloadedData.metrics.dates.length} vs ${originalData.metrics.dates.length}`);
+    }
+    
+    if (downloadedData.metrics.metrics.length !== originalData.metrics.metrics.length) {
+      validationErrors.push(`Metrics count mismatch: ${downloadedData.metrics.metrics.length} vs ${originalData.metrics.metrics.length}`);
+    }
+    
+    // Validate goals
+    if (downloadedData.goals.goals.length !== originalData.goals.goals.length) {
+      validationErrors.push(`Goals count mismatch: ${downloadedData.goals.goals.length} vs ${originalData.goals.goals.length}`);
+    }
+    
+    // Validate kanban
+    const originalKanbanTasks = originalData.kanban ? Object.keys(originalData.kanban.tasks).length : 0;
+    const downloadedKanbanTasks = downloadedData.kanban ? Object.keys(downloadedData.kanban.tasks).length : 0;
+    if (downloadedKanbanTasks !== originalKanbanTasks) {
+      validationErrors.push(`Kanban tasks mismatch: ${downloadedKanbanTasks} vs ${originalKanbanTasks}`);
+    }
+    
+    verificationResults.validation = {
+      errors: validationErrors,
+      downloadedData: {
+        metricsCount: downloadedData.metrics.dates.length,
+        goalsCount: downloadedData.goals.goals.length,
+        kanbanTasks: downloadedKanbanTasks,
+        hasFinancial: !!downloadedData.financial,
+        hasSprints: !!downloadedData.sprints
+      }
+    };
+    
+    // Step 6: Restore original data
+    console.log('🔄 Step 6: Restoring original data...');
+    Object.entries(backupValues).forEach(([key, value]) => {
+      if (value) {
+        localStorage.setItem(key, value);
+      } else {
+        localStorage.removeItem(key);
+      }
+    });
+    
+    verificationResults.restore = { completed: true };
+    
+    if (validationErrors.length > 0) {
+      return {
+        success: false,
+        message: `Data validation failed: ${validationErrors.join(', ')}`,
+        details: verificationResults
+      };
+    }
+    
+    return {
+      success: true,
+      message: 'Complete sync verification successful! All data types synced correctly.',
+      details: verificationResults
+    };
+    
+  } catch (error) {
+    console.error('❌ Sync verification failed:', error);
+    return {
+      success: false,
+      message: `Verification failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      details: {
+        backup: { metricsCount: 0, goalsCount: 0, kanbanTasks: 0, hasFinancial: false, hasSprints: false },
+        upload: { success: false, message: '' },
+        download: { success: false, message: '' },
+        validation: { 
+          errors: [], 
+          downloadedData: { metricsCount: 0, goalsCount: 0, kanbanTasks: 0, hasFinancial: false, hasSprints: false }
+        },
+        restore: { completed: false }
+      }
+    };
+  }
+}
+
+/**
+ * Data migration validation - ensures all existing localStorage data syncs correctly
+ */
+export async function validateDataMigration(): Promise<{ success: boolean; message: string; details: MigrationResults }> {
+  try {
+    console.log('🔍 Validating data migration...');
+    
+    const migrationResults: MigrationResults = {
+      localData: {
+        metricsCount: 0,
+        metricsTypes: [],
+        goalsCount: 0,
+        goalTypes: [],
+        kanbanTasks: 0,
+        hasFinancial: false
+      },
+      supabaseData: {},
+      comparison: {
+        syncSuccess: false,
+        syncMessage: ''
+      }
+    };
+    
+    // Check what data exists locally
+    const localMetrics = loadData();
+    const localGoals = loadGoalsData();
+    const localFinancial = JSON.parse(localStorage.getItem('noctisium-financial-data') || '{}');
+    const localKanban = localStorage.getItem('noctisium-kanban') ? JSON.parse(localStorage.getItem('noctisium-kanban')!) : null;
+    
+    migrationResults.localData = {
+      metricsCount: localMetrics.dates.length,
+      metricsTypes: localMetrics.metrics.map(m => m.id),
+      goalsCount: localGoals.goals.length,
+      goalTypes: localGoals.goals.map(g => g.id),
+      kanbanTasks: localKanban ? Object.keys(localKanban.tasks).length : 0,
+      hasFinancial: Object.keys(localFinancial).length > 0
+    };
+    
+    // Check what data exists in Supabase
+    const testResult = await testSupabaseConnection();
+    if (!testResult.success) {
+      return {
+        success: false,
+        message: 'Cannot connect to Supabase: ' + testResult.message,
+        details: migrationResults
+      };
+    }
+    
+    migrationResults.supabaseData = testResult.details;
+    
+    // Perform migration test
+    const syncResult = await syncAllDataToSupabaseWithTest();
+    migrationResults.comparison = {
+      syncSuccess: syncResult.success,
+      syncMessage: syncResult.message
+    };
+    
+    if (!syncResult.success) {
+      return {
+        success: false,
+        message: 'Migration sync failed: ' + syncResult.message,
+        details: migrationResults
+      };
+    }
+    
+    return {
+      success: true,
+      message: 'Data migration validation successful!',
+      details: migrationResults
+    };
+    
+  } catch (error) {
+    console.error('❌ Migration validation failed:', error);
+    return {
+      success: false,
+      message: `Migration validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      details: {
+        localData: {
+          metricsCount: 0,
+          metricsTypes: [],
+          goalsCount: 0,
+          goalTypes: [],
+          kanbanTasks: 0,
+          hasFinancial: false
+        },
+        supabaseData: {},
+        comparison: {
+          syncSuccess: false,
+          syncMessage: ''
+        }
+      }
+    };
   }
 }

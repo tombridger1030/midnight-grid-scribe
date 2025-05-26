@@ -3,23 +3,272 @@
 @tailwind components;
 @tailwind utilities;
 
+/* iOS viewport fixes */
+@supports (-webkit-touch-callout: none) {
+  .h-screen {
+    height: -webkit-fill-available;
+  }
+  
+  .min-h-screen {
+    min-height: -webkit-fill-available;
+  }
+}
+
+/* Mobile-first font sizing */
+html {
+  font-size: 14px;
+}
+
+@media (min-width: 640px) {
+  html {
+    font-size: 16px;
+  }
+}
+
+/* Improve touch behavior */
+* {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+}
+
+/* Better touch targets for mobile */
+button, input, select, textarea, a {
+  min-height: 44px;
+  min-width: 44px;
+  touch-action: manipulation;
+}
+
+/* Prevent zoom on input focus for iOS */
+input, select, textarea {
+  font-size: 16px !important;
+}
+
+@media (min-width: 640px) {
+  input, select, textarea {
+    font-size: 14px !important;
+  }
+}
+
+/* Optimize table scrolling on mobile */
+.overflow-x-auto {
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+/* Mobile-optimized text sizes */
+@media (max-width: 640px) {
+  .text-xl {
+    font-size: 1.125rem;
+  }
+  
+  .text-lg {
+    font-size: 1rem;
+  }
+  
+  .text-base {
+    font-size: 0.875rem;
+  }
+  
+  .text-sm {
+    font-size: 0.75rem;
+  }
+  
+  .text-xs {
+    font-size: 0.6875rem;
+  }
+}
+
+:root {
+  font-family: 'Fira Mono', monospace;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color-scheme: dark;
+  color: #8A8D93;
+  background-color: #000000;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-text-size-adjust: 100%;
+
+  /* CSS Variables for consistent theming */
+  --bg-main: #0A0A0A;
+  --bg-sidebar: #0F0F0F;
+  --bg-panel: #141414;
+  
+  --text-main: #E0E0E0;
+  --text-muted: #808080;
+  --text-accent: #FF6B00;
+  
+  --accent-cyan: #00C853;
+  --accent-blue: #2196F3;
+  --accent-orange: #FF6B00;
+  --accent-red: #F44336;
+  --accent-yellow: #FFC107;
+  --accent-pink: #E91E63;
+  --accent-purple: #9C27B0;
+  --accent-sprint: #FF6B00;
+  
+  --line-main: #2A2A2A;
+  --line-faint: #1A1A1A;
+  
+  --terminal-bg: #0A0A0A;
+  --terminal-text: #E0E0E0;
+  --terminal-accent: #FF6B00;
+  --terminal-accent-secondary: #00C853;
+}
+
+body {
+  margin: 0;
+  display: flex;
+  place-items: center;
+  min-width: 320px;
+  min-height: 100vh;
+  min-height: 100dvh; /* Modern viewport height for mobile */
+  background: var(--bg-main);
+  color: var(--text-main);
+  overflow-x: hidden; /* Prevent horizontal scroll on body */
+}
+
+#root {
+  width: 100%;
+  min-height: 100vh;
+  min-height: 100dvh; /* Modern viewport height for mobile */
+}
+
+/* Terminal-style table */
+.terminal-cell {
+  border: 1px solid var(--accent-pink);
+  padding: 8px 12px;
+  background: var(--bg-sidebar);
+  color: var(--text-main);
+  font-size: 12px;
+}
+
+/* Mobile-optimized terminal cell padding */
+@media (max-width: 640px) {
+  .terminal-cell {
+    @apply p-2;
+  }
+}
+
+/* Terminal-style input */
+.terminal-input {
+  @apply bg-transparent border text-terminal-text p-2 text-xs;
+  @apply focus:border-terminal-accent focus:outline-none;
+  border-color: rgba(255, 107, 0, 0.3);
+}
+
+.terminal-input::placeholder {
+  color: rgba(128, 128, 128, 0.5);
+}
+
+/* Mobile-optimized input */
+@media (max-width: 640px) {
+  .terminal-input {
+    @apply p-3 text-sm;
+  }
+}
+
+/* Terminal-style button */
+.terminal-button {
+  @apply bg-transparent border text-terminal-text px-3 py-2 text-xs;
+  @apply hover:border-terminal-accent transition-colors;
+  @apply focus:border-terminal-accent focus:outline-none;
+  @apply min-h-[44px] flex items-center justify-center;
+  border-color: rgba(255, 107, 0, 0.3);
+}
+
+.terminal-button:hover {
+  background-color: rgba(255, 107, 0, 0.1);
+}
+
+/* Mobile-optimized button */
+@media (max-width: 640px) {
+  .terminal-button {
+    @apply px-4 py-3 text-sm;
+  }
+}
+
+/* Sprint progress bar styling */
+.sprint-progress-container {
+  width: 100%;
+  height: 2px;
+  background: rgba(128, 128, 128, 0.2);
+  position: relative;
+  overflow: hidden;
+}
+
+.sprint-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #FF6B00 0%, #FF8C42 100%);
+  transition: width 0.3s ease;
+}
+
+/* Section divider */
+.section-divider {
+  border: none;
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, var(--accent-orange) 50%, transparent 100%);
+  margin: 1rem 0;
+}
+
+/* Smooth scrolling for better mobile experience */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Fix for mobile keyboard pushing content up */
+@media (max-width: 640px) {
+  .viewport-height-fix {
+    height: 100dvh;
+    max-height: 100dvh;
+  }
+}
+
+/* Custom scrollbar for mobile */
+@media (max-width: 640px) {
+  ::-webkit-scrollbar {
+    width: 3px;
+    height: 3px;
+  }
+  
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    background: rgba(255, 107, 0, 0.3);
+    border-radius: 3px;
+  }
+}
+
 @layer base {
   :root {
     /* Palette & variables */
-    --bg-primary:       #0A0415; /* very dark charcoal-blue */
-    --bg-panel:         #0A0415; /* main background matches primary (#0A0415) */
-    --text-main:        #E8E6E0; /* warm off-white */
-    --text-muted:       #736E63; /* subtle stone-gray */
-    --accent-red:       #D93023; /* molten red */
-    --accent-orange:    #F9581A; /* lava orange */
-    --accent-amber:     #FFC300; /* amber glow */
-    --accent-cyan:      #0AF5E3; /* cool cyan */
-    --line-faint:       rgba(232, 48, 35, 0.2); /* faint red grid lines */
-    --accent-sprint:    #FF4F2E; /* brighter ember-orange red for sprint days */
+    --bg-primary:       #0A0A0A; /* very dark background */
+    --bg-panel:         #141414; /* panel background */
+    --text-main:        #E0E0E0; /* light gray text */
+    --text-muted:       #808080; /* muted gray text */
+    --accent-red:       #F44336; /* error red */
+    --accent-orange:    #FF6B00; /* primary orange accent */
+    --accent-amber:     #FFC107; /* warning amber */
+    --accent-cyan:      #00C853; /* success green */
+    --line-faint:       rgba(255, 107, 0, 0.15); /* faint orange lines */
+    --accent-sprint:    #FF8C42; /* lighter orange for sprint */
+    --cursor-color:     #FF6B00; /* cursor color matches primary accent */
   }
 
   * {
     border-color: var(--line-faint) !important;
+  }
+
+  html {
+    /* iOS viewport fix */
+    height: 100%;
+    height: 100dvh;
   }
 
   body {
@@ -28,14 +277,31 @@
     font-family: 'Fira Mono', monospace;
     margin: 0;
     padding: 0;
+    height: 100%;
+    height: 100dvh;
+    /* iOS specific fixes */
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: none;
   }
 
-  input, textarea {
+  /* iOS input fixes */
+  input, textarea, select {
     background: var(--bg-primary);
     color: var(--text-main);
     font-family: 'Fira Mono', monospace;
     border: 0.5px solid var(--line-faint);
-    padding: 0.25rem;
+    padding: 0.5rem; /* Increased for better touch targets */
+    min-height: 44px; /* iOS minimum touch target */
+    font-size: 16px; /* Prevents zoom on iOS */
+    -webkit-appearance: none;
+    border-radius: 0;
+  }
+
+  /* Improve button touch targets */
+  button {
+    min-height: 44px;
+    min-width: 44px;
+    touch-action: manipulation;
   }
 
   table {
@@ -44,7 +310,7 @@
 
   th, td {
     border: 0.5px solid var(--line-faint) !important;
-    padding: 0.25rem !important;
+    padding: 0.5rem !important; /* Increased for mobile */
   }
 
   tr:nth-child(even) {
@@ -56,6 +322,17 @@
     border-bottom: 1px solid var(--accent-red) !important;
     margin: 1rem 0;
   }
+
+  /* Mobile scrolling improvements */
+  @media (max-width: 768px) {
+    * {
+      -webkit-overflow-scrolling: touch;
+    }
+    
+    body {
+      overscroll-behavior: none;
+    }
+  }
 }
 
 /* Custom styles for our terminal-like interface */
@@ -65,7 +342,8 @@
   }
   
   .terminal-cell {
-    @apply border border-terminal-accent border-opacity-50 p-1 transition-colors duration-150 focus-within:border-terminal-accent;
+    @apply border border-terminal-accent p-1 transition-colors duration-150 focus-within:border-terminal-accent;
+    border-opacity: 0.5;
   }
   
   .terminal-input {
@@ -82,40 +360,40 @@
     50% { opacity: 0; }
   }
   .blink {
-    color: var(--accent-red) !important;
+    color: var(--accent-orange) !important;
     animation: blink 120ms steps(1) infinite !important;
   }
 
-  /* Cyberpunk overrides */
+  /* Dark theme overrides */
   /* Background overrides */
   .bg-panel { background-color: var(--bg-panel) !important; }
   .bg-sidebar { background-color: var(--bg-panel) !important; }
 
   /* Borders and ASCII box lines */
   .border-terminal-accent,
-  .terminal-cell { border-color: var(--accent-red) !important; }
+  .terminal-cell { border-color: var(--accent-orange) !important; }
 
   /* Hover states */
   .terminal-button:hover,
   input:hover,
-  select:hover { background-color: var(--accent-red) !important; color: var(--bg-primary) !important; transition: background 120ms ease, color 120ms ease; }
+  select:hover { background-color: var(--accent-orange) !important; color: var(--bg-primary) !important; transition: background 120ms ease, color 120ms ease; }
 
   /* Cursor color */
-  .blink { color: var(--cursor-color) !important; }
+  .blink { color: var(--accent-orange) !important; }
 
   /* Sidebar panels */
   .sidebar {
     background: var(--bg-panel) !important;
     color: var(--text-main) !important;
-    border-left: 1px solid var(--accent-red);
+    border-left: 1px solid var(--accent-orange);
   }
   .sidebar h2 {
-    color: var(--accent-red) !important;
+    color: var(--accent-orange) !important;
     font-size: 14px;
   }
   .sidebar > div.mb-4 {
     padding: 0.5rem !important;
-    border: 1px solid var(--accent-red) !important;
+    border: 1px solid var(--accent-orange) !important;
     margin-bottom: 1rem !important;
   }
   .sidebar div[class*="spark-line"] {
@@ -126,11 +404,11 @@
   /* KPI block wrapper */
   .sidebar > div {
     padding: 0.75rem !important;
-    border: 1px solid var(--accent-red)!important;
+    border: 1px solid var(--accent-orange)!important;
     margin-bottom: 1rem !important;
   }
   .sidebar .uppercase {
-    color: var(--accent-red)!important;
+    color: var(--accent-orange)!important;
   }
 
   /* Table & center panel */
@@ -141,20 +419,20 @@
 
   /* Section divider */
   .section-divider {
-    border-bottom: 1px solid var(--accent-red)!important;
+    border-bottom: 1px solid var(--accent-orange)!important;
     padding-bottom: 0.5rem;
     margin-bottom: 1rem;
   }
 
   /* Progress bar gradient */
   .progress-gradient {
-    background: linear-gradient(90deg, var(--accent-red), var(--accent-cyan))!important;
+    background: linear-gradient(90deg, var(--accent-orange), var(--accent-cyan))!important;
   }
 
   /* Hover / active states */
   .terminal-button:hover,
   button:hover {
-    background: var(--accent-red)!important;
+    background: var(--accent-orange)!important;
     color: var(--bg-primary)!important;
     transition: background 120ms ease, color 120ms ease;
   }
@@ -175,7 +453,44 @@
   }
   
   .day--sprint-off {
-    border: 1px solid rgba(249, 88, 26, 0.6) !important;
+    border: 1px solid rgba(255, 107, 0, 0.6) !important;
+  }
+
+  /* Sprint calendar day borders - specific classes to override global rule */
+  .sprint-day-on {
+    border: 1px solid #22C55E !important;
+    border-color: #22C55E !important;
+  }
+  
+  .sprint-day-off {
+    border: 1px solid #EF4444 !important;
+    border-color: #EF4444 !important;
+  }
+  
+  .sprint-day-compliant {
+    border: 1px solid #5FE3B3 !important;
+    border-color: #5FE3B3 !important;
+  }
+  
+  .sprint-day-none {
+    border: none !important;
+    border-width: 0 !important;
+  }
+
+  /* Legend box borders */
+  .legend-compliant {
+    border: 1px solid #5FE3B3 !important;
+    border-color: #5FE3B3 !important;
+  }
+  
+  .legend-on {
+    border: 1px solid #22C55E !important;
+    border-color: #22C55E !important;
+  }
+  
+  .legend-off {
+    border: 1px solid #EF4444 !important;
+    border-color: #EF4444 !important;
   }
 
   /* Sprint progress bar */
@@ -189,7 +504,29 @@
 
   .sprint-progress-bar {
     height: 100%;
-    background-color: var(--accent-red);
+    background-color: var(--accent-orange);
     transition: width 0.3s ease;
   }
+}
+
+/* Line clamp utilities for mobile text truncation */
+.line-clamp-1 {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+}
+
+.line-clamp-2 {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.line-clamp-3 {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
 }
