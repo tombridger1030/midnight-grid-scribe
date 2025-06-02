@@ -56,6 +56,49 @@ const TerminalLayout: React.FC = () => {
     return path;
   };
 
+  // Auto-update sprint status based on current date (same logic as Schedule page)
+  const updateSprintStatuses = async (sprintData: Sprint[]) => {
+    const today = getCurrentLocalDate();
+    const todayDate = new Date(today);
+    let needsUpdate = false;
+    
+    const updatedSprints = sprintData.map(sprint => {
+      const sprintStart = new Date(sprint.start_date);
+      const sprintEnd = sprint.end_date ? new Date(sprint.end_date) : null;
+      
+      let newStatus = sprint.status;
+      
+      // Auto-update status based on dates
+      if (sprint.status === 'planned' && todayDate >= sprintStart) {
+        newStatus = 'active';
+        needsUpdate = true;
+      } else if (sprint.status === 'active' && sprintEnd && todayDate > sprintEnd) {
+        newStatus = 'completed';
+        needsUpdate = true;
+      }
+      
+      return { ...sprint, status: newStatus };
+    });
+    
+    if (needsUpdate) {
+      // Update statuses in database
+      for (const sprint of updatedSprints) {
+        if (sprint.status !== sprintData.find(s => s.sprint_id === sprint.sprint_id)?.status) {
+          await supabase
+            .from('sprints')
+            .update({ status: sprint.status })
+            .eq('sprint_id', sprint.sprint_id)
+            .eq('user_id', FIXED_USER_ID);
+        }
+      }
+      
+      // Return updated data for immediate use
+      return updatedSprints;
+    }
+    
+    return sprintData;
+  };
+
   // Load sprint data from Supabase
   const loadSprintData = async () => {
     try {
@@ -70,12 +113,15 @@ const TerminalLayout: React.FC = () => {
         return;
       }
       
+      // Auto-update sprint statuses first
+      const updatedSprints = await updateSprintStatuses(data || []);
+      
       // Calculate current sprint data
       const today = getCurrentLocalDate();
       const todayDate = new Date(today);
       
       // Find active sprint
-      const activeSprint = data?.find(s => s.status === 'active');
+      const activeSprint = updatedSprints?.find(s => s.status === 'active');
       
       if (activeSprint) {
         const sprintStart = new Date(activeSprint.start_date);
@@ -111,7 +157,7 @@ const TerminalLayout: React.FC = () => {
         });
       } else {
         // Check if there's a planned sprint coming up
-        const plannedSprint = data?.find(s => s.status === 'planned');
+        const plannedSprint = updatedSprints?.find(s => s.status === 'planned');
         
         if (plannedSprint) {
           const sprintStart = new Date(plannedSprint.start_date);
@@ -150,7 +196,7 @@ const TerminalLayout: React.FC = () => {
   // Load sprint data on mount and refresh periodically
   useEffect(() => {
     loadSprintData();
-    const interval = setInterval(loadSprintData, 60000); // Update every minute
+    const interval = setInterval(loadSprintData, 10000); // Update every 10 seconds
     return () => clearInterval(interval);
   }, []);
 

@@ -49,6 +49,55 @@ const Dashboard = () => {
   const { metrics, dates } = useMetrics();
   const currentMonth = getCurrentMonth();
 
+  // Helper function to safely get short sprint ID
+  const getShortSprintId = (sprintId: string | number): string => {
+    const idStr = String(sprintId);
+    return idStr.length > 4 ? idStr.slice(-4) : idStr;
+  };
+
+  // Auto-update sprint status based on current date (same logic as Schedule page)
+  const updateSprintStatuses = async (sprintData: Sprint[]) => {
+    const today = getCurrentLocalDate();
+    const todayDate = new Date(today);
+    let needsUpdate = false;
+    
+    const updatedSprints = sprintData.map(sprint => {
+      const sprintStart = new Date(sprint.start_date);
+      const sprintEnd = sprint.end_date ? new Date(sprint.end_date) : null;
+      
+      let newStatus = sprint.status;
+      
+      // Auto-update status based on dates
+      if (sprint.status === 'planned' && todayDate >= sprintStart) {
+        newStatus = 'active';
+        needsUpdate = true;
+      } else if (sprint.status === 'active' && sprintEnd && todayDate > sprintEnd) {
+        newStatus = 'completed';
+        needsUpdate = true;
+      }
+      
+      return { ...sprint, status: newStatus };
+    });
+    
+    if (needsUpdate) {
+      // Update statuses in database
+      for (const sprint of updatedSprints) {
+        if (sprint.status !== sprintData.find(s => s.sprint_id === sprint.sprint_id)?.status) {
+          await supabase
+            .from('sprints')
+            .update({ status: sprint.status })
+            .eq('sprint_id', sprint.sprint_id)
+            .eq('user_id', FIXED_USER_ID);
+        }
+      }
+      
+      // Return updated data for immediate use
+      return updatedSprints;
+    }
+    
+    return sprintData;
+  };
+
   // Load sprint data from Supabase
   const loadSprintData = async () => {
     try {
@@ -63,14 +112,16 @@ const Dashboard = () => {
         return;
       }
       
-      setSprints(data || []);
+      // Auto-update sprint statuses first
+      const updatedSprints = await updateSprintStatuses(data || []);
+      setSprints(updatedSprints);
       
       // Calculate current sprint data
       const today = getCurrentLocalDate();
       const todayDate = new Date(today);
       
       // Find active sprint
-      const activeSprint = data?.find(s => s.status === 'active');
+      const activeSprint = updatedSprints?.find(s => s.status === 'active');
       
       if (activeSprint) {
         const sprintStart = new Date(activeSprint.start_date);
@@ -102,14 +153,14 @@ const Dashboard = () => {
           currentSprint,
           daysLeft,
           isOnPhase,
-          sprintName: activeSprint.name || `Sprint ${activeSprint.sprint_id.slice(-4)}`,
+          sprintName: activeSprint.name || `Sprint ${getShortSprintId(activeSprint.sprint_id)}`,
           totalDays: totalCycleDays,
           phase,
           daysUntilNext
         });
       } else {
         // Check if there's a planned sprint coming up
-        const plannedSprint = data?.find(s => s.status === 'planned');
+        const plannedSprint = updatedSprints?.find(s => s.status === 'planned');
         
         if (plannedSprint) {
           const sprintStart = new Date(plannedSprint.start_date);
@@ -180,9 +231,9 @@ const Dashboard = () => {
     loadDashboardData();
   }, []);
 
-  // Refresh sprint data every minute to keep it current
+  // Refresh sprint data every 10 seconds to keep it current
   useEffect(() => {
-    const interval = setInterval(loadSprintData, 60000); // Update every minute
+    const interval = setInterval(loadSprintData, 10000); // Update every 10 seconds
     return () => clearInterval(interval);
   }, []);
 

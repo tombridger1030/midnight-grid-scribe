@@ -228,6 +228,14 @@ const Schedule = () => {
     });
   }, []);
 
+  // Auto-update sprint statuses every 10 seconds
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      await updateSprintStatuses();
+    }, 10000); // Update every 10 seconds
+    return () => clearInterval(interval);
+  }, [sprints]); // Re-run when sprints change
+
   // Determine if a date is in a sprint ON period (enhanced)
   const isSprintOnDay = (date: Date) => {
     return getSprintPhase(date) === 'on';
