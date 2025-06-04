@@ -51,10 +51,11 @@ def convert_to_noctisium_format(input_file, output_file):
         reader = csv.reader(f)
         rows = list(reader)
     
-    # Find the header row (row with "Date", "Wake Time", etc.)
+    # Find the header row. Older exports use "Wake"/"Sleep" while newer ones
+    # use "Wake Time"/"Sleep Time".  Support both formats.
     header_row_idx = None
     for i, row in enumerate(rows):
-        if len(row) > 2 and "Date" in row and "Wake Time" in row:
+        if len(row) > 2 and "Date" in row and ("Wake Time" in row or "Wake" in row):
             header_row_idx = i
             break
     
@@ -64,11 +65,21 @@ def convert_to_noctisium_format(input_file, output_file):
     
     headers = rows[header_row_idx]
     
-    # Map column indices
+    # Map column indices and handle older column names
     col_map = {}
     for i, header in enumerate(headers):
-        if header:
-            col_map[header] = i
+        if not header:
+            continue
+        header = header.strip()
+        col_map[header] = i
+
+        # Normalize common alternate column names
+        if header == 'Wake' and 'Wake Time' not in col_map:
+            col_map['Wake Time'] = i
+        if header == 'Sleep' and 'Sleep Time' not in col_map:
+            col_map['Sleep Time'] = i
+        if header == 'CalsBurn' and 'Calories' not in col_map:
+            col_map['Calories'] = i
     
     # Process data rows
     for row in rows[header_row_idx + 1:]:
@@ -111,7 +122,22 @@ def convert_to_noctisium_format(input_file, output_file):
         if 'Deep Work (hrs)' in col_map and len(row) > col_map['Deep Work (hrs)'] and row[col_map['Deep Work (hrs)']]:
             data['deepWork'] = str(row[col_map['Deep Work (hrs)']])
         else:
-            data['deepWork'] = None
+            # Older logs store deep work in minutes across DW1/DW2 columns
+            minutes = 0.0
+            if 'DW1 mins' in col_map and len(row) > col_map['DW1 mins'] and row[col_map['DW1 mins']]:
+                try:
+                    minutes += float(row[col_map['DW1 mins']])
+                except ValueError:
+                    pass
+            if 'DW2 mins' in col_map and len(row) > col_map['DW2 mins'] and row[col_map['DW2 mins']]:
+                try:
+                    minutes += float(row[col_map['DW2 mins']])
+                except ValueError:
+                    pass
+            if minutes > 0:
+                data['deepWork'] = str(round(minutes / 60, 2))
+            else:
+                data['deepWork'] = None
         
         # Recovery
         if 'Recovery' in col_map and len(row) > col_map['Recovery'] and row[col_map['Recovery']]:
