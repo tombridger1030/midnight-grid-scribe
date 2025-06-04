@@ -145,13 +145,24 @@ const Kanban = () => {
     }
   };
 
-  // Update echo tasks closed counter in localStorage for PerformanceSidebar
+  // Update echo tasks counter in localStorage for PerformanceSidebar
   const updateEchoTasksCounter = () => {
-    const completedTasks = kanbanData.columns.done.taskIds.length;
+    const completedTasks = kanbanData.columns.done?.taskIds?.length || 0;
     
     // Update the roadmap data that PerformanceSidebar reads
-    const roadmapsRaw = localStorage.getItem('noctisium-roadmaps') || '[]';
-    const roadmaps = JSON.parse(roadmapsRaw) as Array<{ id: string; milestones: Array<{ completed: boolean }> }>;
+    const roadmapsRaw = localStorage.getItem('noctisium-roadmaps');
+    let roadmaps: Array<{ id: string; milestones: Array<{ completed: boolean }> }> = [];
+    if (roadmapsRaw) {
+      try {
+        const parsedRoadmaps = JSON.parse(roadmapsRaw);
+        if (Array.isArray(parsedRoadmaps)) {
+          roadmaps = parsedRoadmaps;
+        }
+      } catch (error) {
+        console.error("Error parsing roadmaps from localStorage:", error);
+        // roadmaps remains an empty array if parsing fails
+      }
+    }
     
     // Find or create echo roadmap entry
     let echoIndex = roadmaps.findIndex((r) => r.id === 'echo');
@@ -182,8 +193,10 @@ const Kanban = () => {
 
   // Update echo tasks counter whenever done column changes
   useEffect(() => {
-    updateEchoTasksCounter();
-  }, [kanbanData.columns.done.taskIds]);
+    if (kanbanData.columns.done) {
+      updateEchoTasksCounter();
+    }
+  }, [kanbanData.columns.done?.taskIds]);
 
   // Save data whenever kanbanData changes (but not during initial load)
   useEffect(() => {
@@ -659,7 +672,7 @@ const Kanban = () => {
   const activeTasks = Object.values(kanbanData.tasks).filter(task => !task.isDeleted);
   const totalTasks = activeTasks.length;
   const totalTime = activeTasks.reduce((sum, task) => sum + task.timeSpent, 0);
-  const completedTasks = kanbanData.columns.done.taskIds.length;
+  const completedTasks = kanbanData.columns.done?.taskIds?.length || 0;
 
   if (isLoading) {
     return (
@@ -717,7 +730,8 @@ const Kanban = () => {
           <div className="flex gap-4 min-w-max px-2">
             {kanbanData.columnOrder.map(columnId => {
               const column = kanbanData.columns[columnId];
-              const tasks = column.taskIds.map(taskId => kanbanData.tasks[taskId]).filter(task => !task.isDeleted);
+              if (!column) return null; // Skip if column doesn't exist
+              const tasks = column.taskIds.map(taskId => kanbanData.tasks[taskId]).filter(task => task && !task.isDeleted);
               
               return (
                 <div key={columnId} className="w-80 flex-shrink-0">
@@ -950,7 +964,8 @@ const Kanban = () => {
         <div className="hidden md:grid md:grid-cols-4 gap-4 h-full">
           {kanbanData.columnOrder.map(columnId => {
             const column = kanbanData.columns[columnId];
-            const tasks = column.taskIds.map(taskId => kanbanData.tasks[taskId]).filter(task => !task.isDeleted);
+            if (!column) return null; // Skip if column doesn't exist
+            const tasks = column.taskIds.map(taskId => kanbanData.tasks[taskId]).filter(task => task && !task.isDeleted);
             
             return (
               <div key={columnId} className="bg-terminal-bg border border-terminal-accent/30 p-4 flex flex-col"

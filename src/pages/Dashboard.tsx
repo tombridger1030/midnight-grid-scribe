@@ -165,7 +165,7 @@ const Dashboard = () => {
         if (plannedSprint) {
           const sprintStart = new Date(plannedSprint.start_date);
           const daysUntilStart = Math.ceil((sprintStart.getTime() - todayDate.getTime()) / (1000 * 60 * 60 * 24));
-          
+
           setSprintData({
             currentSprint: 1,
             daysLeft: 0,
@@ -395,16 +395,16 @@ const Dashboard = () => {
               )}
               <div className="space-y-3">
                 {sprintData.phase === 'ON' ? (
-                  <div>
-                    <div className="flex justify-between text-xs mb-1">
-                      <span className="text-terminal-accent/70">Phase Progress</span>
-                      <span className="text-terminal-accent">{sprintData.daysLeft} days left</span>
-                    </div>
-                    <Progress 
-                      value={((21 - sprintData.daysLeft) / 21) * 100} 
-                      className="h-2"
-                    />
+                <div>
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="text-terminal-accent/70">Phase Progress</span>
+                    <span className="text-terminal-accent">{sprintData.daysLeft} days left</span>
                   </div>
+                  <Progress 
+                      value={((21 - sprintData.daysLeft) / 21) * 100} 
+                    className="h-2"
+                  />
+                </div>
                 ) : sprintData.phase === 'OFF' ? (
                   <div>
                     <div className="flex justify-between text-xs mb-1">
