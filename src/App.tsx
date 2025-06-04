@@ -3,6 +3,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import TerminalLayout from "@/components/TerminalLayout";
 import Index from "./pages/Index";
 import Dashboard from "./pages/Dashboard";
@@ -11,13 +12,15 @@ import Schedule from "./pages/Schedule";
 import Roadmap from "./pages/Roadmap";
 import Kanban from "./pages/Kanban";
 import NotFound from "./pages/NotFound";
+import AuthPage from "./pages/AuthPage";
 import { useState, useEffect } from "react";
 import PinUnlockOverlay from "@/components/PinUnlockOverlay";
 import { loadMetrics } from "@/lib/storage";
 
 const queryClient = new QueryClient();
 
-const App = () => {
+const AppContent = () => {
+  const { user } = useAuth();
   const [unlocked, setUnlocked] = useState(sessionStorage.getItem('noctisium_unlocked') === 'true');
   const [isLoadingData, setIsLoadingData] = useState(false);
 
@@ -40,6 +43,10 @@ const App = () => {
   const handleUnlock = () => {
     setUnlocked(true);
   };
+
+  if (!user) {
+    return <AuthPage />;
+  }
 
   if (isLoadingData) {
     return (
@@ -79,5 +86,11 @@ const App = () => {
     </QueryClientProvider>
   );
 };
+
+const App = () => (
+  <AuthProvider>
+    <AppContent />
+  </AuthProvider>
+);
 
 export default App;

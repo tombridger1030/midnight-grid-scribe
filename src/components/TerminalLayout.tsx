@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 import PerformanceSidebar from './PerformanceSidebar';
 import ContextSidebar from './ContextSidebar';
 import { syncAllDataToSupabase, loadAllDataFromSupabase, syncAllDataToSupabaseWithTest, testSupabaseConnection, verifySyncFunctionality, FIXED_USER_ID } from '@/lib/storage';
+import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { getCurrentLocalDate } from '@/lib/dateUtils';
 
@@ -22,6 +23,7 @@ interface Sprint {
 
 const TerminalLayout: React.FC = () => {
   const location = useLocation();
+  const { user, signOut } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [systemStats, setSystemStats] = useState({
     cpu: Math.floor(Math.random() * 30) + 10,
@@ -347,7 +349,7 @@ const TerminalLayout: React.FC = () => {
           {formattedTime}
         </div>
         <div className="hidden sm:flex items-center gap-4 text-xs uppercase">
-          <span className="text-[#8A8D93] mr-3">USER: NOCTISIUM</span>
+          <span className="text-[#8A8D93] mr-3">USER: {user?.email}</span>
           <span className="text-[#8A8D93]">OS: DEBIAN LINUX WIRED</span>
           
           {/* Sync Controls */}
@@ -397,6 +399,14 @@ const TerminalLayout: React.FC = () => {
               ) : (
                 <Download size={10} />
               )}
+            </button>
+
+            <button
+              onClick={signOut}
+              className="p-1 hover:bg-[#333] transition-colors min-h-[24px] min-w-[24px] flex items-center justify-center"
+              title="Sign out"
+            >
+              Sign Out
             </button>
           </div>
         </div>

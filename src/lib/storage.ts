@@ -285,14 +285,24 @@ export const importDataCSV = (fileContent: string): boolean => {
 // Supabase-syncing storage functions
 type SupabaseMetricRow = { date: string; data: Record<string, string | number | boolean> };
 
-// Use a fixed Supabase user ID for all sync operations
-export const FIXED_USER_ID = '0b3c6a14-8d1e-4ca4-b44f-8b89980bc61b';
+// Currently active Supabase user ID
+export let FIXED_USER_ID: string | null = null;
+
+// Helper to update the active user ID when auth state changes
+export const setUserId = (id: string | null) => {
+  FIXED_USER_ID = id;
+};
+
+export const getUserId = () => FIXED_USER_ID;
 
 /**
  * Load all metrics from Supabase (falls back to localStorage)
  */
 export async function loadMetrics(): Promise<TrackerData> {
   try {
+    if (!FIXED_USER_ID) {
+      return loadData();
+    }
     const { data, error } = await supabase
       .from('metrics')
       .select('date, data')
@@ -334,6 +344,10 @@ export async function loadMetrics(): Promise<TrackerData> {
  */
 export async function saveMetrics(trackerData: TrackerData): Promise<void> {
   try {
+    if (!FIXED_USER_ID) {
+      saveData(trackerData);
+      return;
+    }
     console.log('📈 Syncing metrics data...');
     console.log('📊 Metrics to sync:', trackerData.dates.length, 'days,', trackerData.metrics.length, 'metrics');
     
@@ -406,6 +420,9 @@ export async function saveMetrics(trackerData: TrackerData): Promise<void> {
  */
 export async function loadRoadmapData(): Promise<RoadmapData | null> {
   try {
+    if (!FIXED_USER_ID) {
+      return null;
+    }
     // Load yearly goals
     const { data: goalsData, error: goalsError } = await supabase
       .from('yearly_goals')
@@ -460,6 +477,9 @@ export async function loadRoadmapData(): Promise<RoadmapData | null> {
  */
 export async function saveRoadmapData(roadmapData: RoadmapData): Promise<void> {
   try {
+    if (!FIXED_USER_ID) {
+      return;
+    }
     // Save yearly goals
     const goalsPayload = roadmapData.yearlyGoals.map(goal => ({
       user_id: FIXED_USER_ID,
@@ -727,6 +747,9 @@ export function updateGoalMonthly(goalId: string, month: Month, value: number | 
  */
 export async function loadGoalsFromSupabase(): Promise<GoalsData> {
   try {
+    if (!FIXED_USER_ID) {
+      return loadGoalsData();
+    }
     const { data, error } = await supabase
       .from('goals')
       .select('*')
@@ -770,6 +793,9 @@ export async function loadGoalsFromSupabase(): Promise<GoalsData> {
  */
 export async function saveGoalsToSupabase(data: GoalsData): Promise<void> {
   try {
+    if (!FIXED_USER_ID) {
+      return;
+    }
     console.log('🎯 Syncing goals data to Supabase...');
     console.log('📊 Goals to sync:', data.goals.map(g => ({ id: g.id, name: g.name, yearlyTarget: g.yearlyTarget })));
     
@@ -823,6 +849,9 @@ export async function saveGoalsToSupabase(data: GoalsData): Promise<void> {
  */
 export async function updateGoalMonthlySupabase(goalId: string, month: Month, value: number | null): Promise<GoalsData> {
   try {
+    if (!FIXED_USER_ID) {
+      return updateGoalMonthly(goalId, month, value);
+    }
     // Get current goal data
     const { data: currentData, error: fetchError } = await supabase
       .from('goals')
@@ -868,6 +897,9 @@ export async function updateGoalMonthlySupabase(goalId: string, month: Month, va
  */
 export async function syncFinancialData(): Promise<void> {
   try {
+    if (!FIXED_USER_ID) {
+      return;
+    }
     console.log('🏦 Syncing financial data...');
     
     // Get financial data from localStorage or defaults
@@ -1125,6 +1157,9 @@ function saveRoadmapDataLocal(data: RoadmapData): void {
 // Fix financial metrics loading with better error handling
 export async function loadFinancialMetrics(): Promise<{ mrr: number; netWorth: number }> {
   try {
+    if (!FIXED_USER_ID) {
+      return { mrr: 0, netWorth: 0 };
+    }
     const { data, error } = await supabase
       .from('financial_metrics')
       .select('mrr, net_worth')
@@ -1151,6 +1186,10 @@ export async function loadFinancialMetrics(): Promise<{ mrr: number; netWorth: n
 // Save financial metrics with proper error handling
 export async function saveFinancialMetrics(mrr: number, netWorth: number): Promise<void> {
   try {
+    if (!FIXED_USER_ID) {
+      localStorage.setItem('noctisium-financial-data', JSON.stringify({ mrr, netWorth }));
+      return;
+    }
     const { error } = await supabase
       .from('financial_metrics')
       .upsert([{
@@ -1177,6 +1216,9 @@ export async function saveFinancialMetrics(mrr: number, netWorth: number): Promi
 // New function to sync roadmap data to a separate table
 export async function saveRoadmapDataToSupabase(roadmapData: RoadmapData): Promise<void> {
   try {
+    if (!FIXED_USER_ID) {
+      return;
+    }
     console.log('🗺️ Syncing roadmap data to Supabase...');
     
     // Check if the table exists
@@ -1336,6 +1378,9 @@ export interface KanbanData {
  */
 export async function loadKanbanFromSupabase(boardId: string = 'echo'): Promise<KanbanData | null> {
   try {
+    if (!FIXED_USER_ID) {
+      return null;
+    }
     console.log('📋 Loading Kanban data from Supabase...');
     
     // Load columns
@@ -1437,6 +1482,9 @@ export async function loadKanbanFromSupabase(boardId: string = 'echo'): Promise<
  */
 export async function saveKanbanToSupabase(kanbanData: KanbanData, boardId: string = 'echo'): Promise<void> {
   try {
+    if (!FIXED_USER_ID) {
+      return;
+    }
     console.log('📋 Saving Kanban data to Supabase...');
     console.log('📊 Data to save:', {
       tasks: Object.keys(kanbanData.tasks).length,
@@ -1620,6 +1668,9 @@ export async function saveKanbanToSupabase(kanbanData: KanbanData, boardId: stri
  */
 export async function deleteKanbanTaskFromSupabase(taskId: string, boardId: string = 'echo'): Promise<void> {
   try {
+    if (!FIXED_USER_ID) {
+      return;
+    }
     // Try soft delete first
     const { error: softDeleteError } = await supabase
       .from('kanban_tasks')
@@ -1661,6 +1712,9 @@ export async function deleteKanbanTaskFromSupabase(taskId: string, boardId: stri
  */
 export async function moveKanbanTaskInSupabase(taskId: string, newColumnId: string, boardId: string = 'echo'): Promise<void> {
   try {
+    if (!FIXED_USER_ID) {
+      return;
+    }
     const { error } = await supabase
       .from('kanban_tasks')
       .update({ column_id: newColumnId })
@@ -1682,6 +1736,9 @@ export async function moveKanbanTaskInSupabase(taskId: string, newColumnId: stri
  */
 export async function restoreKanbanTaskFromSupabase(taskId: string, boardId: string = 'echo'): Promise<void> {
   try {
+    if (!FIXED_USER_ID) {
+      return;
+    }
     const { error } = await supabase
       .from('kanban_tasks')
       .update({ 
@@ -1708,6 +1765,9 @@ export async function restoreKanbanTaskFromSupabase(taskId: string, boardId: str
  */
 export async function getDeletedKanbanTasks(boardId: string = 'echo'): Promise<KanbanTask[]> {
   try {
+    if (!FIXED_USER_ID) {
+      return [];
+    }
     const { data: tasksData, error: tasksError } = await supabase
       .from('kanban_tasks')
       .select('*')
