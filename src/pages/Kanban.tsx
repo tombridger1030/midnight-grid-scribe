@@ -312,7 +312,8 @@ const Kanban = () => {
       labels: [],
       timeSpent: 0,
       createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
+      isDeleted: false
     };
 
     console.log('✅ Creating new task:', newTask);
@@ -961,14 +962,14 @@ const Kanban = () => {
         </div>
 
         {/* Desktop: Grid layout */}
-        <div className="hidden md:grid md:grid-cols-4 gap-4 h-full">
+        <div className="hidden md:grid md:grid-cols-4 gap-4 h-full overflow-y-auto">
           {kanbanData.columnOrder.map(columnId => {
             const column = kanbanData.columns[columnId];
             if (!column) return null; // Skip if column doesn't exist
             const tasks = column.taskIds.map(taskId => kanbanData.tasks[taskId]).filter(task => task && !task.isDeleted);
             
             return (
-              <div key={columnId} className="bg-terminal-bg border border-terminal-accent/30 p-4 flex flex-col"
+              <div key={columnId} className="bg-terminal-bg border border-terminal-accent/30 p-4 flex flex-col max-h-full overflow-hidden"
                 onDragOver={handleDragOver}
                 onDrop={(e) => handleDrop(e, columnId)}
               >
@@ -980,210 +981,14 @@ const Kanban = () => {
                     {tasks.length}
                   </span>
                 </div>
-                
                 <div className="flex-1 space-y-3 overflow-y-auto">
-                  {showAddTask === columnId && renderAddTaskForm(columnId)}
-                  {tasks.map(task => (
-                    <div
-                      key={task.id}
-                      draggable={!editMode}
-                      onDragStart={(e) => handleDragStart(e, task.id)}
-                      className="bg-terminal-bg border border-terminal-accent/20 p-3 cursor-pointer hover:border-terminal-accent/40 transition-colors"
-                      onClick={(e) => handleTaskCardClick(e, task.id)}
-                    >
-                      <div className="flex items-start justify-between mb-2">
-                        <h4 className="text-sm font-medium text-terminal-accent line-clamp-2">{task.title}</h4>
-                        <div className="flex items-center">
-                          <div className={`w-2 h-2 rounded-full ${getPriorityColor(task.priority)} mr-2`}></div>
-                          {editMode && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                deleteTask(task.id);
-                              }}
-                              className="text-red-400 hover:text-red-300"
-                            >
-                              <Trash2 size={12} />
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                      
-                      {task.description && (
-                        <p className="text-xs text-terminal-accent/70 mb-2 line-clamp-2">{task.description}</p>
-                      )}
-                      
-                      <div className="flex flex-wrap gap-1 mb-2">
-                        {task.labels.map(label => (
-                          <span key={label} className="text-xs px-1 py-0.5 bg-terminal-accent/20 text-terminal-accent flex items-center">
-                            {label}
-                            {selectedTask === task.id && (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  removeLabel(task.id, label);
-                                }}
-                                className="ml-1 text-terminal-accent/70 hover:text-terminal-accent"
-                              >
-                                <X size={10} />
-                              </button>
-                            )}
-                          </span>
-                        ))}
-                      </div>
-                      
-                      <div className="flex justify-between items-center text-xs text-terminal-accent/70">
-                        <div className="flex items-center">
-                          {task.assignee && (
-                            <span className="flex items-center mr-2">
-                              <User size={10} className="mr-1" />
-                              {task.assignee}
-                            </span>
-                          )}
-                          <span className="flex items-center">
-                            <Clock size={10} className="mr-1" />
-                            {task.timeSpent}h
-                          </span>
-                        </div>
-                        {task.dueDate && (
-                          <span className="flex items-center">
-                            <Calendar size={10} className="mr-1" />
-                            {getDaysUntilDue(task.dueDate)}
-                          </span>
-                        )}
-                      </div>
-                      
-                      {/* Expanded view for mobile */}
-                      {selectedTask === task.id && (
-                        <div 
-                          className="mt-3 pt-3 border-t border-terminal-accent/20"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <div className="grid grid-cols-1 gap-2 text-xs">
-                            <div>
-                              <label className="text-terminal-accent">Priority:</label>
-                              <select
-                                value={task.priority}
-                                onChange={(e) => {
-                                  e.stopPropagation();
-                                  updateTask(task.id, { priority: e.target.value as KanbanTask['priority'] });
-                                }}
-                                className="terminal-input w-full mt-1"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <option value="low">Low</option>
-                                <option value="medium">Medium</option>
-                                <option value="high">High</option>
-                                <option value="urgent">Urgent</option>
-                              </select>
-                            </div>
-                            <div>
-                              <label className="text-terminal-accent">Due Date:</label>
-                              <input
-                                type="date"
-                                value={task.dueDate || ''}
-                                onChange={(e) => {
-                                  e.stopPropagation();
-                                  updateTask(task.id, { dueDate: e.target.value });
-                                }}
-                                onClick={(e) => e.stopPropagation()}
-                                className="terminal-input w-full mt-1"
-                              />
-                            </div>
-                            <div>
-                              <label className="text-terminal-accent">Assignee:</label>
-                              <input
-                                type="text"
-                                value={task.assignee || ''}
-                                onChange={(e) => {
-                                  e.stopPropagation();
-                                  updateTask(task.id, { assignee: e.target.value });
-                                }}
-                                onClick={(e) => e.stopPropagation()}
-                                className="terminal-input w-full mt-1"
-                                placeholder="Assignee"
-                              />
-                            </div>
-                            <div>
-                              <label className="text-terminal-accent">Time Spent (hrs):</label>
-                              <input
-                                type="number"
-                                step="0.5"
-                                value={task.timeSpent}
-                                onChange={(e) => {
-                                  e.stopPropagation();
-                                  updateTask(task.id, { timeSpent: parseFloat(e.target.value) || 0 });
-                                }}
-                                onClick={(e) => e.stopPropagation()}
-                                className="terminal-input w-full mt-1"
-                              />
-                            </div>
-                          </div>
-                          
-                          {/* Labels section */}
-                          <div className="mt-2">
-                            <label className="text-terminal-accent">Labels:</label>
-                            <div className="flex items-center gap-2 mt-1">
-                              <input
-                                type="text"
-                                value={newLabel}
-                                onChange={(e) => {
-                                  e.stopPropagation();
-                                  setNewLabel(e.target.value);
-                                }}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    addLabel(task.id, newLabel);
-                                    setNewLabel('');
-                                  }
-                                }}
-                                onClick={(e) => e.stopPropagation()}
-                                className="terminal-input flex-1"
-                                placeholder="Add label..."
-                              />
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  addLabel(task.id, newLabel);
-                                  setNewLabel('');
-                                }}
-                                className="terminal-button text-xs px-2 py-1"
-                                disabled={!newLabel.trim()}
-                              >
-                                <Tag size={12} />
-                              </button>
-                            </div>
-                          </div>
-                          
-                          <div className="mt-2">
-                            <label className="text-terminal-accent">Description:</label>
-                            <textarea
-                              value={task.description || ''}
-                              onChange={(e) => {
-                                e.stopPropagation();
-                                updateTask(task.id, { description: e.target.value });
-                              }}
-                              onClick={(e) => e.stopPropagation()}
-                              className="terminal-input w-full mt-1 h-16 resize-none"
-                              placeholder="Task description..."
-                            />
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                  {tasks.map(task => renderTaskCard(task))}
                 </div>
-                
-                <button
-                  onClick={() => {
-                    console.log('🔘 Add Task button clicked for column:', columnId);
-                    setShowAddTask(showAddTask === columnId ? null : columnId);
-                  }}
+                <button 
+                  onClick={() => addTask(columnId)}
                   className="mt-4 p-2 border border-dashed border-terminal-accent/30 text-terminal-accent/50 hover:border-terminal-accent/50 hover:text-terminal-accent transition-colors text-sm"
                 >
-                  {showAddTask === columnId ? 'Cancel' : '+ Add Task'}
+                  + Add Task
                 </button>
               </div>
             );

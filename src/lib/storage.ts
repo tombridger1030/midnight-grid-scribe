@@ -1512,18 +1512,14 @@ export async function saveKanbanToSupabase(kanbanData: KanbanData, boardId: stri
         due_date: task.dueDate || null,
         labels: task.labels || [],
         time_spent: task.timeSpent || 0,
-        position: index + 1
+        position: index + 1,
+        // Always include is_deleted and deleted_at, with defaults
+        is_deleted: task.isDeleted === undefined ? false : task.isDeleted,
+        deleted_at: task.deletedAt === undefined ? null : task.deletedAt
       };
       
-      // Only include soft delete fields if the task has them (for backward compatibility)
-      if (task.isDeleted !== undefined || task.deletedAt !== undefined) {
-        return {
-          ...basePayload,
-          is_deleted: task.isDeleted || false,
-          deleted_at: task.deletedAt || null
-        };
-      }
-      
+      // The conditional logic for backward compatibility is no longer needed here
+      // as is_deleted and deleted_at are now part of basePayload with defaults.
       return basePayload;
     });
     
