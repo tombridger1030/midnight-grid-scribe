@@ -112,6 +112,28 @@ const Visualizer = () => {
     // Build numeric values array
     const valuesByDate = filteredDates.map(date => {
       const raw = metric.values[date];
+      
+      // Special handling for sleep time
+      if (metric.type === 'time' && metric.id === 'sleepTime') {
+        if (!raw || raw === '') return 0;
+        const [hours, minutes] = raw.toString().split(':').map(Number);
+        if (isNaN(hours) || isNaN(minutes)) return 0;
+        
+        // Convert time to a decimal value between 0-24
+        // For times between 9PM (21:00) and 3AM (03:00), we want:
+        // 9PM = 0, 10PM = 1, 11PM = 2, 12AM = 3, 1AM = 4, 2AM = 5, 3AM = 6
+        let decimalTime = hours + (minutes / 60);
+        if (hours < 4) { // Early morning hours (12AM-3AM)
+          decimalTime += 3; // Shift to come after 9PM
+        } else if (hours >= 21) { // Late night hours (9PM-11PM)
+          decimalTime -= 21; // Make 9PM = 0
+        } else {
+          decimalTime = 0; // Invalid sleep time
+        }
+        return decimalTime;
+      }
+      
+      // Normal numeric handling for other metrics
       const num = raw !== undefined && raw !== '' ? parseFloat(raw as string) : 0;
       return isNaN(num) ? 0 : num;
     });
@@ -145,6 +167,11 @@ const Visualizer = () => {
     
     const min = Math.min(...allValues);
     const max = Math.max(...allValues);
+    
+    // Special handling for sleep time Y-axis
+    if (selectedMetricId === 'sleepTime') {
+      return [0, 6]; // Fixed range: 9PM (0) to 3AM (6)
+    }
     
     // Add 10% padding to top and bottom for better visualization
     const range = max - min;
@@ -346,6 +373,17 @@ const Visualizer = () => {
                 <YAxis 
                   stroke="var(--text-muted)"
                   domain={getYAxisDomain(chartData)}
+                  tickFormatter={(value) => {
+                    if (metric.id === 'sleepTime') {
+                      // Convert decimal hours back to time display
+                      if (value <= 3) { // 9PM-11PM
+                        return `${21 + value}:00`;
+                      } else { // 12AM-3AM
+                        return `${value - 3}:00`;
+                      }
+                    }
+                    return value.toString();
+                  }}
                 />
                 <Tooltip 
                   contentStyle={{ 
@@ -354,6 +392,17 @@ const Visualizer = () => {
                     color: 'var(--text-main)'
                   }}
                   labelFormatter={(date) => formatDateForPeriod(date, selectedPeriod)}
+                  formatter={(value: number | string, name: string) => {
+                    if (metric.id === 'sleepTime' && typeof value === 'number') {
+                      // Convert decimal hours back to time display
+                      if (value <= 3) { // 9PM-11PM
+                        return [`${21 + value}:00`, name];
+                      } else { // 12AM-3AM
+                        return [`${value - 3}:00`, name];
+                      }
+                    }
+                    return [value, name];
+                  }}
                 />
                 <Legend />
                 <Line 
