@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation, Outlet } from 'react-router-dom';
-import { Terminal, LayoutDashboard, Calendar, GitBranch, Square, Cpu, HardDrive, Wifi, Globe, Network, Kanban, Menu, X, Upload, Download, Loader2, CheckCircle2, BarChart3 } from 'lucide-react';
+import { Terminal, LayoutDashboard, GitBranch, Cpu, HardDrive, Wifi, Globe, Network, Menu, X, Upload, Download, Loader2, CheckCircle2, BarChart3 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import PerformanceSidebar from './PerformanceSidebar';
 import ContextSidebar from './ContextSidebar';
@@ -240,11 +240,9 @@ const TerminalLayout: React.FC = () => {
   // Navigation items
   const navItems = [
     { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
-    { path: '/metrics', icon: Square, label: 'Metrics' },
-    { path: '/visualizer', icon: BarChart3, label: 'Visualizer' },
-    { path: '/schedule', icon: Calendar, label: 'Schedule' },
-    { path: '/roadmap', icon: GitBranch, label: 'Roadmap' },
-    { path: '/kanban', icon: Kanban, label: 'Kanban' }
+    { path: '/kpis', icon: BarChart3, label: 'Weekly KPIs' },
+    { path: '/visualizer', icon: BarChart3, label: 'Analytics' },
+    { path: '/roadmap', icon: GitBranch, label: 'Roadmap' }
   ];
 
   // Format time with leading zeros

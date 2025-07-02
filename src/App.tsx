@@ -7,9 +7,7 @@ import TerminalLayout from "@/components/TerminalLayout";
 import Index from "./pages/Index";
 import Dashboard from "./pages/Dashboard";
 import Visualizer from "./pages/Visualizer";
-import Schedule from "./pages/Schedule";
 import Roadmap from "./pages/Roadmap";
-import Kanban from "./pages/Kanban";
 import NotFound from "./pages/NotFound";
 import { useState, useEffect } from "react";
 import PinUnlockOverlay from "@/components/PinUnlockOverlay";
@@ -62,12 +60,10 @@ const App = () => {
             <Routes>
               <Route path="/" element={<TerminalLayout />}>
                 <Route index element={<Dashboard />} />
-                <Route path="metrics" element={<Index />} />
+                <Route path="kpis" element={<Index />} />
                 <Route path="dashboard" element={<Dashboard />} />
                 <Route path="visualizer" element={<Visualizer />} />
-                <Route path="schedule" element={<Schedule />} />
                 <Route path="roadmap" element={<Roadmap />} />
-                <Route path="kanban" element={<Kanban />} />
               </Route>
               <Route path="*" element={<NotFound />} />
             </Routes>

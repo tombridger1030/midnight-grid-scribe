@@ -164,3 +164,265 @@ The application now features:
 - ✅ **Production-Ready Database**: Comprehensive schema with RLS policies and error handling
 
 **Application is now feature-complete for core functionality** with enhanced dashboard experience, real-time data updates, mobile optimization, and production-ready architecture. Focus shifts to polish, optimization, and advanced features. 
+
+# Noctisium Weekly KPI Refactor - Task List
+
+## Overview
+Transform Noctisium from a daily metrics tracker to a weekly KPI system focused on key performance indicators with specific targets.
+
+## 1. Data Model & Storage Layer
+
+### 1.1 Create Weekly KPI Data Model
+- [ ] **Create `src/lib/weeklyKpi.ts`**
+  - Define `WeeklyKPI` interface with targets:
+    - Strength sessions: 3-4 target
+    - Conditioning sessions: 3 target
+    - Mat hours: 4-6 target
+    - Cold plunges: 5 target
+    - Sleep average: 6 hrs target
+    - Deep-work blocks: 10 target
+    - Git commits: 25 target
+    - Twitter DMs: 20 target
+    - LinkedIn messages: 30 target
+    - Reading: 300 pages target
+  - Define `WeeklyKPIData` interface for storage
+  - Add functions: `loadWeeklyKPIs()`, `saveWeeklyKPIs()`, `getCurrentWeek()`, `getWeekKey()`
+
+### 1.2 Update Storage System
+- [ ] **Modify `src/lib/storage.ts`**
+  - Add weekly KPI storage functions
+  - Keep existing daily storage for backward compatibility
+  - Add Supabase table support for weekly KPIs
+
+### 1.3 Database Schema
+- [ ] **Create Supabase migration**
+  - Table: `weekly_kpis`
+  - Columns: `id`, `user_id`, `week_key`, `data`, `created_at`, `updated_at`
+  - Indexes on `user_id` and `week_key`
+
+## 2. Navigation & Layout Overhaul
+
+### 2.1 Remove Sidebar Navigation
+- [ ] **Update `src/components/Sidebar.tsx`**
+  - Remove all existing navigation items
+  - Keep only: Dashboard, Roadmap, Visualizer
+  - Remove references to: Metrics, Schedule, Kanban, etc.
+
+### 2.2 Update Routing
+- [ ] **Modify `src/App.tsx` or main routing file**
+  - Remove routes for: `/schedule`, `/kanban`, `/metrics`
+  - Keep routes for: `/`, `/roadmap`, `/visualizer`
+  - Update default route to weekly KPI dashboard
+
+### 2.3 Remove Unused Pages
+- [ ] **Delete `src/pages/Schedule.tsx`**
+- [ ] **Delete `src/pages/Kanban.tsx`**
+- [ ] **Move daily metrics to optional section**
+
+## 3. Weekly KPI Input System
+
+### 3.1 Create Weekly KPI Input Component
+- [ ] **Create `src/components/WeeklyKPIInput.tsx`**
+  - Weekly summary form with all KPI inputs
+  - Progress bars showing current vs. target
+  - Week selection (current week default)
+  - Real-time calculation of progress percentages
+
+### 3.2 Transform Index Page
+- [ ] **Rewrite `src/pages/Index.tsx`**
+  - Make weekly KPI input the primary interface
+  - Move daily metrics to optional/advanced section
+  - Add toggle to switch between weekly and daily views
+  - Default to weekly view
+
+### 3.3 Weekly KPI Manager
+- [ ] **Create `src/components/WeeklyKPIManager.tsx`**
+  - Edit KPI targets
+  - Customize KPI categories
+  - Bulk operations for historical weeks
+
+## 4. Dashboard Redesign
+
+### 4.1 Strip Down Dashboard
+- [ ] **Rewrite `src/pages/Dashboard.tsx`**
+  - Remove: Sprint status, financial metrics, kanban stats, detailed metrics
+  - Keep only:
+    - Current week KPI progress bars (targets vs. actuals)
+    - Week-streak line chart (last 6 weeks performance)
+    - High-level roadmap section for long-term goals
+
+### 4.2 Weekly Progress Components
+- [ ] **Create `src/components/WeeklyProgressBar.tsx`**
+  - Individual KPI progress bar with target indication
+  - Color coding: green (on target), yellow (close), red (behind)
+  - Percentage completion display
+
+- [ ] **Create `src/components/WeekStreakChart.tsx`**
+  - Mini line chart showing weekly performance over 6 weeks
+  - Overall completion percentage per week
+  - Trend indicators
+
+## 5. Visualizer Overhaul
+
+### 5.1 Rewrite Visualizer for Weekly Data
+- [ ] **Complete rewrite of `src/pages/Visualizer.tsx`**
+  - Remove all daily-granularity charts
+  - Create monthly grid view of weekly KPIs
+  - Add weekly KPI trend lines by month
+  - Show weekly aggregations and monthly summaries
+
+### 5.2 Weekly Chart Components
+- [ ] **Create `src/components/WeeklyKPIChart.tsx`**
+  - Monthly view with weeks as data points
+  - Multiple KPI lines on single chart
+  - Target line overlay for reference
+
+- [ ] **Create `src/components/KPIHeatmap.tsx`**
+  - Monthly grid showing weekly performance
+  - Color-coded cells based on target achievement
+  - Drill-down capability to specific weeks
+
+## 6. Component Updates & Cleanup
+
+### 6.1 Update Existing Components
+- [ ] **Modify `src/components/MetricGrid.tsx`**
+  - Make this optional/secondary
+  - Move to "Advanced" or "Daily Detail" section
+  - Keep for users who want daily granularity
+
+- [ ] **Modify `src/components/MetricManager.tsx`**
+  - Repurpose for KPI target management
+  - Allow customization of weekly targets
+
+### 6.2 Remove Sprint-Related Components
+- [ ] **Clean up sprint references**
+  - Remove sprint logic from all components
+  - Delete sprint-related utilities
+  - Clean up CSS classes related to sprints
+
+### 6.3 Update TypewriterText Usage
+- [ ] **Update all page headers**
+  - Change "Metrics Input" to "Weekly KPIs"
+  - Change "Metrics Visualizer" to "KPI Analytics"
+  - Remove "Sprint Schedule" references
+
+## 7. Styling & CSS Updates
+
+### 7.1 Update CSS Classes
+- [ ] **Modify `src/styles/globals.css`**
+  - Remove sprint-related styles
+  - Add weekly KPI specific styles
+  - Update color schemes for KPI progress
+
+### 7.2 Component-Specific Styles
+- [ ] **Create weekly KPI component styles**
+  - Progress bar animations
+  - KPI card layouts
+  - Responsive grid for weekly data
+
+## 8. Data Migration & Compatibility
+
+### 8.1 Migration Script
+- [ ] **Create `src/lib/migrations/dailyToWeekly.ts`**
+  - Convert existing daily data to weekly aggregations
+  - Handle partial weeks
+  - Preserve data integrity
+
+### 8.2 Backward Compatibility
+- [ ] **Maintain daily data access**
+  - Keep daily input available as advanced feature
+  - Allow historical daily data viewing
+  - Provide export functionality for daily data
+
+## 9. Testing & Validation
+
+### 9.1 Component Testing
+- [ ] **Test weekly KPI input forms**
+- [ ] **Test progress calculations**
+- [ ] **Test data persistence**
+- [ ] **Test chart rendering**
+
+### 9.2 Data Validation
+- [ ] **Validate weekly aggregations**
+- [ ] **Test migration script**
+- [ ] **Verify Supabase integration**
+
+## 10. Documentation & Cleanup
+
+### 10.1 Remove Unused Files
+- [ ] **Delete unused components**
+  - Sprint-related components
+  - Unused daily metric components
+  - Obsolete chart utilities
+
+### 10.2 Update Documentation
+- [ ] **Update README.md**
+  - Reflect new weekly KPI focus
+  - Update feature descriptions
+  - Add setup instructions for weekly data
+
+### 10.3 Code Cleanup
+- [ ] **Remove dead code**
+  - Unused imports
+  - Commented-out sprint logic
+  - Obsolete utility functions
+- [ ] **Update type definitions**
+  - Remove unused interfaces
+  - Add weekly KPI types
+  - Clean up storage types
+
+## 11. New File Structure
+
+### Files to Create:
+```
+src/
+├── lib/
+│   ├── weeklyKpi.ts (new)
+│   └── migrations/
+│       └── dailyToWeekly.ts (new)
+├── components/
+│   ├── WeeklyKPIInput.tsx (new)
+│   ├── WeeklyKPIManager.tsx (new)
+│   ├── WeeklyProgressBar.tsx (new)
+│   ├── WeekStreakChart.tsx (new)
+│   ├── WeeklyKPIChart.tsx (new)
+│   └── KPIHeatmap.tsx (new)
+└── pages/
+    ├── Index.tsx (rewrite)
+    ├── Dashboard.tsx (strip down)
+    └── Visualizer.tsx (rewrite)
+```
+
+### Files to Delete:
+```
+src/pages/Schedule.tsx
+src/pages/Kanban.tsx
+```
+
+### Files to Modify:
+```
+src/components/Sidebar.tsx (major changes)
+src/components/MetricGrid.tsx (make optional)
+src/components/MetricManager.tsx (repurpose)
+src/lib/storage.ts (add weekly functions)
+src/styles/globals.css (remove sprint styles)
+```
+
+## Implementation Priority
+
+1. **Phase 1: Data Model** (Tasks 1.1-1.3)
+2. **Phase 2: Core UI** (Tasks 3.1-3.3, 4.1-4.2)
+3. **Phase 3: Navigation** (Tasks 2.1-2.3)
+4. **Phase 4: Visualizer** (Tasks 5.1-5.2)
+5. **Phase 5: Cleanup** (Tasks 6.1-10.3)
+
+## Success Criteria
+
+- [ ] Users can input weekly KPIs with targets
+- [ ] Dashboard shows current week progress clearly
+- [ ] Visualizer displays monthly/weekly trends
+- [ ] No references to daily metrics in primary UI
+- [ ] All sprint-related code removed
+- [ ] Clean, focused navigation with 3 main sections
+- [ ] Responsive design works on mobile
+- [ ] Data migration preserves historical information 

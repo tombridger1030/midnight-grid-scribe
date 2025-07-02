@@ -1,260 +1,179 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { loadData, predefinedMetrics } from '@/lib/storage';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, 
   ResponsiveContainer, Legend, AreaChart, Area 
 } from 'recharts';
 import TypewriterText from '@/components/TypewriterText';
-import { 
-  HABIT_COLORS, HABIT_METRICS, computeRollingAverage, 
-  prepareCumulativeHabitData 
-} from '@/lib/chartUtils';
-import { formatLocalDate, getCurrentLocalDate, parseLocalDate } from '@/lib/dateUtils';
+import {
+  WEEKLY_KPI_DEFINITIONS,
+  loadWeeklyKPIs,
+  loadWeeklyKPIsWithSync,
+  getWeekKey,
+  formatWeekKey,
+  calculateKPIProgress,
+  WeeklyKPIData
+} from '@/lib/weeklyKpi';
 
 // Period types for the selector
-type PeriodType = 'week' | 'month' | 'quarter' | 'year';
+type PeriodType = 'month' | 'quarter' | 'year';
 
-// Define chart data shape
-type ChartData = { date: string; value: number; rollingAvg: number; };
+// Define chart data shape for weekly KPIs
+type WeeklyChartData = { 
+  week: string; 
+  weekFormatted: string;
+  [kpiId: string]: string | number; 
+};
 
 const Visualizer = () => {
-  const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>('week');
-  const [selectedMetricId, setSelectedMetricId] = useState<string | null>(null);
-  const [currentMetric, setCurrentMetric] = useState<typeof metrics[0] | null>(null);
-  const [showAllHabits, setShowAllHabits] = useState<boolean>(false);
-  
-  // Memoize data loading to prevent infinite re-renders
-  const data = useMemo(() => loadData(), []);
-  const metrics = useMemo(() => 
-    data.metrics.filter(m => predefinedMetrics.some(pm => pm.id === m.id)), 
-    [data.metrics]
-  );
+  const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>('month');
+  const [selectedKPIId, setSelectedKPIId] = useState<string | null>(null);
+  const [weeklyData, setWeeklyData] = useState<WeeklyKPIData>({ records: [] });
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Update currentMetric when selectedMetricId changes
+  // Load weekly KPI data on mount
   useEffect(() => {
-    if (selectedMetricId) {
-      const found = metrics.find(m => m.id === selectedMetricId) || null;
-      setCurrentMetric(found);
-      setShowAllHabits(false); // Hide all habits view when selecting a specific metric
-    } else {
-      setCurrentMetric(null);
-    }
-  }, [selectedMetricId]); // Removed metrics from dependency array
-
-  // Get date range based on selected period
-  const getDateRange = (period: PeriodType): [Date, Date] => {
-    const endDate = new Date();
-    const startDate = new Date();
-    
-    switch (period) {
-      case 'week':
-        startDate.setDate(endDate.getDate() - 7);
-        break;
-      case 'month':
-        startDate.setMonth(endDate.getMonth() - 1);
-        break;
-      case 'quarter':
-        startDate.setMonth(endDate.getMonth() - 3);
-        break;
-      case 'year':
-        startDate.setFullYear(endDate.getFullYear() - 1);
-        break;
-    }
-    
-    return [startDate, endDate];
-  };
-
-  // Improved date formatting based on period
-  const formatDateForPeriod = (dateStr: string, period: PeriodType): string => {
-    // Use parseLocalDate to avoid timezone issues
-    const date = parseLocalDate(dateStr);
-    
-    switch (period) {
-      case 'week':
-        return date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
-      case 'month':
-        return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-      case 'quarter':
-        return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-      case 'year':
-        return date.toLocaleDateString(undefined, { month: 'short', year: '2-digit' });
-      default:
-        return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-    }
-  };
-
-  // Format date range for display
-  const formatDateRange = (period: PeriodType): string => {
-    const [startDate, endDate] = getDateRange(period);
-    const options: Intl.DateTimeFormatOptions = period === 'year' 
-      ? { year: 'numeric', month: 'short' }
-      : { month: 'short', day: 'numeric', year: '2-digit' };
-    
-    return `${startDate.toLocaleDateString(undefined, options)} – ${endDate.toLocaleDateString(undefined, options)}`;
-  };
-
-  // Filter dates based on selected period
-  const getFilteredDates = (period: PeriodType): string[] => {
-    const [startDate, _] = getDateRange(period);
-    const startDateStr = formatLocalDate(startDate);
-    
-    return data.dates.filter(date => date >= startDateStr).sort((a, b) => 
-      a.localeCompare(b) // Use string comparison for YYYY-MM-DD format
-    );
-  };
-
-  // Prepare chart data for a specific metric with rolling average
-  const getChartData = (metricId: string): ChartData[] => {
-    const filteredDates = getFilteredDates(selectedPeriod);
-    const metric = metrics.find(m => m.id === metricId);
-    if (!metric) return [];
-
-    // Build numeric values array
-    const valuesByDate = filteredDates.map(date => {
-      const raw = metric.values[date];
-      
-      // Special handling for sleep time
-      if (metric.type === 'time' && metric.id === 'sleepTime') {
-        if (!raw || raw === '') return 0;
-        const [hours, minutes] = raw.toString().split(':').map(Number);
-        if (isNaN(hours) || isNaN(minutes)) return 0;
-        
-        // Convert time to a decimal value between 0-24
-        // For times between 9PM (21:00) and 3AM (03:00), we want:
-        // 9PM = 0, 10PM = 1, 11PM = 2, 12AM = 3, 1AM = 4, 2AM = 5, 3AM = 6
-        let decimalTime = hours + (minutes / 60);
-        if (hours < 4) { // Early morning hours (12AM-3AM)
-          decimalTime += 3; // Shift to come after 9PM
-        } else if (hours >= 21) { // Late night hours (9PM-11PM)
-          decimalTime -= 21; // Make 9PM = 0
-        } else {
-          decimalTime = 0; // Invalid sleep time
-        }
-        return decimalTime;
+    const loadData = async () => {
+      try {
+        setIsLoading(true);
+        const data = await loadWeeklyKPIsWithSync();
+        setWeeklyData(data);
+      } catch (error) {
+        console.error('Failed to load weekly KPI data:', error);
+        setWeeklyData(loadWeeklyKPIs());
+      } finally {
+        setIsLoading(false);
       }
-      
-      // Normal numeric handling for other metrics
-      const num = raw !== undefined && raw !== '' ? parseFloat(raw as string) : 0;
-      return isNaN(num) ? 0 : num;
-    });
+    };
 
-    // Compute rolling average with window size 4
-    const rollingAvgs = computeRollingAverage(valuesByDate, 4);
+    loadData();
+  }, []);
 
-    // Return chart data
-    return filteredDates.map((date, idx) => ({
-      date,
-      value: valuesByDate[idx],
-      rollingAvg: rollingAvgs[idx]
-    }));
-  };
-
-  // Calculate better Y-axis domain for improved graph fitting
-  const getYAxisDomain = (data: ChartData[], dataKeys: string[] = ['value', 'rollingAvg']): [number, number] => {
-    if (!data || data.length === 0) return [0, 100];
+  // Get week range based on selected period
+  const getWeekRange = (period: PeriodType): string[] => {
+    const currentDate = new Date();
+    const weeks: string[] = [];
     
-    const allValues: number[] = [];
-    data.forEach(item => {
-      dataKeys.forEach(key => {
-        const value = item[key as keyof ChartData];
-        if (typeof value === 'number' && !isNaN(value)) {
-          allValues.push(value);
-        }
-      });
-    });
-    
-    if (allValues.length === 0) return [0, 100];
-    
-    const min = Math.min(...allValues);
-    const max = Math.max(...allValues);
-    
-    // Special handling for sleep time Y-axis
-    if (selectedMetricId === 'sleepTime') {
-      return [0, 6]; // Fixed range: 9PM (0) to 3AM (6)
+    let weeksToShow = 0;
+    switch (period) {
+      case 'month':
+        weeksToShow = 4; // Last 4 weeks
+        break;
+      case 'quarter':
+        weeksToShow = 13; // Last 13 weeks (quarter)
+        break;
+      case 'year':
+        weeksToShow = 52; // Last 52 weeks (year)
+        break;
     }
     
-    // Add 10% padding to top and bottom for better visualization
-    const range = max - min;
-    const padding = Math.max(range * 0.1, 1); // At least 1 unit padding
+    for (let i = weeksToShow - 1; i >= 0; i--) {
+      const date = new Date(currentDate);
+      date.setDate(currentDate.getDate() - (i * 7));
+      weeks.push(getWeekKey(date));
+    }
     
-    return [Math.max(0, min - padding), max + padding];
+    return weeks;
   };
 
-  // Get cumulative habit data
-  const getCumulativeHabitData = () => {
-    const filteredDates = getFilteredDates(selectedPeriod);
-    return prepareCumulativeHabitData(data, filteredDates);
+  // Format period range for display
+  const formatPeriodRange = (period: PeriodType): string => {
+    const weeks = getWeekRange(period);
+    if (weeks.length === 0) return '';
+    
+    const firstWeek = weeks[0];
+    const lastWeek = weeks[weeks.length - 1];
+    
+    return `${formatWeekKey(firstWeek)} → ${formatWeekKey(lastWeek)}`;
   };
 
-  // Calculate summary statistics for a metric
-  const getMetricSummary = (metricId: string) => {
-    const metric = metrics.find(m => m.id === metricId);
-    if (!metric) return null;
+  // Prepare chart data for all KPIs over the selected period
+  const getKPIProgressionData = (): WeeklyChartData[] => {
+    const weeks = getWeekRange(selectedPeriod);
     
-    const filteredDates = getFilteredDates(selectedPeriod);
-    const values = filteredDates
-      .map(date => metric.values[date] ? parseFloat(metric.values[date] as string) : 0)
-      .filter(v => !isNaN(v));
-    
-    if (values.length === 0) return null;
-    
-    // Calculate basic statistics
-    const currentValue = values[values.length - 1];
-    const previousValue = values.length > 1 ? values[0] : currentValue;
-    const average = values.reduce((sum, val) => sum + val, 0) / values.length;
-    const percentChange = previousValue !== 0 
-      ? ((currentValue - previousValue) / previousValue * 100).toFixed(1)
-      : 'N/A';
-    
-    return {
-      current: currentValue.toFixed(1),
-      previous: previousValue.toFixed(1),
-      average: average.toFixed(1),
-      percentChange
-    };
+    return weeks.map(weekKey => {
+      const record = weeklyData.records.find(r => r.weekKey === weekKey);
+      const dataPoint: WeeklyChartData = {
+        week: weekKey,
+        weekFormatted: formatWeekKey(weekKey)
+      };
+      
+      // Add each KPI's value for this week
+      WEEKLY_KPI_DEFINITIONS.forEach(kpi => {
+        const value = record?.values[kpi.id] || 0;
+        dataPoint[kpi.id] = value;
+      });
+      
+      return dataPoint;
+    });
   };
 
-  // Render the habit streak progress chart
-  const renderHabitStreakChart = () => {
-    const cumulativeData = getCumulativeHabitData();
+  // Prepare chart data for a specific KPI showing progress percentage
+  const getKPIProgressChart = (kpiId: string): WeeklyChartData[] => {
+    const weeks = getWeekRange(selectedPeriod);
+    const kpi = WEEKLY_KPI_DEFINITIONS.find(k => k.id === kpiId);
+    if (!kpi) return [];
+    
+    return weeks.map(weekKey => {
+      const record = weeklyData.records.find(r => r.weekKey === weekKey);
+      const value = record?.values[kpiId] || 0;
+      const progress = calculateKPIProgress(kpiId, value);
+      
+      return {
+        week: weekKey,
+        weekFormatted: formatWeekKey(weekKey),
+        value,
+        progress,
+        target: kpi.target
+      };
+    });
+  };
+
+  // Render all KPIs progression chart
+  const renderAllKPIsChart = () => {
+    const chartData = getKPIProgressionData();
     
     return (
       <div>
-        <h2 className="text-lg mb-2">Habit Streak Progress</h2>
-        <div className="h-80">
+        <h2 className="text-lg mb-2">All Weekly KPIs Progression</h2>
+        <div className="text-sm text-terminal-accent/70 mb-4">{formatPeriodRange(selectedPeriod)}</div>
+        <div className="h-96">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart
-              data={cumulativeData}
+              data={chartData}
               margin={{ top: 5, right: 20, left: 10, bottom: 5 }}
             >
               <CartesianGrid strokeDasharray="3 3" stroke="var(--line-faint)" />
               <XAxis 
-                dataKey="date" 
+                dataKey="week" 
                 stroke="var(--text-muted)"
-                tickFormatter={(date) => formatDateForPeriod(date, selectedPeriod)}
-                interval="preserveStartEnd"
+                tickFormatter={(week) => {
+                  const weekNum = week.split('-W')[1];
+                  return `W${weekNum}`;
+                }}
+                interval={selectedPeriod === 'year' ? 3 : selectedPeriod === 'quarter' ? 1 : 0}
               />
               <YAxis stroke="var(--text-muted)" />
               <Tooltip 
                 contentStyle={{ 
                   backgroundColor: 'var(--bg-panel)', 
                   border: '1px solid var(--line-faint)',
-                  color: 'var(--text-main)'
+                  color: 'var(--text-main)',
+                  fontSize: '12px'
                 }}
-                labelFormatter={(date) => formatDateForPeriod(date, selectedPeriod)}
+                labelFormatter={(week) => formatWeekKey(week)}
               />
               <Legend />
               
-              {/* Habit metrics as lines */}
-              {HABIT_METRICS.map(metricId => (
+              {/* All KPIs as separate lines */}
+              {WEEKLY_KPI_DEFINITIONS.map(kpi => (
                 <Line
-                  key={metricId}
+                  key={kpi.id}
                   type="monotone"
-                  dataKey={metricId}
-                  stroke={HABIT_COLORS[metricId as keyof typeof HABIT_COLORS]}
+                  dataKey={kpi.id}
+                  stroke={kpi.color}
                   strokeWidth={2}
-                  dot={{ r: 2 }}
-                  name={metrics.find(m => m.id === metricId)?.name || metricId}
+                  dot={{ r: 2, fill: kpi.color }}
+                  name={kpi.name}
                 />
               ))}
             </LineChart>
@@ -264,203 +183,145 @@ const Visualizer = () => {
     );
   };
 
-  // Render the selected metric chart with rolling average
-  const renderMetricChart = (metricId: string) => {
-    const metric = metrics.find(m => m.id === metricId);
-    
-    if (!metric) {
-      return <div className="text-center p-4">No data available for this metric</div>;
+  // Render individual KPI chart with target line
+  const renderKPIChart = (kpiId: string) => {
+    const kpi = WEEKLY_KPI_DEFINITIONS.find(k => k.id === kpiId);
+    if (!kpi) {
+      return <div className="text-center p-4">KPI not found</div>;
     }
     
-    // Check if this is a habit metric (should show cumulative) or a regular metric (show with rolling avg)
-    const isHabitMetric = HABIT_METRICS.includes(metricId);
+    const chartData = getKPIProgressChart(kpiId);
     
-    if (isHabitMetric) {
-      // For habit metrics, show cumulative progress like in the All Habits view
-      const filteredDates = getFilteredDates(selectedPeriod);
-      
-      // Create cumulative data for just this one habit
-      let cumulativeCount = 0;
-      const cumulativeData = filteredDates.map(date => {
-        const rawValue = metric.values[date];
-        let value = 0;
-        
-        if (rawValue !== undefined && rawValue !== '') {
-          if (metric.type === 'boolean') {
-            value = rawValue === true ? 1 : 0;
-          } else {
-            value = parseFloat(rawValue.toString());
-            if (isNaN(value)) value = 0;
-          }
-        }
-        
-        // Add to cumulative count
-        cumulativeCount += value;
-        
-        return {
-          date,
-          [metricId]: cumulativeCount
-        };
-      });
-      
-      return (
-        <div>
-          <h2 className="text-lg mb-1">{metric.name} (Cumulative)</h2>
-          <div className="text-sm text-terminal-accent/70 mb-2">{formatDateRange(selectedPeriod)}</div>
-          <div className="h-80">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart
-                data={cumulativeData}
-                margin={{ top: 5, right: 20, left: 10, bottom: 5 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--line-faint)" />
-                <XAxis 
-                  dataKey="date" 
-                  stroke="var(--text-muted)"
-                  tickFormatter={(date) => formatDateForPeriod(date, selectedPeriod)}
-                  interval="preserveStartEnd"
-                />
-                <YAxis 
-                  stroke="var(--text-muted)" 
-                />
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: 'var(--bg-panel)', 
-                    border: '1px solid var(--line-faint)',
-                    color: 'var(--text-main)'
-                  }}
-                  labelFormatter={(date) => formatDateForPeriod(date, selectedPeriod)}
-                />
-                <Legend />
-                <Line 
-                  type="monotone" 
-                  dataKey={metricId} 
-                  stroke={HABIT_COLORS[metricId as keyof typeof HABIT_COLORS] || "var(--accent-cyan)"} 
-                  strokeWidth={2}
-                  dot={{ r: 2 }}
-                  name={`${metric.name} (Cumulative)`} 
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      );
-    } else {
-      // For non-habit metrics, show daily values with rolling average
-      const chartData = getChartData(metricId);
-      
-      if (chartData.length === 0) {
-        return <div className="text-center p-4">No data available for this metric</div>;
-      }
-      
-      return (
-        <div>
-          <h2 className="text-lg mb-1">{metric.name}</h2>
-          <div className="text-sm text-terminal-accent/70 mb-2">{formatDateRange(selectedPeriod)}</div>
-          <div className="h-80">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart
-                data={chartData}
-                margin={{ top: 5, right: 20, left: 10, bottom: 5 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--line-faint)" />
-                <XAxis 
-                  dataKey="date" 
-                  stroke="var(--text-muted)"
-                  tickFormatter={(date) => formatDateForPeriod(date, selectedPeriod)}
-                  interval="preserveStartEnd"
-                />
-                <YAxis 
-                  stroke="var(--text-muted)"
-                  domain={getYAxisDomain(chartData)}
-                  tickFormatter={(value) => {
-                    if (metric.id === 'sleepTime') {
-                      // Convert decimal hours back to time display
-                      if (value <= 3) { // 9PM-11PM
-                        return `${21 + value}:00`;
-                      } else { // 12AM-3AM
-                        return `${value - 3}:00`;
-                      }
-                    }
-                    return value.toString();
-                  }}
-                />
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: 'var(--bg-panel)', 
-                    border: '1px solid var(--line-faint)',
-                    color: 'var(--text-main)'
-                  }}
-                  labelFormatter={(date) => formatDateForPeriod(date, selectedPeriod)}
-                  formatter={(value: number | string, name: string) => {
-                    if (metric.id === 'sleepTime' && typeof value === 'number') {
-                      // Convert decimal hours back to time display
-                      if (value <= 3) { // 9PM-11PM
-                        return [`${21 + value}:00`, name];
-                      } else { // 12AM-3AM
-                        return [`${value - 3}:00`, name];
-                      }
-                    }
-                    return [value, name];
-                  }}
-                />
-                <Legend />
-                <Line 
-                  type="monotone" 
-                  dataKey="value" 
-                  stroke="var(--accent-cyan)" 
-                  strokeWidth={2}
-                  dot={{ r: 3, fill: 'var(--accent-cyan)', stroke: 'none' }} 
-                  name="Daily Value" 
-                />
-                <Line 
-                  type="monotone" 
-                  dataKey="rollingAvg" 
-                  stroke="var(--accent-sprint)" 
-                  strokeWidth={1.5}
-                  strokeDasharray="5 5" 
-                  dot={{ r: 0 }} 
-                  name="4-Day Avg" 
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      );
+    if (chartData.length === 0) {
+      return <div className="text-center p-4">No data available for this KPI</div>;
     }
+    
+    return (
+      <div>
+        <h2 className="text-lg mb-1" style={{ color: kpi.color }}>{kpi.name}</h2>
+        <div className="text-sm text-terminal-accent/70 mb-2">
+          Target: {kpi.target} {kpi.unit} • {formatPeriodRange(selectedPeriod)}
+        </div>
+        <div className="h-80">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart
+              data={chartData}
+              margin={{ top: 5, right: 20, left: 10, bottom: 5 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--line-faint)" />
+              <XAxis 
+                dataKey="week" 
+                stroke="var(--text-muted)"
+                tickFormatter={(week) => {
+                  const weekNum = week.split('-W')[1];
+                  return `W${weekNum}`;
+                }}
+                interval={selectedPeriod === 'year' ? 3 : selectedPeriod === 'quarter' ? 1 : 0}
+              />
+                             <YAxis 
+                 stroke="var(--text-muted)"
+                 domain={[0, kpi.target * 1.2]}
+               />
+              <Tooltip 
+                contentStyle={{ 
+                  backgroundColor: 'var(--bg-panel)', 
+                  border: '1px solid var(--line-faint)',
+                  color: 'var(--text-main)'
+                }}
+                labelFormatter={(week) => formatWeekKey(week)}
+                formatter={(value: number, name: string) => [
+                  `${value} ${kpi.unit}`,
+                  name === 'value' ? 'Actual' : name === 'target' ? 'Target' : name
+                ]}
+              />
+              <Legend />
+              
+              {/* Target line */}
+              <Line 
+                type="monotone" 
+                dataKey="target" 
+                stroke={kpi.color}
+                strokeWidth={1}
+                strokeDasharray="5 5"
+                dot={{ r: 0 }}
+                name="Target"
+              />
+              
+              {/* Actual values */}
+              <Line 
+                type="monotone" 
+                dataKey="value" 
+                stroke={kpi.color}
+                strokeWidth={3}
+                dot={{ r: 4, fill: kpi.color, strokeWidth: 2, stroke: '#fff' }}
+                name="Actual"
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+    );
+  };
+
+  // Calculate KPI summary for selected period
+  const getKPISummary = (kpiId: string) => {
+    const weeks = getWeekRange(selectedPeriod);
+    const kpi = WEEKLY_KPI_DEFINITIONS.find(k => k.id === kpiId);
+    if (!kpi) return null;
+    
+    const values = weeks.map(week => {
+      const record = weeklyData.records.find(r => r.weekKey === week);
+      return record?.values[kpiId] || 0;
+    });
+    
+    if (values.length === 0) return null;
+    
+    const currentValue = values[values.length - 1];
+    const average = values.reduce((sum, val) => sum + val, 0) / values.length;
+    const bestWeek = Math.max(...values);
+    const completionRate = values.filter(v => v >= kpi.target).length / values.length * 100;
+    
+    return {
+      current: currentValue,
+      average: average.toFixed(1),
+      best: bestWeek,
+      completionRate: completionRate.toFixed(0)
+    };
   };
 
   // Render the main visualization
   const renderVisualization = () => {
-    if (showAllHabits) {
-      return renderHabitStreakChart();
-    } else if (selectedMetricId) {
-      return renderMetricChart(selectedMetricId);
+    if (selectedKPIId) {
+      return renderKPIChart(selectedKPIId);
     } else {
-      return (
-        <div className="flex flex-col items-center justify-center h-64 text-terminal-accent/70">
-          <p>Select a metric or view all habits</p>
-        </div>
-      );
+      return renderAllKPIsChart();
     }
   };
 
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-terminal-accent">Loading weekly KPI data...</div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-full">
-      {/* Compact header section */}
+      {/* Header section */}
       <div className="mb-4">
-        <TypewriterText text="Metrics Visualizer" className="text-xl mb-2" />
-        <p className="text-terminal-accent/70 text-sm mb-3">Analyze sprint performance and trends.</p>
+        <TypewriterText text="Weekly KPI Visualizer" className="text-xl mb-2" />
+        <p className="text-terminal-accent/70 text-sm mb-3">Analyze weekly KPI progression over time.</p>
         
-        {/* Compact controls in a single row */}
+        {/* Controls */}
         <div className="flex flex-wrap items-center gap-4 mb-4 text-sm">
           {/* Period selector */}
           <div className="flex items-center gap-2">
             <span className="text-terminal-accent/70">Period:</span>
-            {(['week', 'month', 'quarter', 'year'] as PeriodType[]).map((period) => (
+            {(['month', 'quarter', 'year'] as PeriodType[]).map((period) => (
               <button
                 key={period}
-                className={`px-2 py-1 text-xs border border-terminal-accent/30 transition-colors ${
+                className={`px-3 py-1 text-xs border border-terminal-accent/30 transition-colors ${
                   selectedPeriod === period 
                     ? 'bg-terminal-accent text-terminal-bg' 
                     : 'hover:border-terminal-accent/50'
@@ -472,101 +333,77 @@ const Visualizer = () => {
             ))}
           </div>
           
-          {/* View selector */}
-          <div className="flex items-center gap-2">
-            <span className="text-terminal-accent/70">View:</span>
+          {/* Clear selection */}
+          {selectedKPIId && (
             <button
-              className={`px-2 py-1 text-xs border border-terminal-accent/30 transition-colors ${
-                showAllHabits 
-                  ? 'bg-terminal-accent text-terminal-bg' 
-                  : 'hover:border-terminal-accent/50'
-              }`}
-              onClick={() => {
-                setShowAllHabits(true);
-                setSelectedMetricId(null);
-              }}
+              className="px-2 py-1 text-xs border border-terminal-accent/30 hover:border-terminal-accent/50 transition-colors"
+              onClick={() => setSelectedKPIId(null)}
             >
-              All Habits
+              View All KPIs
             </button>
-          </div>
+          )}
           
-          {/* Date range display */}
+          {/* Period range display */}
           <div className="text-terminal-accent/50 text-xs ml-auto">
-            {formatDateRange(selectedPeriod)}
+            {formatPeriodRange(selectedPeriod)}
           </div>
         </div>
         
-        {/* Compact metric selector - smaller buttons in tighter grid */}
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-1 mb-4">
-          {metrics.map(metric => (
+        {/* KPI selector */}
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 mb-4">
+          {WEEKLY_KPI_DEFINITIONS.map(kpi => (
             <button 
-              key={metric.id}
-              className={`px-2 py-1 text-xs border border-terminal-accent/30 text-left truncate transition-colors ${
-                selectedMetricId === metric.id 
-                  ? 'bg-terminal-accent text-terminal-bg' 
-                  : 'hover:border-terminal-accent/50'
+              key={kpi.id}
+              className={`px-3 py-2 text-xs border text-left transition-colors ${
+                selectedKPIId === kpi.id 
+                  ? 'text-white' 
+                  : 'border-terminal-accent/30 hover:border-terminal-accent/50'
               }`}
-              onClick={() => {
-                setSelectedMetricId(metric.id);
-                setShowAllHabits(false);
-              }}
-              title={metric.name} // Show full name on hover
+              style={selectedKPIId === kpi.id 
+                ? { backgroundColor: kpi.color, borderColor: kpi.color }
+                : { borderColor: kpi.color + '40', color: kpi.color }
+              }
+              onClick={() => setSelectedKPIId(selectedKPIId === kpi.id ? null : kpi.id)}
+              title={`${kpi.name} - Target: ${kpi.target} ${kpi.unit}`}
             >
-              {metric.name}
+              <div className="font-medium">{kpi.name}</div>
+              <div className="text-xs opacity-70">{kpi.target} {kpi.unit}</div>
             </button>
           ))}
         </div>
       </div>
       
-      {/* Main visualization area - now takes up more space */}
+      {/* Main visualization area */}
       <div className="flex-1 border border-terminal-accent/30 p-4 bg-terminal-bg/30 overflow-y-auto">
-        <div className="mb-3">
-          <h1 className="text-lg mb-1">
-            {showAllHabits ? 'Habit Progress' : selectedMetricId ? metrics.find(m => m.id === selectedMetricId)?.name : 'Select a Metric'}
-          </h1>
-          <div className="text-terminal-accent/70 text-xs">
-            {formatDateRange(selectedPeriod)}
-          </div>
-        </div>
-        
-        {/* Chart area - larger and more prominent */}
+        {/* Chart area */}
         <div className="mb-4">
           {renderVisualization()}
         </div>
         
-        {/* Summary table for selected metric - more compact */}
-        {selectedMetricId && !showAllHabits && getMetricSummary(selectedMetricId) && (
+        {/* Summary table for selected KPI */}
+        {selectedKPIId && getKPISummary(selectedKPIId) && (
           <div className="mb-4">
             <div className="text-sm mb-2 text-terminal-accent">Summary Statistics:</div>
             <table className="w-full border-collapse text-xs">
               <thead>
                 <tr>
-                  <th className="terminal-cell">Period</th>
-                  <th className="terminal-cell">Value</th>
-                  <th className="terminal-cell">Prev vs Curr</th>
-                  <th className="terminal-cell">Δ (pct)</th>
+                  <th className="terminal-cell">Current</th>
+                  <th className="terminal-cell">Average</th>
+                  <th className="terminal-cell">Best Week</th>
+                  <th className="terminal-cell">Success Rate</th>
                 </tr>
               </thead>
               <tbody>
                 <tr>
-                  <td className="terminal-cell">{selectedPeriod}</td>
-                  <td className="terminal-cell">{getMetricSummary(selectedMetricId)?.current}</td>
+                  <td className="terminal-cell">{getKPISummary(selectedKPIId)?.current}</td>
+                  <td className="terminal-cell">{getKPISummary(selectedKPIId)?.average}</td>
+                  <td className="terminal-cell">{getKPISummary(selectedKPIId)?.best}</td>
                   <td className="terminal-cell">
-                    {selectedPeriod} / {selectedPeriod === 'week' ? 'W-1' : 
-                      selectedPeriod === 'month' ? 'M-1' : 
-                      selectedPeriod === 'quarter' ? 'Q-1' : 'Y-1'}
-                  </td>
-                  <td className="terminal-cell">
-                    <span 
-                      className={
-                        getMetricSummary(selectedMetricId)?.percentChange === 'N/A' ? '' :
-                        parseFloat(getMetricSummary(selectedMetricId)?.percentChange || '0') > 0 ? 'text-green-400' : 
-                        parseFloat(getMetricSummary(selectedMetricId)?.percentChange || '0') < 0 ? 'text-red-400' : ''
-                      }
-                    >
-                      {getMetricSummary(selectedMetricId)?.percentChange === 'N/A' 
-                        ? '–' 
-                        : `${getMetricSummary(selectedMetricId)?.percentChange}%`}
+                    <span className={
+                      parseFloat(getKPISummary(selectedKPIId)?.completionRate || '0') >= 80 ? 'text-green-400' : 
+                      parseFloat(getKPISummary(selectedKPIId)?.completionRate || '0') >= 50 ? 'text-yellow-400' : 'text-red-400'
+                    }>
+                      {getKPISummary(selectedKPIId)?.completionRate}%
                     </span>
                   </td>
                 </tr>
