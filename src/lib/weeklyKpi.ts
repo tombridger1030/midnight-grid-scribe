@@ -24,14 +24,6 @@ export const WEEKLY_KPI_DEFINITIONS: WeeklyKPIDefinition[] = [
     color: '#FF6B00'  // Orange for fitness
   },
   {
-    id: 'conditioningSessions', 
-    name: 'Conditioning Sessions',
-    target: 3,
-    unit: 'sessions',
-    category: 'fitness',
-    color: '#FF6B00'  // Orange for fitness
-  },
-  {
     id: 'matHours',
     name: 'Mat Hours',
     target: 6,

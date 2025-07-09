@@ -1,428 +1,489 @@
-# Noctisium - Bug Fixes and Feature Improvements
-
-## ✅ Completed Tasks
-
-### Phase 1 (High Priority Issues) - ✅ COMPLETED
-1. ✅ **Bottom Right Corner Layout Issue** - Fixed overflow and layout positioning
-2. ✅ **Remove Daily News Feature** - Removed completely from ContextSidebar
-3. ✅ **Move Right Sidebar to Left** - Reorganized layout successfully
-4. ✅ **Remove Toggle Roadmap Feature** - Cleaned up MidnightTracker
-5. ✅ **Fix Data Loading on Initial Page Load** - Added proper async loading with PIN unlock
-6. ✅ **Improve iOS/Mobile UI Experience** - Enhanced with viewport fixes and touch targets
-7. ✅ **Add/Remove Metrics Functionality** - Implemented MetricManager with full CRUD
-8. ✅ **Additional Bug Fixes** - Page refresh loops, sidebar layout, metric management UX, financial snapshot editing
-
-### Phase 2 (Short-term) - ✅ COMPLETED
-6. ✅ **Async Data Loading Race Conditions** - Implemented centralized React Query-based data management with useTracker hook
-8. ✅ **Mobile-First Responsive Design** - Complete mobile optimization with responsive navigation, touch targets, iOS fixes, horizontal table scrolling
-10. ✅ **Enhanced Roadmap with Quantitative Goals** - Complete rewrite with yearly goals, monthly targets, progress tracking, categorization
-11. ✅ **Kanban Board for Echo Project** - Full-featured kanban with drag-and-drop, task management, time tracking, priorities
-
-### Phase 2.5 (Supabase Integration) - ✅ COMPLETED
-12. ✅ **Supabase Database Schema Setup** - Created comprehensive schema with goals, financial_metrics, metrics, sprints, and roadmaps tables
-13. ✅ **Data Sync Infrastructure** - Implemented complete sync system with upload/download/test functionality
-14. ✅ **Storage Abstraction Layer** - Enhanced storage.ts with Supabase integration while maintaining localStorage fallback
-15. ✅ **Sync UI Controls** - Added upload (↑), download (↓), and test (?) buttons to TerminalLayout header
-16. ✅ **Error Handling & Debugging** - Comprehensive error logging, connection testing, and troubleshooting tools
-17. ✅ **Database Trigger Issues Resolution** - Fixed timestamp handling conflicts and trigger compatibility issues
-18. ✅ **Multi-Device Data Access** - Full cloud-based data management enabling access across devices
-19. ✅ **Complete Metrics Table Trigger Fix** - Successfully resolved database trigger conflicts and verified sync functionality
-
-### Phase 3A (Critical Bugs) - ✅ COMPLETED
-20. ✅ **Kanban Task Editing Issues** - Fixed task editing functionality with proper event handling and state management
-21. ✅ **Kanban New Task Creation Bug** - Fixed assignee addition and form persistence issues with controlled inputs
-22. ✅ **Kanban Echo Tasks Counter Integration** - When tasks move to "Done", automatically increment "sprint tasks closed" counter in left sidebar
-23. ✅ **Kanban Labels/Tags Editing** - Added ability to add/remove labels/tags from tasks with proper UI controls
-24. ✅ **Kanban Supabase Sync** - Integrated Kanban data with Supabase for cloud storage and multi-device access
-
-### Phase 3B (High Priority Features) - ✅ COMPLETED
-1. ✅ **Dashboard Page Creation** - Created comprehensive dashboard with bento grid layout, sprint status, deep work trends, financial overview, Echo kanban stats, recent metrics, 2025 goals progress, and quick actions
-2. ✅ **Visualizer Graph Date Issues** - Fixed critical date offset bug where graphs showed previous day's dates due to UTC timezone issues. Implemented local timezone utilities and updated all date handling
-3. ✅ **Visualizer UI Optimization** - Reduced metric selection button sizes, improved layout with compact controls, enhanced chart sizing and responsiveness
-
-### Phase 3C (Sprint Management & Sync) - ✅ COMPLETED
-7. ✅ **Schedule Sprint Management** - Comprehensive sprint system with:
-   - Historical sprint insertion with manual end dates
-   - Customizable ON/OFF day cycles per sprint
-   - Three sprint statuses: Planned (Future), Active (Start Now), Completed (Historical)
-   - Full CRUD operations with edit/delete functionality
-   - Auto-status updates based on current date
-   - Enhanced sprint visualization with color-coded borders
-   - Sprint history section with detailed period breakdowns
-8. ✅ **Verify Full Sync Functionality** - Implemented 6-step verification system testing all data types, connection status, and sync operations with comprehensive error handling
-9. ✅ **Data Migration Validation** - All localStorage data successfully syncs to Supabase with proper validation and error recovery
-
-### Phase 3D (Critical Bug Fixes) - ✅ COMPLETED
-25. ✅ **Sprint ID Error Fix** - Fixed "sprint.sprint_id.slice is not a function" error by creating helper function for safe string conversion
-26. ✅ **Schedule Page Layout Issues** - Removed sprint history section per user request, restructured with separate scrollable calendar section
-27. ✅ **Green Dots Accuracy Fix** - Fixed day quality evaluation system with strict compliance criteria (4-5AM wake, 3+ hr focus, BJJ/lifting, no dopamine) and three-tier quality system (green=100%, yellow=50%+, red=<50%)
-28. ✅ **Database Schema Errors** - Created comprehensive migration scripts for missing columns (end_date, name, on_days, off_days, updated_at) and enum fixes
-29. ✅ **Sprint History Restoration** - Added back sprint history with full edit functionality, visual status indicators, and proper form handling
-30. ✅ **Infinite Loop Error Fix** - Fixed "Maximum update depth exceeded" error by memoizing data loading calls in Visualizer and Schedule components
-31. ✅ **Sprint Deletion Issues** - Identified and fixed Row Level Security (RLS) policy issues preventing sprint deletions, implemented proper RLS policies for all CRUD operations
-32. ✅ **Sprint Update Errors** - Fixed "record 'new' has no field 'updated_at'" error with comprehensive database migration and enhanced error handling
-
-### Phase 3E (Advanced Sprint Features) - ✅ COMPLETED
-33. ✅ **Enhanced Sprint Visualization** - Added distinct border colors for sprint phases with visual legend explaining the system
-34. ✅ **Auto-Updating Sprint Status** - Implemented automatic status transitions (planned → active → completed) based on current date with Supabase sync
-35. ✅ **Auto-Calculation Features** - Added auto-calculation of end dates and ON days when form fields change, with helper functions for date calculations
-36. ✅ **Proper End Date Semantics** - Fixed end date to correctly represent when the OFF period ends, updated sprint phase calculations accordingly
-
-### Phase 3F (Dashboard & UX Enhancements) - ✅ COMPLETED
-37. ✅ **Dashboard First in Navigation** - Reordered navigation to make Dashboard the default route, updated routing structure
-38. ✅ **Dashboard Sprint Data Real-time Updates** - Fixed sprint data loading from Supabase with proper real-time calculation and auto-refresh
-39. ✅ **Visualizer Date Timezone Bug Fix** - Fixed critical date offset issue using local date utilities, ensuring accurate date display
-40. ✅ **Kanban Mobile Experience Enhancement** - Complete mobile redesign with horizontal scrolling, responsive cards, touch-optimized interface
-41. ✅ **Enhanced Bento Grid Dashboard** - Added comprehensive dashboard cards including:
-   - System Health Card (Supabase sync status)
-   - Today's Focus Card (current date and sprint phase)
-   - Streak Tracker Card (days tracked counter)
-   - Performance Trends Card (compliance percentage)
-   - Weekly Rhythm Card (sprint cycle visualization)
-   - Achievement Highlights Card (recent milestones)
-
-## 🚧 Remaining Tasks (Prioritized by Impact)
-
-### Phase 4 (Polish & Optimization - Next 4-6 weeks)
-10. **Improve Error Handling** - Add comprehensive error boundaries and consistent error messaging
-11. **Performance Optimizations** - Virtual scrolling, data pagination, lazy loading
-12. **Accessibility Improvements** - ARIA labels, keyboard navigation, screen reader support
-13. **Supabase RLS Policies Enhancement** - Implement additional Row Level Security policies for other tables
-14. **Automated Backup System** - Scheduled data exports and backup procedures
-
-### Phase 5 (Advanced Features - Long-term)
-15. **Real-time Sync** - Implement Supabase real-time subscriptions for live updates
-16. **Data Analytics Dashboard** - Advanced metrics visualization and trend analysis
-17. **Add Comprehensive Testing** - Jest, React Testing Library, E2E tests
-18. **Update Documentation** - README updates, API docs, user guides
-19. **Multi-user Support** - User authentication and data isolation
-
-## Implementation Summary
-
-### Completed Features ✅
-- **Comprehensive Dashboard**: Modern bento grid layout with sprint status, deep work trends, financial overview, Echo kanban statistics, recent metrics summary, 2025 goals progress, and quick navigation actions
-- **Advanced Sprint Management**: Full sprint lifecycle management with customizable cycles, historical tracking, auto-status updates, visual calendar with color-coded borders, and comprehensive CRUD operations
-- **Enhanced Date Handling**: Fixed critical timezone offset bugs with local date utilities, ensuring accurate date display across all components
-- **Improved Visualizer**: Compact UI with better chart sizing, responsive controls, and optimized metric selection interface
-- **Robust Database Integration**: Complete Supabase integration with RLS policies, comprehensive migrations, and error handling for all CRUD operations
-- **Enhanced Roadmap System**: Yearly goals with quantitative targets, monthly milestones, progress tracking, categorization (professional, fitness, financial, personal)
-- **Kanban Project Management**: Full Echo project kanban board with drag-and-drop, task cards, priorities, time tracking, completion stats
-- **Centralized Data Management**: React Query-based data loading system preventing race conditions, with optimistic updates and proper error handling
-- **Mobile-First Design**: Complete responsive overhaul with mobile navigation, touch optimization, iOS viewport fixes, horizontal table scrolling
-- **Improved Layout**: Fixed all layout issues, moved sidebars, removed unnecessary features, unified responsive design
-- **Metric Management**: Full CRUD operations for custom metrics with validation and data preservation
-
-### Technical Improvements ✅
-- **Date Management**: Local timezone utilities preventing UTC offset issues across all date operations
-- **Sprint System**: Sophisticated sprint management with customizable cycles, auto-status updates, and comprehensive visualization
-- **Database Schema**: Robust schema with proper migrations, RLS policies, and comprehensive error handling
-- **Data Loading**: Centralized `useTracker` and `useMetrics` hooks with React Query caching and memoization
-- **Mobile Experience**: 44px touch targets, iOS viewport fixes, horizontal scrolling, mobile navigation
-- **Performance**: Optimistic updates, proper loading states, error boundaries, memoized data loading
-- **Code Quality**: TypeScript throughout, consistent error handling, proper component separation
-- **Cloud Storage**: Comprehensive Supabase integration with sync infrastructure and debugging tools
-
-### Files Modified/Created ✅
-- **New Files**: 
-  - `src/pages/Dashboard.tsx` - Comprehensive dashboard with modern bento grid layout
-  - `src/lib/dateUtils.ts` - Local timezone utilities for accurate date handling
-  - `src/pages/Kanban.tsx` - Complete kanban board implementation
-  - `src/hooks/useTracker.ts` - Centralized data management hooks
-  - `database/` directory - Comprehensive database schemas, migrations, and policies
-- **Enhanced Files**: 
-  - `src/pages/Schedule.tsx` - Complete sprint management system with advanced features
-  - `src/pages/Visualizer.tsx` - Improved UI and fixed date handling with memoization
-  - `src/pages/Roadmap.tsx` - Complete rewrite with quantitative goals
-  - `src/components/TerminalLayout.tsx` - Mobile-responsive navigation + sync controls + Dashboard route
-  - `src/components/MetricGrid.tsx` - Mobile-optimized table with React Query
-  - `src/lib/storage.ts` - Complete Supabase integration with comprehensive sync functions
-  - `src/App.tsx` - Added Dashboard route and navigation
-  - `src/index.css` - Mobile-first CSS with iOS optimizations and sprint visualization styles
-
-## Current Status: Phase 3F Complete ✅ - Moving to Phase 4
-
-**Total Development Time Invested**: ~14-16 weeks
-**Remaining Estimated Time**: 4-6 weeks for Phase 4, 6-8 weeks for Phase 5
-
-**🎯 Current Priority Focus:**
-1. **POLISH**: Error handling and performance optimizations (Phase 4) - production readiness
-2. **ADVANCED**: Real-time sync and analytics dashboard (Phase 5) - advanced features
-3. **TESTING**: Comprehensive test coverage and documentation updates
-
-The application now features:
-- ✅ **Enhanced Dashboard Experience**: Dashboard-first navigation with comprehensive bento grid layout featuring 12+ specialized cards
-- ✅ **Real-time Sprint Management**: Live sprint data updates from Supabase with proper phase calculations and auto-refresh
-- ✅ **Fixed Critical Date Bug**: Resolved timezone offset issues in visualizer ensuring accurate date display across all components
-- ✅ **Mobile-Optimized Kanban**: Complete mobile redesign with horizontal scrolling, responsive cards, and touch-friendly interface
-- ✅ **Advanced Sprint System**: Customizable cycles, auto-status updates, comprehensive visualization, and database integration
-- ✅ **Comprehensive Goal Tracking**: Quantitative yearly goals with monthly milestones and progress visualization
-- ✅ **Professional Project Management**: Full Echo project kanban with drag-and-drop and time tracking
-- ✅ **Race Condition-Free Data**: Centralized data management with React Query and memoization
-- ✅ **Mobile-First Design**: Complete responsive overhaul optimized for iOS with proper touch targets
-- ✅ **Robust Cloud Integration**: Complete Supabase integration with sync infrastructure and multi-device access
-- ✅ **Enhanced Metric Management**: Full CRUD operations with validation and financial tracking
-- ✅ **Production-Ready Database**: Comprehensive schema with RLS policies and error handling
-
-**Application is now feature-complete for core functionality** with enhanced dashboard experience, real-time data updates, mobile optimization, and production-ready architecture. Focus shifts to polish, optimization, and advanced features. 
-
-# Noctisium Weekly KPI Refactor - Task List
+# Skill Progression Module - Tasks
 
 ## Overview
-Transform Noctisium from a daily metrics tracker to a weekly KPI system focused on key performance indicators with specific targets.
+Create a new **Skill Progression** module for the Noctisium to track long-term personal and professional development goals with visual progress bars, checkpoints, and AI-powered progress updates.
 
-## 1. Data Model & Storage Layer
+---
 
-### 1.1 Create Weekly KPI Data Model
-- [ ] **Create `src/lib/weeklyKpi.ts`**
-  - Define `WeeklyKPI` interface with targets:
-    - Strength sessions: 3-4 target
-    - Conditioning sessions: 3 target
-    - Mat hours: 4-6 target
-    - Cold plunges: 5 target
-    - Sleep average: 6 hrs target
-    - Deep-work blocks: 10 target
-    - Git commits: 25 target
-    - Twitter DMs: 20 target
-    - LinkedIn messages: 30 target
-    - Reading: 300 pages target
-  - Define `WeeklyKPIData` interface for storage
-  - Add functions: `loadWeeklyKPIs()`, `saveWeeklyKPIs()`, `getCurrentWeek()`, `getWeekKey()`
+## 1. Core Entities & Data Structure
 
-### 1.2 Update Storage System
-- [ ] **Modify `src/lib/storage.ts`**
-  - Add weekly KPI storage functions
-  - Keep existing daily storage for backward compatibility
-  - Add Supabase table support for weekly KPIs
+### Task 1.1: Define Skill Types
+- [ ] Create TypeScript types in `src/types/skills.ts`:
+```ts
+export type SkillId = 'netWorth' | 'jiuJitsu' | 'cortalBuild' | 'cortalMRR' | 'bodyComp' | 'career' | 'knowledge';
+export type SkillUnit = '$' | '%' | 'belt' | 'bool' | '$/yr';
 
-### 1.3 Database Schema
-- [ ] **Create Supabase migration**
-  - Table: `weekly_kpis`
-  - Columns: `id`, `user_id`, `week_key`, `data`, `created_at`, `updated_at`
-  - Indexes on `user_id` and `week_key`
+export type Checkpoint = {
+  label: string;
+  target: number;
+  due: string; // ISO date
+  completed?: boolean;
+};
 
-## 2. Navigation & Layout Overhaul
+export type Skill = {
+  id: SkillId;
+  label: string;
+  unit: SkillUnit;
+  current: number;
+  target: number;
+  checkpoints: Checkpoint[];
+  category: 'financial' | 'physical' | 'professional' | 'personal';
+};
 
-### 2.1 Remove Sidebar Navigation
-- [ ] **Update `src/components/Sidebar.tsx`**
-  - Remove all existing navigation items
-  - Keep only: Dashboard, Roadmap, Visualizer
-  - Remove references to: Metrics, Schedule, Kanban, etc.
-
-### 2.2 Update Routing
-- [ ] **Modify `src/App.tsx` or main routing file**
-  - Remove routes for: `/schedule`, `/kanban`, `/metrics`
-  - Keep routes for: `/`, `/roadmap`, `/visualizer`
-  - Update default route to weekly KPI dashboard
-
-### 2.3 Remove Unused Pages
-- [ ] **Delete `src/pages/Schedule.tsx`**
-- [ ] **Delete `src/pages/Kanban.tsx`**
-- [ ] **Move daily metrics to optional section**
-
-## 3. Weekly KPI Input System
-
-### 3.1 Create Weekly KPI Input Component
-- [ ] **Create `src/components/WeeklyKPIInput.tsx`**
-  - Weekly summary form with all KPI inputs
-  - Progress bars showing current vs. target
-  - Week selection (current week default)
-  - Real-time calculation of progress percentages
-
-### 3.2 Transform Index Page
-- [ ] **Rewrite `src/pages/Index.tsx`**
-  - Make weekly KPI input the primary interface
-  - Move daily metrics to optional/advanced section
-  - Add toggle to switch between weekly and daily views
-  - Default to weekly view
-
-### 3.3 Weekly KPI Manager
-- [ ] **Create `src/components/WeeklyKPIManager.tsx`**
-  - Edit KPI targets
-  - Customize KPI categories
-  - Bulk operations for historical weeks
-
-## 4. Dashboard Redesign
-
-### 4.1 Strip Down Dashboard
-- [ ] **Rewrite `src/pages/Dashboard.tsx`**
-  - Remove: Sprint status, financial metrics, kanban stats, detailed metrics
-  - Keep only:
-    - Current week KPI progress bars (targets vs. actuals)
-    - Week-streak line chart (last 6 weeks performance)
-    - High-level roadmap section for long-term goals
-
-### 4.2 Weekly Progress Components
-- [ ] **Create `src/components/WeeklyProgressBar.tsx`**
-  - Individual KPI progress bar with target indication
-  - Color coding: green (on target), yellow (close), red (behind)
-  - Percentage completion display
-
-- [ ] **Create `src/components/WeekStreakChart.tsx`**
-  - Mini line chart showing weekly performance over 6 weeks
-  - Overall completion percentage per week
-  - Trend indicators
-
-## 5. Visualizer Overhaul
-
-### 5.1 Rewrite Visualizer for Weekly Data
-- [ ] **Complete rewrite of `src/pages/Visualizer.tsx`**
-  - Remove all daily-granularity charts
-  - Create monthly grid view of weekly KPIs
-  - Add weekly KPI trend lines by month
-  - Show weekly aggregations and monthly summaries
-
-### 5.2 Weekly Chart Components
-- [ ] **Create `src/components/WeeklyKPIChart.tsx`**
-  - Monthly view with weeks as data points
-  - Multiple KPI lines on single chart
-  - Target line overlay for reference
-
-- [ ] **Create `src/components/KPIHeatmap.tsx`**
-  - Monthly grid showing weekly performance
-  - Color-coded cells based on target achievement
-  - Drill-down capability to specific weeks
-
-## 6. Component Updates & Cleanup
-
-### 6.1 Update Existing Components
-- [ ] **Modify `src/components/MetricGrid.tsx`**
-  - Make this optional/secondary
-  - Move to "Advanced" or "Daily Detail" section
-  - Keep for users who want daily granularity
-
-- [ ] **Modify `src/components/MetricManager.tsx`**
-  - Repurpose for KPI target management
-  - Allow customization of weekly targets
-
-### 6.2 Remove Sprint-Related Components
-- [ ] **Clean up sprint references**
-  - Remove sprint logic from all components
-  - Delete sprint-related utilities
-  - Clean up CSS classes related to sprints
-
-### 6.3 Update TypewriterText Usage
-- [ ] **Update all page headers**
-  - Change "Metrics Input" to "Weekly KPIs"
-  - Change "Metrics Visualizer" to "KPI Analytics"
-  - Remove "Sprint Schedule" references
-
-## 7. Styling & CSS Updates
-
-### 7.1 Update CSS Classes
-- [ ] **Modify `src/styles/globals.css`**
-  - Remove sprint-related styles
-  - Add weekly KPI specific styles
-  - Update color schemes for KPI progress
-
-### 7.2 Component-Specific Styles
-- [ ] **Create weekly KPI component styles**
-  - Progress bar animations
-  - KPI card layouts
-  - Responsive grid for weekly data
-
-## 8. Data Migration & Compatibility
-
-### 8.1 Migration Script
-- [ ] **Create `src/lib/migrations/dailyToWeekly.ts`**
-  - Convert existing daily data to weekly aggregations
-  - Handle partial weeks
-  - Preserve data integrity
-
-### 8.2 Backward Compatibility
-- [ ] **Maintain daily data access**
-  - Keep daily input available as advanced feature
-  - Allow historical daily data viewing
-  - Provide export functionality for daily data
-
-## 9. Testing & Validation
-
-### 9.1 Component Testing
-- [ ] **Test weekly KPI input forms**
-- [ ] **Test progress calculations**
-- [ ] **Test data persistence**
-- [ ] **Test chart rendering**
-
-### 9.2 Data Validation
-- [ ] **Validate weekly aggregations**
-- [ ] **Test migration script**
-- [ ] **Verify Supabase integration**
-
-## 10. Documentation & Cleanup
-
-### 10.1 Remove Unused Files
-- [ ] **Delete unused components**
-  - Sprint-related components
-  - Unused daily metric components
-  - Obsolete chart utilities
-
-### 10.2 Update Documentation
-- [ ] **Update README.md**
-  - Reflect new weekly KPI focus
-  - Update feature descriptions
-  - Add setup instructions for weekly data
-
-### 10.3 Code Cleanup
-- [ ] **Remove dead code**
-  - Unused imports
-  - Commented-out sprint logic
-  - Obsolete utility functions
-- [ ] **Update type definitions**
-  - Remove unused interfaces
-  - Add weekly KPI types
-  - Clean up storage types
-
-## 11. New File Structure
-
-### Files to Create:
-```
-src/
-├── lib/
-│   ├── weeklyKpi.ts (new)
-│   └── migrations/
-│       └── dailyToWeekly.ts (new)
-├── components/
-│   ├── WeeklyKPIInput.tsx (new)
-│   ├── WeeklyKPIManager.tsx (new)
-│   ├── WeeklyProgressBar.tsx (new)
-│   ├── WeekStreakChart.tsx (new)
-│   ├── WeeklyKPIChart.tsx (new)
-│   └── KPIHeatmap.tsx (new)
-└── pages/
-    ├── Index.tsx (rewrite)
-    ├── Dashboard.tsx (strip down)
-    └── Visualizer.tsx (rewrite)
+export function getSkillPercent(skill: Skill): number {
+  return Math.min(1, Math.max(0, skill.current / skill.target));
+}
 ```
 
-### Files to Delete:
-```
-src/pages/Schedule.tsx
-src/pages/Kanban.tsx
+### Task 1.2: Create Initial Skill Definitions
+- [ ] Create `src/data/skillDefinitions.ts` with initial skills:
+  - **netWorth**: $145,000 → $3,500,000 (checkpoints: $1M, $2M, $3M)
+  - **jiuJitsu**: 1 (blue) → 3 (brown) (checkpoints: purple=2, brown=3)
+  - **cortalBuild**: 0.25 → 1.0 (checkpoints: MVP=1.0 by 2025-09-29)
+  - **cortalMRR**: $0 → $3,000,000 ARR (checkpoints: $24K, $100K, $1M, $3M ARR)
+  - **bodyComp**: 18% → 9% (checkpoints: 15%, 12%, 9%)
+  - **career**: 0 → 1 (checkpoints: exit job by 2026-06-30)
+  - **knowledge**: 0.20 → 1.0 (checkpoints: 0.4, 0.6, 0.8)
+
+---
+
+## 2. State Management & Storage
+
+### Task 2.1: Create Zustand Store
+- [ ] Create `src/stores/useSkillStore.ts`:
+```ts
+interface SkillStore {
+  skills: Record<SkillId, Skill>;
+  isLoading: boolean;
+  
+  // Actions
+  loadSkills: () => Promise<void>;
+  updateSkill: (id: SkillId, updates: Partial<Skill>) => Promise<void>;
+  updateSkillProgress: (id: SkillId, newCurrent: number) => Promise<void>;
+  markCheckpointComplete: (skillId: SkillId, checkpointIndex: number) => Promise<void>;
+}
 ```
 
-### Files to Modify:
+### Task 2.2: Supabase Integration
+- [ ] Create Supabase table `skills`:
+```sql
+CREATE TABLE skills (
+  id text PRIMARY KEY,
+  user_id uuid REFERENCES auth.users(id),
+  skill_data jsonb NOT NULL,
+  updated_at timestamp DEFAULT now()
+);
 ```
-src/components/Sidebar.tsx (major changes)
-src/components/MetricGrid.tsx (make optional)
-src/components/MetricManager.tsx (repurpose)
-src/lib/storage.ts (add weekly functions)
-src/styles/globals.css (remove sprint styles)
+- [ ] Create `src/lib/skillStorage.ts` with CRUD operations
+- [ ] Add localStorage fallback for offline usage
+
+---
+
+## 3. UI Components
+
+### Task 3.1: Main Skill Progression Component
+- [ ] Create `src/components/SkillProgressionSection.tsx`:
+  - Grid layout showing all skills
+  - Progress bars using existing terminal styling
+  - Group by timeframe: "Short-term (< 3 years)" vs "Long-term (2030+)"
+
+### Task 3.2: Individual Skill Card
+- [ ] Create `src/components/SkillCard.tsx`:
+  - Skill label and current/target values
+  - Progress bar with percentage
+  - Next checkpoint indicator with due date
+  - Unit-specific formatting ($, %, belt names)
+
+### Task 3.3: Skill Detail Modal
+- [ ] Create `src/components/SkillDetailModal.tsx`:
+  - Detailed view of single skill
+  - All checkpoints with completion status
+  - Manual progress update input
+  - Progress history chart (optional)
+
+### Task 3.4: Progress Update Interface
+- [ ] Create `src/components/SkillUpdateBox.tsx`:
+  - Text input for natural language updates
+  - "Process Update" button
+  - Loading state during AI processing
+  - Success/error toast notifications
+
+---
+
+## 4. AI-Powered Updates
+
+### Task 4.1: API Route for AI Processing
+- [ ] Create `src/pages/api/skills/evaluate-update.ts`:
+```ts
+type UpdateRequest = {
+  update: string; // Natural language
+  skills: Record<SkillId, Skill>;
+};
+
+type UpdateResponse = {
+  updates: Array<{
+    skillId: SkillId;
+    delta: number;
+    reasoning: string;
+  }>;
+};
 ```
+
+### Task 4.2: OpenAI Integration
+- [ ] Create system prompt for skill evaluation:
+  - Parse natural language updates
+  - Map to specific skills and progress deltas
+  - Return structured JSON response
+- [ ] Handle edge cases (ambiguous updates, invalid skills)
+
+### Task 4.3: Update Processing Logic
+- [ ] Create `src/lib/skillUpdates.ts`:
+  - Apply AI-suggested updates to store
+  - Validate update ranges (0-100%)
+  - Auto-mark checkpoints as complete
+  - Generate summary messages
+
+---
+
+## 5. Weekly KPI to Skill Progression Mapping
+
+### Task 5.1: Define KPI Contribution Weights
+- [ ] Create `src/lib/skillContributions.ts` with realistic weekly KPI impact:
+
+```ts
+export type KPIContribution = {
+  kpiId: string;
+  skillId: SkillId;
+  weight: number; // 0-1 multiplier
+  formula: 'linear' | 'threshold' | 'exponential';
+  description: string;
+};
+
+export const KPI_SKILL_CONTRIBUTIONS: KPIContribution[] = [
+  // NET WORTH PROGRESSION ($145K → $3.5M)
+  {
+    kpiId: 'deepWorkBlocks',
+    skillId: 'netWorth',
+    weight: 0.4,
+    formula: 'linear',
+    description: 'Deep work directly drives business results and income'
+  },
+  {
+    kpiId: 'gitCommits',
+    skillId: 'netWorth',
+    weight: 0.3,
+    formula: 'linear',
+    description: 'Shipping code creates business value'
+  },
+  {
+    kpiId: 'twitterDMs',
+    skillId: 'netWorth',
+    weight: 0.15,
+    formula: 'linear',
+    description: 'Network building leads to opportunities'
+  },
+  {
+    kpiId: 'linkedinMessages',
+    skillId: 'netWorth',
+    weight: 0.15,
+    formula: 'linear',
+    description: 'Professional networking for business development'
+  },
+
+  // JIU-JITSU PROGRESSION (Blue → Brown Belt)
+  {
+    kpiId: 'matHours',
+    skillId: 'jiuJitsu',
+    weight: 0.7,
+    formula: 'linear',
+    description: 'Direct training time is primary skill driver'
+  },
+  {
+    kpiId: 'strengthSessions',
+    skillId: 'jiuJitsu',
+    weight: 0.3,
+    formula: 'threshold',
+    description: 'Supporting strength improves BJJ performance'
+  },
+
+  // CORTAL BUILD PROGRESSION (MVP Launch)
+  {
+    kpiId: 'deepWorkBlocks',
+    skillId: 'cortalBuild',
+    weight: 0.5,
+    formula: 'linear',
+    description: 'Focused development time builds the product'
+  },
+  {
+    kpiId: 'gitCommits',
+    skillId: 'cortalBuild',
+    weight: 0.5,
+    formula: 'linear',
+    description: 'Code commits represent tangible progress'
+  },
+
+  // CORTAL MRR PROGRESSION ($0 → $3M ARR)
+  {
+    kpiId: 'deepWorkBlocks',
+    skillId: 'cortalMRR',
+    weight: 0.3,
+    formula: 'linear',
+    description: 'Product development drives revenue potential'
+  },
+  {
+    kpiId: 'twitterDMs',
+    skillId: 'cortalMRR',
+    weight: 0.35,
+    formula: 'exponential',
+    description: 'Network effects and user acquisition'
+  },
+  {
+    kpiId: 'linkedinMessages',
+    skillId: 'cortalMRR',
+    weight: 0.35,
+    formula: 'exponential',
+    description: 'B2B sales and partnership development'
+  },
+
+  // BODY COMPOSITION (18% → 9% BF)
+  {
+    kpiId: 'strengthSessions',
+    skillId: 'bodyComp',
+    weight: 0.5,
+    formula: 'linear',
+    description: 'Resistance training builds muscle, reduces fat'
+  },
+  {
+    kpiId: 'matHours',
+    skillId: 'bodyComp',
+    weight: 0.2,
+    formula: 'linear',
+    description: 'Cardio and conditioning from BJJ'
+  },
+  {
+    kpiId: 'coldPlunges',
+    skillId: 'bodyComp',
+    weight: 0.2,
+    formula: 'threshold',
+    description: 'Cold exposure boosts metabolism'
+  },
+  {
+    kpiId: 'sleepAverage',
+    skillId: 'bodyComp',
+    weight: 0.1,
+    formula: 'threshold',
+    description: 'Recovery enables body composition changes'
+  },
+
+  // CAREER STATUS (Employee → Founder)
+  {
+    kpiId: 'deepWorkBlocks',
+    skillId: 'career',
+    weight: 0.4,
+    formula: 'linear',
+    description: 'Building skills and business for independence'
+  },
+  {
+    kpiId: 'gitCommits',
+    skillId: 'career',
+    weight: 0.3,
+    formula: 'linear',
+    description: 'Technical execution demonstrates capability'
+  },
+  {
+    kpiId: 'twitterDMs',
+    skillId: 'career',
+    weight: 0.15,
+    formula: 'linear',
+    description: 'Building personal brand and network'
+  },
+  {
+    kpiId: 'linkedinMessages',
+    skillId: 'career',
+    weight: 0.15,
+    formula: 'linear',
+    description: 'Professional relationship building'
+  },
+
+  // KNOWLEDGE INDEX (Self-rated learning)
+  {
+    kpiId: 'readingPages',
+    skillId: 'knowledge',
+    weight: 0.6,
+    formula: 'linear',
+    description: 'Reading directly expands knowledge base'
+  },
+  {
+    kpiId: 'deepWorkBlocks',
+    skillId: 'knowledge',
+    weight: 0.4,
+    formula: 'linear',
+    description: 'Learning time within deep work blocks'
+  }
+];
+```
+
+### Task 5.2: Weekly KPI Impact Calculation
+- [ ] Create automatic skill progression from weekly KPIs:
+```ts
+export function calculateWeeklySkillImpact(
+  weeklyKPIs: WeeklyKPIValues,
+  currentSkills: Record<SkillId, Skill>
+): Record<SkillId, number> {
+  const impacts: Record<SkillId, number> = {};
+  
+  KPI_SKILL_CONTRIBUTIONS.forEach(contribution => {
+    const kpiValue = weeklyKPIs[contribution.kpiId] || 0;
+    const kpiDefinition = WEEKLY_KPI_DEFINITIONS.find(k => k.id === contribution.kpiId);
+    
+    if (!kpiDefinition) return;
+    
+    // Calculate normalized performance (0-1 scale)
+    const performance = Math.min(1, kpiValue / kpiDefinition.target);
+    
+    // Apply formula-specific scaling
+    let scaledImpact = performance * contribution.weight;
+    
+    switch (contribution.formula) {
+      case 'exponential':
+        scaledImpact = Math.pow(performance, 1.5) * contribution.weight;
+        break;
+      case 'threshold':
+        scaledImpact = performance >= 0.8 ? contribution.weight : contribution.weight * 0.3;
+        break;
+      case 'linear':
+      default:
+        scaledImpact = performance * contribution.weight;
+    }
+    
+    if (!impacts[contribution.skillId]) impacts[contribution.skillId] = 0;
+    impacts[contribution.skillId] += scaledImpact;
+  });
+  
+  return impacts;
+}
+```
+
+### Task 5.3: Realistic Progression Rates
+- [ ] Define realistic weekly progression rates per skill:
+  - **Net Worth**: 0.1% per excellent week (slow, compound growth)
+  - **Jiu-Jitsu**: 0.5% per excellent week (technique accumulation)
+  - **Cortal Build**: 2% per excellent week (sprint-based development)
+  - **Cortal MRR**: 0.2% per excellent week (sales cycles)
+  - **Body Comp**: 0.3% per excellent week (body changes take time)
+  - **Career**: 1% per excellent week (binary transition preparation)
+  - **Knowledge**: 0.8% per excellent week (learning accumulation)
+
+### Task 5.4: Integration with Dashboard
+- [ ] Add weekly KPI impact indicators to skill cards
+- [ ] Show "This week's contribution" on skill progression page
+- [ ] Highlight which KPIs most impact each skill
+
+---
+
+## 6. Integration with Existing Systems
+
+### Task 6.1: Dashboard Integration
+- [ ] Add SkillProgressionSection to Dashboard page
+- [ ] Create skill summary cards for dashboard overview
+- [ ] Add "Skill Update" quick action to header
+
+### Task 6.2: Historical Data Migration
+- [ ] Create migration script to backfill skill progression from historical weekly KPIs
+- [ ] Calculate cumulative skill progression based on past performance
+- [ ] Set realistic baselines for each skill based on historical data
+
+---
+
+## 7. Utilities & Helpers
+
+### Task 7.1: Formatting Utilities
+- [ ] Create `src/lib/skillFormatters.ts`:
+```ts
+export function formatSkillValue(value: number, unit: SkillUnit): string;
+export function formatBeltLevel(level: number): string; // "Blue Belt"
+export function formatCareerStatus(status: number): string; // "Employee" / "Founder"
+export function getNextCheckpoint(skill: Skill): Checkpoint | null;
+export function getSkillProgress(skill: Skill): { percent: number; nextDue: string };
+```
+
+### Task 7.2: Date & Deadline Utilities
+- [ ] Calculate days until checkpoint deadlines
+- [ ] Highlight overdue checkpoints
+- [ ] Progress velocity calculations
+
+---
+
+## 8. Styling & Terminal Theme
+
+### Task 8.1: Terminal-Style Progress Bars
+- [ ] Custom progress bar component matching terminal aesthetic
+- [ ] Color coding: green (on-track), yellow (behind), red (overdue)
+- [ ] ASCII-style progress indicators
+
+### Task 8.2: Skill Categories
+- [ ] Color-code skills by category:
+  - Financial: `#FFD700` (gold)
+  - Physical: `#53B4FF` (blue)
+  - Professional: `#FF6B00` (orange)
+  - Personal: `#5FE3B3` (green)
+
+---
+
+## 9. Testing & Polish
+
+### Task 9.1: Component Testing
+- [ ] Unit tests for skill calculation utilities
+- [ ] Component tests for SkillCard and SkillProgressionSection
+- [ ] Integration tests for store operations
+
+### Task 9.2: AI Update Testing
+- [ ] Test various natural language inputs
+- [ ] Validate AI parsing accuracy
+- [ ] Handle edge cases and errors gracefully
+
+---
+
+## 10. Future Enhancements
+
+### Task 10.1: Advanced Features (Phase 2)
+- [ ] Skill dependencies (e.g., cortalMRR depends on cortalBuild)
+- [ ] Historical progress tracking and charts
+- [ ] Achievement system with badges
+- [ ] Weekly/monthly skill reports
+
+### Task 10.2: Mobile Optimization
+- [ ] Responsive skill cards for mobile
+- [ ] Touch-friendly progress updates
+- [ ] Mobile-optimized skill detail view
+
+---
 
 ## Implementation Priority
 
-1. **Phase 1: Data Model** (Tasks 1.1-1.3)
-2. **Phase 2: Core UI** (Tasks 3.1-3.3, 4.1-4.2)
-3. **Phase 3: Navigation** (Tasks 2.1-2.3)
-4. **Phase 4: Visualizer** (Tasks 5.1-5.2)
-5. **Phase 5: Cleanup** (Tasks 6.1-10.3)
+1. **High Priority** (Core MVP):
+   - Tasks 1.1-1.2: Type definitions and initial data
+   - Tasks 2.1-2.2: Store and storage
+   - Tasks 3.1-3.2: Basic UI components
+   - Task 5.2: Dashboard integration
 
-## Success Criteria
+2. **Medium Priority** (Enhanced UX):
+   - Tasks 3.3-3.4: Detail modal and update interface
+   - Tasks 4.1-4.3: AI-powered updates
+   - Task 5.1-5.4: Weekly KPI integration
+   - Task 7.1: Formatting utilities
 
-- [ ] Users can input weekly KPIs with targets
-- [ ] Dashboard shows current week progress clearly
-- [ ] Visualizer displays monthly/weekly trends
-- [ ] No references to daily metrics in primary UI
-- [ ] All sprint-related code removed
-- [ ] Clean, focused navigation with 3 main sections
-- [ ] Responsive design works on mobile
-- [ ] Data migration preserves historical information 
+3. **Low Priority** (Polish):
+   - Tasks 8.1-8.2: Advanced styling
+   - Tasks 9.1-9.2: Testing
+   - Tasks 10.1-10.2: Future enhancements
+
+---
+
+## Success Metrics
+
+- [ ] All 7 core skills properly tracked and displayed
+- [ ] Progress updates via natural language working with 80%+ accuracy
+- [ ] Seamless integration with existing weekly KPI system
+- [ ] Mobile-responsive design
+- [ ] Sub-second load times for skill progression view 

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import TypewriterText from '@/components/TypewriterText';
 import WeeklyProgressBar from '@/components/WeeklyProgressBar';
 import WeekStreakChart from '@/components/WeekStreakChart';
+import RevenueLostCounter from '@/components/RevenueLostCounter';
 import { Progress } from "@/components/ui/progress";
 import { 
   Target, TrendingUp, CheckCircle2, BarChart3, GitBranch, Award
@@ -108,104 +109,21 @@ const Dashboard = () => {
       <div className="mb-4">
         <TypewriterText text="Dashboard" className="text-xl mb-2" />
         <p className="text-terminal-accent/70 text-sm">
-          Weekly KPI overview and performance tracking
+          Real-time opportunity tracking and KPI trends
         </p>
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        {/* Weekly KPI Performance Section */}
+        {/* Main Revenue Lost Counter */}
         <div className="mb-8">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-2">
-              <Target size={20} className="text-terminal-accent" />
-              <h2 className="text-lg text-terminal-accent">This Week's Performance</h2>
-            </div>
-            <div className="text-right">
-              <div className="text-3xl font-bold text-terminal-accent">{weekCompletion}%</div>
-              <div className="text-xs text-terminal-accent/70">Overall Completion</div>
-            </div>
-          </div>
-
-          {/* Current Week Progress Overview */}
-          <div className="mb-6 p-4 border border-terminal-accent/30 bg-terminal-bg/30">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-terminal-accent font-medium">Week {currentWeek} Progress</span>
-              <span className="text-2xl font-bold text-terminal-accent">{weekCompletion}%</span>
-            </div>
-            <Progress value={weekCompletion} className="h-3 mb-3" />
-            
-            {/* KPI Status Summary */}
-            <div className="grid grid-cols-4 gap-4 text-center text-xs">
-              <div>
-                <div className="text-lg font-bold text-[#5FE3B3]">{kpiSummary.excellent}</div>
-                <div className="text-terminal-accent/70">Excellent</div>
-              </div>
-              <div>
-                <div className="text-lg font-bold text-[#FFD700]">{kpiSummary.good}</div>
-                <div className="text-terminal-accent/70">Good</div>
-              </div>
-              <div>
-                <div className="text-lg font-bold text-[#FF6B00]">{kpiSummary.fair}</div>
-                <div className="text-terminal-accent/70">Fair</div>
-              </div>
-              <div>
-                <div className="text-lg font-bold text-[#FF6B6B]">{kpiSummary.poor}</div>
-                <div className="text-terminal-accent/70">Needs Work</div>
-              </div>
-            </div>
-          </div>
-
-          {/* Top Priority KPIs - Show first 6 in compact view */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-            {WEEKLY_KPI_DEFINITIONS.slice(0, 6).map(kpi => (
-              <div key={kpi.id} className="border border-terminal-accent/30 p-4 bg-terminal-bg/20">
-                <WeeklyProgressBar 
-                  kpi={kpi} 
-                  actualValue={currentWeekData[kpi.id] || 0} 
-                  compact={true}
-                />
-              </div>
-            ))}
-          </div>
+          <RevenueLostCounter
+            startDate="2025-07-08T21:00:00-07:00"
+            targetARR={1000000}
+            currency="USD"
+          />
         </div>
 
-        {/* Weekly Trend Chart */}
-        <div className="mb-8">
-          <WeekStreakChart weekCount={6} />
-        </div>
 
-        {/* Goals Progress Section */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-2">
-              <GitBranch size={20} className="text-terminal-accent" />
-              <h2 className="text-lg text-terminal-accent">2025 Goals Progress</h2>
-            </div>
-            <button 
-              onClick={() => window.location.href = '/roadmap'}
-              className="text-xs text-terminal-accent/50 hover:text-terminal-accent transition-colors"
-            >
-              View All →
-            </button>
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {goalsData.goals.slice(0, 4).map(goal => (
-              <div key={goal.id} className="border border-terminal-accent/30 p-4 bg-terminal-bg/20">
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-sm font-medium">{goal.name}</span>
-                  <span className={`text-sm ${getCategoryColor(goal.category)}`}>
-                    {Math.round(goal.progressPct * 100)}%
-                  </span>
-                </div>
-                <Progress value={goal.progressPct * 100} className="h-2 mb-2" />
-                <div className="text-xs text-terminal-accent/50">
-                  {goal.currentTotal.toLocaleString()} / {goal.yearlyTarget.toLocaleString()} {goal.unit}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
 
         {/* System Health & Quick Stats */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">

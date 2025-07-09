@@ -2,8 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { Link, useLocation, Outlet } from 'react-router-dom';
 import { Terminal, LayoutDashboard, GitBranch, Cpu, HardDrive, Wifi, Globe, Network, Menu, X, Upload, Download, Loader2, CheckCircle2, BarChart3 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import PerformanceSidebar from './PerformanceSidebar';
-import ContextSidebar from './ContextSidebar';
 import { syncAllDataToSupabase, loadAllDataFromSupabase, syncAllDataToSupabaseWithTest, testSupabaseConnection, verifySyncFunctionality, FIXED_USER_ID } from '@/lib/storage';
 import { supabase } from '@/lib/supabase';
 import { getCurrentLocalDate } from '@/lib/dateUtils';
@@ -408,20 +406,6 @@ const TerminalLayout: React.FC = () => {
       </div>
 
       <div className="flex flex-1 min-h-0">
-        {/* Combined Left Sidebar - Hidden on mobile unless menu is open */}
-        <div className={cn(
-          "lg:block transition-transform duration-300 ease-in-out",
-          mobileMenuOpen ? "block" : "hidden"
-        )}>
-          <div className="w-full lg:w-[20ch] border-r border-accent-pink bg-sidebar p-2 shrink-0 overflow-y-auto font-mono text-xs text-main flex flex-col h-full">
-            {/* Personal Performance Monitor Content */}
-            <PerformanceSidebar />
-            
-            {/* Context & Inspiration Content */}
-            <ContextSidebar />
-          </div>
-        </div>
-
         <div className="flex-1 flex flex-col min-h-0">
           {/* Terminal top bar */}
           <div className="flex flex-col p-1 bg-sidebar border-b border-[#333] text-xs">
@@ -452,6 +436,7 @@ const TerminalLayout: React.FC = () => {
                   )}
                 </span>
               </div>
+
             </div>
             {/* Sprint progress bar - only show during ON phase */}
             {sprintData.phase === 'ON' && (
@@ -531,3 +516,4 @@ const TerminalLayout: React.FC = () => {
 };
 
 export default TerminalLayout;
+
