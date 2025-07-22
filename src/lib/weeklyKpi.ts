@@ -67,7 +67,7 @@ export const WEEKLY_KPI_DEFINITIONS: WeeklyKPIDefinition[] = [
   {
     id: 'twitterDMs',
     name: 'Twitter DMs',
-    target: 20,
+    target: 3,
     unit: 'messages',
     category: 'social',
     color: '#FFD700'  // Yellow for social
@@ -75,7 +75,7 @@ export const WEEKLY_KPI_DEFINITIONS: WeeklyKPIDefinition[] = [
   {
     id: 'linkedinMessages',
     name: 'LinkedIn Messages',
-    target: 30,
+    target: 5,
     unit: 'messages',
     category: 'social',
     color: '#FFD700'  // Yellow for social

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, 
-  ResponsiveContainer, Legend, AreaChart, Area 
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, 
+  ResponsiveContainer, Legend, Cell
 } from 'recharts';
 import TypewriterText from '@/components/TypewriterText';
 import {
@@ -128,7 +128,7 @@ const Visualizer = () => {
     });
   };
 
-  // Render all KPIs progression chart
+  // Render all KPIs progression chart (vertical layout)
   const renderAllKPIsChart = () => {
     const chartData = getKPIProgressionData();
     
@@ -138,21 +138,28 @@ const Visualizer = () => {
         <div className="text-sm text-terminal-accent/70 mb-4">{formatPeriodRange(selectedPeriod)}</div>
         <div className="h-96">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart
+            <BarChart
               data={chartData}
-              margin={{ top: 5, right: 20, left: 10, bottom: 5 }}
+              margin={{ top: 5, right: 20, left: 40, bottom: 5 }}
             >
               <CartesianGrid strokeDasharray="3 3" stroke="var(--line-faint)" />
               <XAxis 
-                dataKey="week" 
+                type="number"
                 stroke="var(--text-muted)"
+                fontSize={10}
+              />
+              <YAxis 
+                dataKey="week" 
+                type="category"
+                stroke="var(--text-muted)"
+                fontSize={10}
                 tickFormatter={(week) => {
                   const weekNum = week.split('-W')[1];
                   return `W${weekNum}`;
                 }}
-                interval={selectedPeriod === 'year' ? 3 : selectedPeriod === 'quarter' ? 1 : 0}
+                interval={0}
+                width={40}
               />
-              <YAxis stroke="var(--text-muted)" />
               <Tooltip 
                 contentStyle={{ 
                   backgroundColor: 'var(--bg-panel)', 
@@ -164,26 +171,24 @@ const Visualizer = () => {
               />
               <Legend />
               
-              {/* All KPIs as separate lines */}
+              {/* All KPIs as separate bars */}
               {WEEKLY_KPI_DEFINITIONS.map(kpi => (
-                <Line
+                <Bar
                   key={kpi.id}
-                  type="monotone"
                   dataKey={kpi.id}
-                  stroke={kpi.color}
-                  strokeWidth={2}
-                  dot={{ r: 2, fill: kpi.color }}
+                  fill={kpi.color}
                   name={kpi.name}
+                  radius={[0, 2, 2, 0]}
                 />
               ))}
-            </LineChart>
+            </BarChart>
           </ResponsiveContainer>
         </div>
       </div>
     );
   };
 
-  // Render individual KPI chart with target line
+  // Render individual KPI chart with target reference (vertical layout)
   const renderKPIChart = (kpiId: string) => {
     const kpi = WEEKLY_KPI_DEFINITIONS.find(k => k.id === kpiId);
     if (!kpi) {
@@ -204,24 +209,29 @@ const Visualizer = () => {
         </div>
         <div className="h-80">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart
+            <BarChart
               data={chartData}
-              margin={{ top: 5, right: 20, left: 10, bottom: 5 }}
+              margin={{ top: 5, right: 20, left: 40, bottom: 5 }}
             >
               <CartesianGrid strokeDasharray="3 3" stroke="var(--line-faint)" />
               <XAxis 
-                dataKey="week" 
+                type="number"
                 stroke="var(--text-muted)"
+                fontSize={10}
+                domain={[0, kpi.target * 1.2]}
+              />
+              <YAxis 
+                dataKey="week" 
+                type="category"
+                stroke="var(--text-muted)"
+                fontSize={10}
                 tickFormatter={(week) => {
                   const weekNum = week.split('-W')[1];
                   return `W${weekNum}`;
                 }}
-                interval={selectedPeriod === 'year' ? 3 : selectedPeriod === 'quarter' ? 1 : 0}
+                interval={0}
+                width={40}
               />
-                             <YAxis 
-                 stroke="var(--text-muted)"
-                 domain={[0, kpi.target * 1.2]}
-               />
               <Tooltip 
                 contentStyle={{ 
                   backgroundColor: 'var(--bg-panel)', 
@@ -236,27 +246,24 @@ const Visualizer = () => {
               />
               <Legend />
               
-              {/* Target line */}
-              <Line 
-                type="monotone" 
+              {/* Target reference bar (transparent) */}
+              <Bar 
                 dataKey="target" 
+                fill="transparent"
                 stroke={kpi.color}
                 strokeWidth={1}
                 strokeDasharray="5 5"
-                dot={{ r: 0 }}
                 name="Target"
               />
               
-              {/* Actual values */}
-              <Line 
-                type="monotone" 
+              {/* Actual values bar */}
+              <Bar 
                 dataKey="value" 
-                stroke={kpi.color}
-                strokeWidth={3}
-                dot={{ r: 4, fill: kpi.color, strokeWidth: 2, stroke: '#fff' }}
+                fill={kpi.color}
                 name="Actual"
+                radius={[0, 2, 2, 0]}
               />
-            </LineChart>
+            </BarChart>
           </ResponsiveContainer>
         </div>
       </div>

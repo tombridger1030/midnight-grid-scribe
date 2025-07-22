@@ -240,6 +240,7 @@ const TerminalLayout: React.FC = () => {
     { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
     { path: '/kpis', icon: BarChart3, label: 'Weekly KPIs' },
     { path: '/visualizer', icon: BarChart3, label: 'Analytics' },
+    { path: '/skills', icon: Terminal, label: 'Skills' },
     { path: '/roadmap', icon: GitBranch, label: 'Roadmap' }
   ];
 

@@ -4,8 +4,9 @@ import WeeklyProgressBar from '@/components/WeeklyProgressBar';
 import WeekStreakChart from '@/components/WeekStreakChart';
 import RevenueLostCounter from '@/components/RevenueLostCounter';
 import { Progress } from "@/components/ui/progress";
+import { useSkillProgressionStore } from '@/stores/skillProgressionStore';
 import { 
-  Target, TrendingUp, CheckCircle2, BarChart3, GitBranch, Award
+  Target, TrendingUp, CheckCircle2, BarChart3, GitBranch, Award, Brain
 } from 'lucide-react';
 import { 
   Goal, 
@@ -29,6 +30,16 @@ const Dashboard = () => {
   const [isLoading, setIsLoading] = useState(true);
   const currentWeek = getCurrentWeek();
   const currentMonth = getCurrentMonth();
+  
+  // Skill progression store
+  const {
+    skills,
+    getOverallProgress,
+    getUpcomingCheckpoints,
+    getOverdueCheckpoints,
+    loadSkillsFromSupabase,
+    calculateProgressFromKPIs
+  } = useSkillProgressionStore();
 
   // Load dashboard data
   useEffect(() => {
@@ -46,6 +57,12 @@ const Dashboard = () => {
         // Load current week KPI data
         const weekRecord = getWeeklyKPIRecord(currentWeek);
         setCurrentWeekData(weekRecord?.values || {});
+        
+        // Load skill progression data
+        await loadSkillsFromSupabase();
+        
+        // Calculate skill progression from current week's KPIs
+        await calculateProgressFromKPIs();
         
       } catch (error) {
         console.error('Failed to load dashboard data:', error);
@@ -165,6 +182,101 @@ const Dashboard = () => {
             </div>
             <div className="text-xl font-bold text-[#FFD700]">{goalsData.goals.length}</div>
             <div className="text-xs text-terminal-accent/70">Active Goals</div>
+          </div>
+        </div>
+
+        {/* Skill Progression Summary */}
+        <div className="mt-8 border border-terminal-accent/30 p-4 bg-terminal-bg/20">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Brain size={20} className="text-[#9D4EDD]" />
+              <h2 className="text-lg text-terminal-accent">Skill Progression</h2>
+            </div>
+            <div className="text-right">
+              <div className="text-2xl font-bold text-[#9D4EDD]">{getOverallProgress()}%</div>
+              <div className="text-xs text-terminal-accent/70">Overall Progress</div>
+            </div>
+          </div>
+          
+          <div className="mb-4">
+            <Progress 
+              value={getOverallProgress()} 
+              className="h-2"
+              style={{ '--progress-background': '#9D4EDD' } as React.CSSProperties}
+            />
+          </div>
+          
+          <div className="space-y-3">
+            {/* Skills Checkpoints - Vertical Layout */}
+            <div className="text-sm text-terminal-accent/70 mb-2">Next Skill Checkpoints</div>
+            <div className="space-y-2">
+              {skills.map(skill => {
+                // Get the next incomplete checkpoint for this skill
+                const nextCheckpoint = skill.checkpoints
+                  .filter(cp => !cp.isCompleted)
+                  .sort((a, b) => new Date(a.targetDate).getTime() - new Date(b.targetDate).getTime())[0];
+                
+                if (!nextCheckpoint) return null;
+                
+                // Calculate days until target date
+                const daysUntil = Math.ceil((new Date(nextCheckpoint.targetDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+                const isOverdue = daysUntil < 0;
+                
+                return (
+                  <div key={skill.id} className="p-3 border border-terminal-accent/20 bg-terminal-bg/10">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg">{skill.icon}</span>
+                        <div>
+                          <div className="text-sm font-medium">{skill.name}</div>
+                          <div className="text-xs text-terminal-accent/70">{skill.category}</div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-sm font-bold" style={{ color: skill.color }}>
+                          {nextCheckpoint.progressPercentage.toFixed(1)}%
+                        </div>
+                        <div className="text-xs text-terminal-accent/70">
+                          {isOverdue ? `${Math.abs(daysUntil)} days late` : `${daysUntil} days left`}
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="mb-2">
+                      <div className="text-xs font-medium mb-1">{nextCheckpoint.name}</div>
+                      <div className="text-xs text-terminal-accent/70">{nextCheckpoint.description}</div>
+                    </div>
+                    
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 h-2 bg-terminal-accent/20 rounded overflow-hidden">
+                        <div 
+                          className="h-full transition-all duration-300"
+                          style={{ 
+                            width: `${nextCheckpoint.progressPercentage}%`,
+                            backgroundColor: skill.color
+                          }}
+                        />
+                      </div>
+                      <div className="text-xs text-terminal-accent/70 min-w-0">
+                        {new Date(nextCheckpoint.targetDate).toLocaleDateString()}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            
+            {/* Overdue Summary */}
+            {getOverdueCheckpoints().length > 0 && (
+              <div className="mt-3 p-2 border border-red-400/30 bg-red-400/10">
+                <div className="text-sm text-red-400 font-medium mb-1">
+                  ⚠️ {getOverdueCheckpoints().length} Overdue Checkpoint{getOverdueCheckpoints().length > 1 ? 's' : ''}
+                </div>
+                <div className="text-xs text-terminal-accent/70">
+                  Review and update your skill progression plan
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

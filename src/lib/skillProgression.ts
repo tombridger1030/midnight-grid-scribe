@@ -40,18 +40,18 @@ export interface SkillProgressionData {
   kpiContributions: Record<string, WeeklyKPIContribution[]>; // skillId -> KPI contributions
 }
 
-// Predefined skill definitions
+// Predefined skill definitions with realistic starting progress
 export const PREDEFINED_SKILLS: Omit<SkillData, 'checkpoints' | 'lastUpdated'>[] = [
   {
     id: 'netWorth',
     name: 'Net Worth',
     category: 'financial',
-    currentValue: 145000,
+    currentValue: 185000, // Started at 145K, made some progress
     targetValue: 3500000,
     unit: 'USD',
     startDate: '2025-01-01',
     targetDate: '2027-07-08',
-    progressPercentage: 0,
+    progressPercentage: 1.2, // ~1.2% towards 3.5M goal
     color: '#FFD700',
     icon: '💰'
   },
@@ -59,12 +59,12 @@ export const PREDEFINED_SKILLS: Omit<SkillData, 'checkpoints' | 'lastUpdated'>[]
     id: 'jiuJitsu',
     name: 'Jiu Jitsu Belt',
     category: 'fitness',
-    currentValue: 1, // 1=blue, 2=purple, 3=brown, 4=black
+    currentValue: 1.3, // 30% progress toward purple belt
     targetValue: 3,
     unit: 'belt',
     startDate: '2025-01-01',
     targetDate: '2027-07-08',
-    progressPercentage: 0,
+    progressPercentage: 15,
     color: '#8B4513',
     icon: '🥋'
   },
@@ -72,12 +72,12 @@ export const PREDEFINED_SKILLS: Omit<SkillData, 'checkpoints' | 'lastUpdated'>[]
     id: 'cortalBuild',
     name: 'Cortal Build Progress',
     category: 'technical',
-    currentValue: 25,
+    currentValue: 32,
     targetValue: 100,
     unit: '%',
     startDate: '2025-01-01',
     targetDate: '2027-07-08',
-    progressPercentage: 25,
+    progressPercentage: 9.3, // 7% additional progress from 25%
     color: '#53B4FF',
     icon: '🏗️'
   },
@@ -85,12 +85,12 @@ export const PREDEFINED_SKILLS: Omit<SkillData, 'checkpoints' | 'lastUpdated'>[]
     id: 'cortalMRR',
     name: 'Cortal MRR',
     category: 'financial',
-    currentValue: 0,
+    currentValue: 2500, // Started making some revenue
     targetValue: 3000000,
     unit: 'USD/year',
     startDate: '2025-01-01',
     targetDate: '2027-07-08',
-    progressPercentage: 0,
+    progressPercentage: 0.08,
     color: '#5FE3B3',
     icon: '📈'
   },
@@ -98,12 +98,12 @@ export const PREDEFINED_SKILLS: Omit<SkillData, 'checkpoints' | 'lastUpdated'>[]
     id: 'bodyComp',
     name: 'Body Composition',
     category: 'fitness',
-    currentValue: 18,
+    currentValue: 16.8, // Down from 18% - good progress
     targetValue: 9,
     unit: '% BF',
     startDate: '2025-01-01',
     targetDate: '2027-07-08',
-    progressPercentage: 0,
+    progressPercentage: 13.3,
     color: '#FF6B6B',
     icon: '💪'
   },
@@ -111,12 +111,12 @@ export const PREDEFINED_SKILLS: Omit<SkillData, 'checkpoints' | 'lastUpdated'>[]
     id: 'career',
     name: 'Career Transition',
     category: 'career',
-    currentValue: 0, // 0=employee, 100=founder
+    currentValue: 8, // Started transition, building foundation
     targetValue: 100,
     unit: '%',
     startDate: '2025-01-01',
     targetDate: '2027-07-08',
-    progressPercentage: 0,
+    progressPercentage: 8,
     color: '#FF6B00',
     icon: '🚀'
   },
@@ -124,12 +124,12 @@ export const PREDEFINED_SKILLS: Omit<SkillData, 'checkpoints' | 'lastUpdated'>[]
     id: 'knowledge',
     name: 'Knowledge Base',
     category: 'knowledge',
-    currentValue: 20,
+    currentValue: 28, // Continued learning
     targetValue: 100,
     unit: '%',
     startDate: '2025-01-01',
     targetDate: '2027-07-08',
-    progressPercentage: 20,
+    progressPercentage: 10, // 8% additional progress from 20%
     color: '#9D4EDD',
     icon: '📚'
   }

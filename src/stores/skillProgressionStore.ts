@@ -43,6 +43,7 @@ interface SkillProgressionStore {
   getOverallProgress: () => number;
   getUpcomingCheckpoints: () => SkillCheckpoint[];
   getOverdueCheckpoints: () => SkillCheckpoint[];
+  getNextCheckpoint: (skillId: string) => SkillCheckpoint | null;
 }
 
 export const useSkillProgressionStore = create<SkillProgressionStore>()(
@@ -53,14 +54,190 @@ export const useSkillProgressionStore = create<SkillProgressionStore>()(
       isLoading: false,
       lastUpdated: new Date().toISOString(),
       
-      // Initialize skills with predefined data
+      // Initialize skills with predefined data and default checkpoints
       initializeSkills: () => {
-        const initialSkills: SkillData[] = PREDEFINED_SKILLS.map(skill => ({
-          ...skill,
-          checkpoints: [],
-          progressPercentage: calculateSkillProgress(skill as SkillData),
-          lastUpdated: new Date().toISOString()
-        }));
+        const initialSkills: SkillData[] = PREDEFINED_SKILLS.map(skill => {
+          // Create default checkpoints for each skill
+          const defaultCheckpoints: SkillCheckpoint[] = [];
+          
+          switch (skill.id) {
+            case 'netWorth':
+              defaultCheckpoints.push(
+                {
+                  id: 'nw-cp-1',
+                  skillId: skill.id,
+                  name: '250K Net Worth',
+                  description: 'First major milestone',
+                  targetDate: '2025-06-01',
+                  isCompleted: false,
+                  progressPercentage: Math.min(100, (skill.currentValue / 250000) * 100),
+                  notes: ''
+                },
+                {
+                  id: 'nw-cp-2',
+                  skillId: skill.id,
+                  name: '500K Net Worth',
+                  description: 'Half million milestone',
+                  targetDate: '2025-12-01',
+                  isCompleted: false,
+                  progressPercentage: Math.min(100, (skill.currentValue / 500000) * 100),
+                  notes: ''
+                }
+              );
+              break;
+            case 'jiuJitsu':
+              defaultCheckpoints.push(
+                {
+                  id: 'jj-cp-1',
+                  skillId: skill.id,
+                  name: 'Purple Belt',
+                  description: 'Intermediate skill level',
+                  targetDate: '2025-10-01',
+                  isCompleted: false,
+                  progressPercentage: ((skill.currentValue - 1) / (2 - 1)) * 100,
+                  notes: ''
+                },
+                {
+                  id: 'jj-cp-2',
+                  skillId: skill.id,
+                  name: 'Brown Belt',
+                  description: 'Advanced skill level',
+                  targetDate: '2027-03-01',
+                  isCompleted: false,
+                  progressPercentage: Math.max(0, ((skill.currentValue - 2) / (3 - 2)) * 100),
+                  notes: ''
+                }
+              );
+              break;
+            case 'cortalBuild':
+              defaultCheckpoints.push(
+                {
+                  id: 'cb-cp-1',
+                  skillId: skill.id,
+                  name: 'MVP Complete',
+                  description: 'Core features functional',
+                  targetDate: '2025-04-01',
+                  isCompleted: false,
+                  progressPercentage: Math.min(100, (skill.currentValue / 50) * 100),
+                  notes: ''
+                },
+                {
+                  id: 'cb-cp-2',
+                  skillId: skill.id,
+                  name: 'Beta Launch',
+                  description: 'Public testing phase',
+                  targetDate: '2025-08-01',
+                  isCompleted: false,
+                  progressPercentage: Math.max(0, ((skill.currentValue - 50) / (75 - 50)) * 100),
+                  notes: ''
+                }
+              );
+              break;
+            case 'cortalMRR':
+              defaultCheckpoints.push(
+                {
+                  id: 'mrr-cp-1',
+                  skillId: skill.id,
+                  name: 'First $10K MRR',
+                  description: 'Initial revenue milestone',
+                  targetDate: '2025-09-01',
+                  isCompleted: false,
+                  progressPercentage: Math.min(100, (skill.currentValue / 10000) * 100),
+                  notes: ''
+                },
+                {
+                  id: 'mrr-cp-2',
+                  skillId: skill.id,
+                  name: '$100K MRR',
+                  description: 'Significant growth milestone',
+                  targetDate: '2026-06-01',
+                  isCompleted: false,
+                  progressPercentage: Math.max(0, (skill.currentValue / 100000) * 100),
+                  notes: ''
+                }
+              );
+              break;
+            case 'bodyComp':
+              defaultCheckpoints.push(
+                {
+                  id: 'bc-cp-1',
+                  skillId: skill.id,
+                  name: '15% Body Fat',
+                  description: 'Lean physique milestone',
+                  targetDate: '2025-07-01',
+                  isCompleted: false,
+                  progressPercentage: Math.min(100, ((18 - skill.currentValue) / (18 - 15)) * 100),
+                  notes: ''
+                },
+                {
+                  id: 'bc-cp-2',
+                  skillId: skill.id,
+                  name: '12% Body Fat',
+                  description: 'Athletic physique',
+                  targetDate: '2026-01-01',
+                  isCompleted: false,
+                  progressPercentage: Math.max(0, ((15 - skill.currentValue) / (15 - 12)) * 100),
+                  notes: ''
+                }
+              );
+              break;
+            case 'career':
+              defaultCheckpoints.push(
+                {
+                  id: 'car-cp-1',
+                  skillId: skill.id,
+                  name: 'Side Business Launch',
+                  description: 'First entrepreneurial step',
+                  targetDate: '2025-05-01',
+                  isCompleted: false,
+                  progressPercentage: Math.min(100, (skill.currentValue / 25) * 100),
+                  notes: ''
+                },
+                {
+                  id: 'car-cp-2',
+                  skillId: skill.id,
+                  name: 'Full-time Founder',
+                  description: 'Complete transition',
+                  targetDate: '2026-01-01',
+                  isCompleted: false,
+                  progressPercentage: Math.max(0, ((skill.currentValue - 25) / (75 - 25)) * 100),
+                  notes: ''
+                }
+              );
+              break;
+            case 'knowledge':
+              defaultCheckpoints.push(
+                {
+                  id: 'kn-cp-1',
+                  skillId: skill.id,
+                  name: 'AI/ML Fundamentals',
+                  description: 'Core technical knowledge',
+                  targetDate: '2025-08-01',
+                  isCompleted: false,
+                  progressPercentage: Math.min(100, (skill.currentValue / 50) * 100),
+                  notes: ''
+                },
+                {
+                  id: 'kn-cp-2',
+                  skillId: skill.id,
+                  name: 'Business Strategy Mastery',
+                  description: 'Leadership and strategy skills',
+                  targetDate: '2026-03-01',
+                  isCompleted: false,
+                  progressPercentage: Math.max(0, ((skill.currentValue - 50) / (80 - 50)) * 100),
+                  notes: ''
+                }
+              );
+              break;
+          }
+          
+          return {
+            ...skill,
+            checkpoints: defaultCheckpoints,
+            progressPercentage: calculateSkillProgress(skill as SkillData),
+            lastUpdated: new Date().toISOString()
+          };
+        });
         
         set({ skills: initialSkills, lastUpdated: new Date().toISOString() });
       },
@@ -351,6 +528,17 @@ export const useSkillProgressionStore = create<SkillProgressionStore>()(
         });
         
         return checkpoints.sort((a, b) => new Date(a.targetDate).getTime() - new Date(b.targetDate).getTime());
+      },
+
+      // Get the next checkpoint for a specific skill
+      getNextCheckpoint: (skillId: string) => {
+        const { skills } = get();
+        const skill = skills.find(s => s.id === skillId);
+        if (!skill) return null;
+        
+        return skill.checkpoints
+          .filter(cp => !cp.isCompleted)
+          .sort((a, b) => new Date(a.targetDate).getTime() - new Date(b.targetDate).getTime())[0] || null;
       }
     }),
     {
