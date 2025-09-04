@@ -1067,7 +1067,7 @@ export async function syncSprintData(): Promise<void> {
     if (sprintStartDate) {
       // Check if we already have an active sprint
       const { data: existingSprints } = await supabase
-        .from('sprints')
+        // .from('sprints') removed
         .select('*')
         .eq('user_id', FIXED_USER_ID)
         .eq('status', 'active');
@@ -1075,7 +1075,7 @@ export async function syncSprintData(): Promise<void> {
       if (!existingSprints || existingSprints.length === 0) {
         // Create an active sprint - let database defaults handle timestamps
         const { error } = await supabase
-          .from('sprints')
+          // .from('sprints') removed
           .insert([{
             user_id: FIXED_USER_ID,
             start_date: new Date(sprintStartDate).toISOString().split('T')[0],
@@ -1229,7 +1229,7 @@ export async function testSupabaseConnection(): Promise<{ success: boolean; mess
     const results: SupabaseTestResults = {};
     
     // Test each table
-    const tables = ['financial_metrics', 'goals', 'metrics', 'sprints', 'roadmaps', 'kanban_boards', 'kanban_columns', 'kanban_tasks'];
+    const tables = ['financial_metrics', 'goals', 'metrics', 'roadmaps', 'kanban_boards', 'kanban_columns', 'kanban_tasks'];
     
     for (const table of tables) {
       try {

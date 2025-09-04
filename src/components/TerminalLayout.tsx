@@ -2,21 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useLocation, Outlet } from 'react-router-dom';
 import { Terminal, LayoutDashboard, GitBranch, Cpu, HardDrive, Wifi, Globe, Network, Menu, X, Upload, Download, Loader2, CheckCircle2, BarChart3 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { syncAllDataToSupabase, loadAllDataFromSupabase, syncAllDataToSupabaseWithTest, testSupabaseConnection, verifySyncFunctionality, FIXED_USER_ID } from '@/lib/storage';
-import { supabase } from '@/lib/supabase';
-import { getCurrentLocalDate } from '@/lib/dateUtils';
-
-// Sprint interface
-interface Sprint {
-  sprint_id: string;
-  user_id: string;
-  start_date: string;
-  end_date?: string;
-  status: 'active' | 'completed' | 'planned';
-  name?: string;
-  on_days?: number;
-  off_days?: number;
-}
+import { syncAllDataToSupabase, loadAllDataFromSupabase, syncAllDataToSupabaseWithTest, testSupabaseConnection, verifySyncFunctionality } from '@/lib/storage';
 
 const TerminalLayout: React.FC = () => {
   const location = useLocation();
@@ -39,13 +25,7 @@ const TerminalLayout: React.FC = () => {
   const [isTesting, setIsTesting] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string>('');
-  const [sprintData, setSprintData] = useState({
-    dayOfSprint: 1,
-    isOnPeriod: true,
-    totalDays: 28,
-    phase: 'ON' as 'ON' | 'OFF' | 'NONE',
-    daysUntilNext: 0
-  });
+  // Removed sprint UI/state
   
   // Get current page name for terminal prompt
   const getCurrentPagePath = () => {
@@ -54,149 +34,7 @@ const TerminalLayout: React.FC = () => {
     return path;
   };
 
-  // Auto-update sprint status based on current date (same logic as Schedule page)
-  const updateSprintStatuses = async (sprintData: Sprint[]) => {
-    const today = getCurrentLocalDate();
-    const todayDate = new Date(today);
-    let needsUpdate = false;
-    
-    const updatedSprints = sprintData.map(sprint => {
-      const sprintStart = new Date(sprint.start_date);
-      const sprintEnd = sprint.end_date ? new Date(sprint.end_date) : null;
-      
-      let newStatus = sprint.status;
-      
-      // Auto-update status based on dates
-      if (sprint.status === 'planned' && todayDate >= sprintStart) {
-        newStatus = 'active';
-        needsUpdate = true;
-      } else if (sprint.status === 'active' && sprintEnd && todayDate > sprintEnd) {
-        newStatus = 'completed';
-        needsUpdate = true;
-      }
-      
-      return { ...sprint, status: newStatus };
-    });
-    
-    if (needsUpdate) {
-      // Update statuses in database
-      for (const sprint of updatedSprints) {
-        if (sprint.status !== sprintData.find(s => s.sprint_id === sprint.sprint_id)?.status) {
-          await supabase
-            .from('sprints')
-            .update({ status: sprint.status })
-            .eq('sprint_id', sprint.sprint_id)
-            .eq('user_id', FIXED_USER_ID);
-        }
-      }
-      
-      // Return updated data for immediate use
-      return updatedSprints;
-    }
-    
-    return sprintData;
-  };
-
-  // Load sprint data from Supabase
-  const loadSprintData = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('sprints')
-        .select('*')
-        .eq('user_id', FIXED_USER_ID)
-        .order('start_date', { ascending: true });
-      
-      if (error) {
-        console.error('Error loading sprints:', error);
-        return;
-      }
-      
-      // Auto-update sprint statuses first
-      const updatedSprints = await updateSprintStatuses(data || []);
-      
-      // Calculate current sprint data
-      const today = getCurrentLocalDate();
-      const todayDate = new Date(today);
-      
-      // Find active sprint
-      const activeSprint = updatedSprints?.find(s => s.status === 'active');
-      
-      if (activeSprint) {
-        const sprintStart = new Date(activeSprint.start_date);
-        const onDays = activeSprint.on_days || 21;
-        const offDays = activeSprint.off_days || 7;
-        const totalCycleDays = onDays + offDays;
-        
-        // Calculate days since sprint start
-        const daysSinceStart = Math.floor((todayDate.getTime() - sprintStart.getTime()) / (1000 * 60 * 60 * 24));
-        
-        // Calculate current cycle position
-        const cyclePosition = daysSinceStart % totalCycleDays;
-        const dayOfSprint = cyclePosition + 1;
-        const isOnPeriod = cyclePosition < onDays;
-        
-        let phase: 'ON' | 'OFF' | 'NONE';
-        let daysUntilNext = 0;
-        
-        if (isOnPeriod) {
-          phase = 'ON';
-          daysUntilNext = 0; // Not applicable during ON phase
-        } else {
-          phase = 'OFF';
-          daysUntilNext = totalCycleDays - cyclePosition; // Days until next ON phase
-        }
-        
-        setSprintData({
-          dayOfSprint,
-          isOnPeriod,
-          totalDays: totalCycleDays,
-          phase,
-          daysUntilNext
-        });
-      } else {
-        // Check if there's a planned sprint coming up
-        const plannedSprint = updatedSprints?.find(s => s.status === 'planned');
-        
-        if (plannedSprint) {
-          const sprintStart = new Date(plannedSprint.start_date);
-          const daysUntilStart = Math.ceil((sprintStart.getTime() - todayDate.getTime()) / (1000 * 60 * 60 * 24));
-          
-          setSprintData({
-            dayOfSprint: 0,
-            isOnPeriod: false,
-            totalDays: 28,
-            phase: 'NONE',
-            daysUntilNext: daysUntilStart > 0 ? daysUntilStart : 0
-          });
-        } else {
-          // No active or planned sprint
-          setSprintData({
-            dayOfSprint: 0,
-            isOnPeriod: false,
-            totalDays: 28,
-            phase: 'NONE',
-            daysUntilNext: 0
-          });
-        }
-      }
-    } catch (err) {
-      console.error('Failed to load sprint data:', err);
-      setSprintData({
-        dayOfSprint: 0,
-        isOnPeriod: false,
-        totalDays: 28,
-        phase: 'NONE',
-        daysUntilNext: 0
-      });
-    }
-  };
-
-  // Load sprint data on mount and refresh periodically
-  useEffect(() => {
-    loadSprintData();
-    const interval = setInterval(loadSprintData, 10000); // Update every 10 seconds
-    return () => clearInterval(interval);
-  }, []);
+  // Removed sprint fetching/useEffect
 
   // Simulate changing system stats
   useEffect(() => {
@@ -240,7 +78,6 @@ const TerminalLayout: React.FC = () => {
     { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
     { path: '/kpis', icon: BarChart3, label: 'Weekly KPIs' },
     { path: '/visualizer', icon: BarChart3, label: 'Analytics' },
-    { path: '/skills', icon: Terminal, label: 'Skills' },
     { path: '/roadmap', icon: GitBranch, label: 'Roadmap' }
   ];
 
@@ -427,27 +264,11 @@ const TerminalLayout: React.FC = () => {
                 <span className="hidden lg:flex items-center">
                   <Wifi size={12} className="mr-1" /> {systemStats.net} KB/s
                 </span>
-                <span className={sprintData.phase === 'ON' ? "text-[#5FE3B3]" : sprintData.phase === 'OFF' ? "text-[#53B4FF]" : "text-[#FFD700]"}>
-                  {sprintData.phase === 'ON' ? (
-                    `Sprint: ${sprintData.dayOfSprint}/${sprintData.totalDays}`
-                  ) : sprintData.phase === 'OFF' ? (
-                    `Sprint: OFF (${sprintData.daysUntilNext}d until next)`
-                  ) : (
-                    sprintData.daysUntilNext > 0 ? `Next Sprint: ${sprintData.daysUntilNext}d` : 'No Sprint'
-                  )}
-                </span>
+                {/* Sprint indicators removed */}
               </div>
 
             </div>
-            {/* Sprint progress bar - only show during ON phase */}
-            {sprintData.phase === 'ON' && (
-              <div className="sprint-progress-container mt-1">
-                <div 
-                  className="sprint-progress-bar" 
-                  style={{ width: `${(sprintData.dayOfSprint / 21) * 100}%` }}
-                ></div>
-              </div>
-            )}
+            {/* Sprint progress bar removed */}
           </div>
 
           {/* Terminal content */}

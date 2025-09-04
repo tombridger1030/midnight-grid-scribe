@@ -11,6 +11,7 @@ import {
   calculateWeekCompletion,
   loadWeeklyKPIsWithSync
 } from '@/lib/weeklyKpi';
+import { getWeeklyDailyValues, updateWeeklyDailyValue, getWeekDayDates, setWeeklyDailyValues, loadWeeklyEntriesForWeek } from '@/lib/weeklyKpi';
 import { Progress } from "@/components/ui/progress";
 import { ChevronLeft, ChevronRight, Target, TrendingUp, Plus, Minus } from 'lucide-react';
 
@@ -23,6 +24,7 @@ const WeeklyKPIInput: React.FC<WeeklyKPIInputProps> = ({ onWeekChange }) => {
   const [values, setValues] = useState<WeeklyKPIValues>({});
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [editingDay, setEditingDay] = useState<Record<string, number | null>>({});
 
   // Load data from Supabase on mount
   useEffect(() => {
@@ -51,9 +53,13 @@ const WeeklyKPIInput: React.FC<WeeklyKPIInputProps> = ({ onWeekChange }) => {
   // Load data for current week when week changes
   useEffect(() => {
     if (!isLoading) {
-      const record = getWeeklyKPIRecord(currentWeek);
-      setValues(record?.values || {});
-      onWeekChange?.(currentWeek);
+      const loadWeek = async () => {
+        await loadWeeklyEntriesForWeek(currentWeek);
+        const record = getWeeklyKPIRecord(currentWeek);
+        setValues(record?.values || {});
+        onWeekChange?.(currentWeek);
+      };
+      loadWeek();
     }
   }, [currentWeek, onWeekChange, isLoading]);
 
@@ -83,6 +89,12 @@ const WeeklyKPIInput: React.FC<WeeklyKPIInputProps> = ({ onWeekChange }) => {
     try {
       setIsSyncing(true);
       await updateWeeklyKPIRecord(currentWeek, { [kpiId]: Math.max(0, value) });
+      // If set to zero, clear all daily dots for that KPI
+      if (Math.max(0, value) === 0) {
+        await setWeeklyDailyValues(currentWeek, kpiId, new Array(7).fill(0));
+        const record = getWeeklyKPIRecord(currentWeek);
+        setValues(record?.values || {});
+      }
     } catch (error) {
       console.error('Failed to sync KPI update:', error);
       // The value is still updated locally, so the user sees the change
@@ -91,20 +103,38 @@ const WeeklyKPIInput: React.FC<WeeklyKPIInputProps> = ({ onWeekChange }) => {
     }
   };
 
-  // Increment KPI value
-  const incrementKPI = (kpiId: string) => {
+  // Increment KPI value (or selected day's value if a day is active)
+  const incrementKPI = async (kpiId: string) => {
     const kpi = WEEKLY_KPI_DEFINITIONS.find(k => k.id === kpiId);
-    const currentValue = values[kpiId] || 0;
     const step = kpi?.unit === 'hours' ? 0.5 : 1;
-    updateKPI(kpiId, currentValue + step);
+    const activeIdx = Number.isInteger(editingDay[kpiId] as number) ? (editingDay[kpiId] as number) : null;
+    if (activeIdx !== null) {
+      const daily = getWeeklyDailyValues(currentWeek, kpiId);
+      const next = Math.max(0, Number(daily[activeIdx] || 0) + step);
+      await updateWeeklyDailyValue(currentWeek, kpiId, activeIdx, next);
+      const record = getWeeklyKPIRecord(currentWeek);
+      setValues(record?.values || {});
+    } else {
+      const currentValue = values[kpiId] || 0;
+      updateKPI(kpiId, currentValue + step);
+    }
   };
 
-  // Decrement KPI value
-  const decrementKPI = (kpiId: string) => {
+  // Decrement KPI value (or selected day's value if a day is active)
+  const decrementKPI = async (kpiId: string) => {
     const kpi = WEEKLY_KPI_DEFINITIONS.find(k => k.id === kpiId);
-    const currentValue = values[kpiId] || 0;
     const step = kpi?.unit === 'hours' ? 0.5 : 1;
-    updateKPI(kpiId, Math.max(0, currentValue - step));
+    const activeIdx = Number.isInteger(editingDay[kpiId] as number) ? (editingDay[kpiId] as number) : null;
+    if (activeIdx !== null) {
+      const daily = getWeeklyDailyValues(currentWeek, kpiId);
+      const next = Math.max(0, Number(daily[activeIdx] || 0) - step);
+      await updateWeeklyDailyValue(currentWeek, kpiId, activeIdx, next);
+      const record = getWeeklyKPIRecord(currentWeek);
+      setValues(record?.values || {});
+    } else {
+      const currentValue = values[kpiId] || 0;
+      updateKPI(kpiId, Math.max(0, currentValue - step));
+    }
   };
 
   // Get status color for progress bars
@@ -233,6 +263,53 @@ const WeeklyKPIInput: React.FC<WeeklyKPIInputProps> = ({ onWeekChange }) => {
                         '--progress-foreground': kpi.color
                       } as React.CSSProperties}
                     />
+                    {/* Daily Dots Row */}
+                    <div className="flex items-center justify-between py-1">
+                      {(() => {
+                        const daily = getWeeklyDailyValues(currentWeek, kpi.id);
+                        const dayDates = getWeekDayDates(currentWeek);
+                        const dayNames = dayDates.map(d => d.toLocaleDateString(undefined, { weekday: 'short' }));
+                        const dayLetters = dayNames.map(n => n.slice(0, 1));
+                        const formatCount = (v: number, unit: string) => {
+                          const baseStep = unit === 'hours' ? 0.5 : 1;
+                          const half = baseStep / 2;
+                          const decimals = half < 1 ? (String(half).split('.')[1]?.length || 1) : 0;
+                          const rounded = Number(v.toFixed(decimals));
+                          return decimals > 0 ? rounded.toFixed(decimals) : String(rounded);
+                        };
+                        return (
+                          <div className="w-full">
+                            <div className="grid grid-cols-7 gap-2 w-full px-2 justify-items-center">
+                              {daily.map((val, idx) => (
+                                <div key={idx} className="relative flex flex-col items-center justify-center w-6">
+                                  <div className="relative">
+                                    <button
+                                      onClick={() => setEditingDay(prev => ({ ...prev, [kpi.id]: (prev[kpi.id] === idx ? null : idx) }))}
+                                      className={`h-2 w-2 rounded-full transition-colors focus:outline-none border-2 ${editingDay[kpi.id] === idx
+                                        ? 'bg-[#FF6B00] border-white' // active edit (orange)
+                                        : (val > 0 ? 'bg-[#5FE3B3] border-white' : 'bg-white/10 border-white/70')}`}
+                                      title={dayNames[idx]}
+                                      tabIndex={0}
+                                    />
+                                    {(val > 0 || editingDay[kpi.id] === idx) && (
+                                      <span className="absolute inset-0 flex items-center justify-center text-[8px] leading-none text-white pointer-events-none">
+                                        {formatCount(val, kpi.unit)}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                            <div className="grid grid-cols-7 gap-2 w-full px-2 mt-1 text-[10px] text-terminal-accent/70 justify-items-center">
+                              {dayLetters.map((l, idx) => (
+                                <span key={`label-${idx}`} className="leading-none select-none">{l}</span>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                    {/* Legacy labels row under dots */}
                     <div className="flex justify-between text-xs text-terminal-accent/50">
                       <span>0</span>
                       {isRange && (
@@ -262,7 +339,18 @@ const WeeklyKPIInput: React.FC<WeeklyKPIInputProps> = ({ onWeekChange }) => {
                        min="0"
                        step={kpi.unit === 'hours' ? '0.5' : '1'}
                        value={currentValue}
-                       onChange={(e) => updateKPI(kpi.id, parseFloat(e.target.value) || 0)}
+                       onChange={async (e) => {
+                        const raw = parseFloat(e.target.value);
+                        const parsed = Number.isFinite(raw) ? raw : 0;
+                        const activeIdx = Number.isInteger(editingDay[kpi.id] as number) ? (editingDay[kpi.id] as number) : null;
+                        if (activeIdx !== null) {
+                          await updateWeeklyDailyValue(currentWeek, kpi.id, activeIdx, Math.max(0, parsed));
+                          const record = getWeeklyKPIRecord(currentWeek);
+                          setValues(record?.values || {});
+                        } else {
+                          updateKPI(kpi.id, parsed);
+                        }
+                      }}
                        className="terminal-input w-20 text-center"
                        placeholder="0"
                      />

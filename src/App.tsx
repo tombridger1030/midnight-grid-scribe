@@ -7,7 +7,6 @@ import TerminalLayout from "@/components/TerminalLayout";
 import Index from "./pages/Index";
 import Dashboard from "./pages/Dashboard";
 import Visualizer from "./pages/Visualizer";
-import SkillProgression from "./pages/SkillProgression";
 import Roadmap from "./pages/Roadmap";
 import NotFound from "./pages/NotFound";
 import { useState, useEffect } from "react";
@@ -64,7 +63,6 @@ const App = () => {
                 <Route path="kpis" element={<Index />} />
                 <Route path="dashboard" element={<Dashboard />} />
                 <Route path="visualizer" element={<Visualizer />} />
-                <Route path="skills" element={<SkillProgression />} />
                 <Route path="roadmap" element={<Roadmap />} />
               </Route>
               <Route path="*" element={<NotFound />} />

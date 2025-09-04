@@ -101,6 +101,10 @@ export interface WeeklyKPIRecord {
   values: WeeklyKPIValues;
   createdAt: string;
   updatedAt: string;
+  // Optional per-day breakdown for each KPI (7 entries for Mon-Sun)
+  daily?: Record<string, number[]>;
+  // Map of ISO date (YYYY-MM-DD) -> { [kpiId]: number } for exact-date tracking
+  dailyByDate?: Record<string, Record<string, number>>;
 }
 
 // Storage data structure
@@ -136,6 +140,25 @@ export const getWeekDates = (weekKey: string): { start: Date; end: Date } => {
   end.setDate(start.getDate() + 6);
   
   return { start, end };
+};
+
+// Get the 7 dates for a week key (start..start+6)
+export const getWeekDayDates = (weekKey: string): Date[] => {
+  const { start } = getWeekDates(weekKey);
+  const days: Date[] = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(start);
+    d.setDate(start.getDate() + i);
+    days.push(d);
+  }
+  return days;
+};
+
+export const toISODate = (d: Date): string => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 };
 
 export const formatWeekKey = (weekKey: string): string => {
@@ -207,6 +230,135 @@ export const updateWeeklyKPIRecord = async (weekKey: string, values: Partial<Wee
   await saveWeeklyKPIs(data);
 };
 
+// Read daily values for a KPI in a given week (always length 7)
+export const getWeeklyDailyValues = (weekKey: string, kpiId: string): number[] => {
+  const record = getWeeklyKPIRecord(weekKey);
+  const dates = getWeekDayDates(weekKey).map(toISODate);
+
+  if (record && record.dailyByDate) {
+    return dates.map(date => {
+      const dayMap = record!.dailyByDate![date];
+      if (!dayMap) return 0;
+      const v = dayMap[kpiId];
+      return typeof v === 'number' && Number.isFinite(v) ? v : 0;
+    });
+  }
+
+  // Fallback to old daily array if exists
+  if (record && record.daily && record.daily[kpiId]) {
+    const arr = record.daily[kpiId];
+    const normalized = (Array.isArray(arr) ? arr : []).map(v => (typeof v === 'number' && Number.isFinite(v) ? v : 0));
+    while (normalized.length < 7) normalized.push(0);
+    return normalized.slice(0, 7);
+  }
+
+  return new Array(7).fill(0);
+};
+
+// Update a single day's value for a KPI (0/1) and keep weekly total in sync
+export const updateWeeklyDailyValue = async (
+  weekKey: string,
+  kpiId: string,
+  dayIndex: number,
+  value: number
+): Promise<void> => {
+  const data = loadWeeklyKPIs();
+  const now = new Date().toISOString();
+  let record = data.records.find(r => r.weekKey === weekKey);
+  if (!record) {
+    record = {
+      weekKey,
+      values: {},
+      createdAt: now,
+      updatedAt: now,
+      daily: {},
+      dailyByDate: {}
+    };
+    data.records.push(record);
+  }
+
+  // Keep compatibility array as well as date-keyed map
+  if (!record.daily) record.daily = {};
+  if (!record.daily[kpiId]) record.daily[kpiId] = new Array(7).fill(0);
+  const arr = record.daily[kpiId].slice();
+  if (dayIndex < 0 || dayIndex > 6) return; // ignore invalid
+  arr[dayIndex] = Math.max(0, Number(value) || 0);
+  record.daily[kpiId] = arr;
+
+  if (!record.dailyByDate) record.dailyByDate = {};
+  const weekDates = getWeekDayDates(weekKey);
+  const dateKey = toISODate(weekDates[dayIndex]);
+  if (!record.dailyByDate[dateKey]) record.dailyByDate[dateKey] = {};
+  record.dailyByDate[dateKey][kpiId] = Math.max(0, Number(value) || 0);
+
+  // Keep weekly total aligned with sum of daily values (counts or quantities)
+  const sum = arr.reduce((s, n) => s + (Number.isFinite(n) ? Number(n) : 0), 0);
+  record.values[kpiId] = sum;
+  record.updatedAt = now;
+
+  await saveWeeklyKPIs(data);
+
+  // Persist a per-date entry row for analytics/reporting
+  try {
+    const { error } = await supabase
+      .from('weekly_kpi_entries')
+      .upsert({
+        user_id: FIXED_USER_ID,
+        date: dateKey,
+        week_key: weekKey,
+        kpi_id: kpiId,
+        value: Math.max(0, Number(value) || 0)
+      }, {
+        onConflict: 'user_id,date,kpi_id'
+      });
+    if (error) console.error('Failed to upsert weekly_kpi_entries:', error);
+  } catch (e) {
+    console.error('Failed to save weekly_kpi_entries:', e);
+  }
+};
+
+// Overwrite the entire week's daily values for a KPI (length 7), and sync weekly total
+export const setWeeklyDailyValues = async (
+  weekKey: string,
+  kpiId: string,
+  values: number[]
+): Promise<void> => {
+  const data = loadWeeklyKPIs();
+  const now = new Date().toISOString();
+  let record = data.records.find(r => r.weekKey === weekKey);
+  if (!record) {
+    record = {
+      weekKey,
+      values: {},
+      createdAt: now,
+      updatedAt: now,
+      daily: {},
+      dailyByDate: {}
+    };
+    data.records.push(record);
+  }
+
+  if (!record.daily) record.daily = {};
+  const arr = (Array.isArray(values) ? values.slice(0, 7) : []).map(v => (Number.isFinite(Number(v)) ? Math.max(0, Number(v)) : 0));
+  while (arr.length < 7) arr.push(0);
+  record.daily[kpiId] = arr;
+
+  // Also set date-keyed map
+  if (!record.dailyByDate) record.dailyByDate = {};
+  const weekDates = getWeekDayDates(weekKey);
+  arr.forEach((val, idx) => {
+    const dateKey = toISODate(weekDates[idx]);
+    if (!record!.dailyByDate![dateKey]) record!.dailyByDate![dateKey] = {};
+    record!.dailyByDate![dateKey][kpiId] = val;
+  });
+
+  const sum = arr.reduce((s, n) => s + (Number.isFinite(n) ? Number(n) : 0), 0);
+  record.values[kpiId] = sum;
+  record.updatedAt = now;
+
+  await saveWeeklyKPIs(data);
+};
+
 // Load weekly KPIs with Supabase sync
 export const loadWeeklyKPIsWithSync = async (): Promise<WeeklyKPIData> => {
   try {
@@ -273,9 +425,11 @@ export const loadWeeklyKPIsFromSupabase = async (userId: string = FIXED_USER_ID)
     
     const records: WeeklyKPIRecord[] = (data || []).map(row => ({
       weekKey: row.week_key,
-      values: row.data || {},
+      values: (row.data && typeof row.data === 'object' && !Array.isArray(row.data) && row.data.values) ? row.data.values : (row.data || {}),
       createdAt: row.created_at,
-      updatedAt: row.updated_at
+      updatedAt: row.updated_at,
+      daily: (row.data && row.data.__daily) ? row.data.__daily : undefined,
+      dailyByDate: (row.data && row.data.__dailyByDate) ? row.data.__dailyByDate : undefined
     }));
     
     return { records };
@@ -291,7 +445,8 @@ export const saveWeeklyKPIsToSupabase = async (data: WeeklyKPIData, userId: stri
     const upsertData = data.records.map(record => ({
       user_id: userId,
       week_key: record.weekKey,
-      data: record.values,
+      // Store values and embed daily breakdowns for compatibility and exact dates
+      data: { values: record.values, __daily: record.daily || {}, __dailyByDate: record.dailyByDate || {} },
       created_at: record.createdAt,
       updated_at: record.updatedAt
     }));
@@ -327,3 +482,61 @@ export const getRecentWeeks = (count: number = 6): string[] => {
 };
 
 // Types are already exported above 
+
+// Load per-date entries for a week and merge into local weekly record
+export const loadWeeklyEntriesForWeek = async (weekKey: string, userId: string = FIXED_USER_ID): Promise<void> => {
+  try {
+    const { data, error } = await supabase
+      .from('weekly_kpi_entries')
+      .select('date,kpi_id,value')
+      .eq('user_id', userId)
+      .eq('week_key', weekKey);
+
+    if (error) {
+      console.error('Failed to load weekly_kpi_entries:', error);
+      return;
+    }
+
+    const store = loadWeeklyKPIs();
+    const now = new Date().toISOString();
+    let record = store.records.find(r => r.weekKey === weekKey);
+    if (!record) {
+      record = { weekKey, values: {}, createdAt: now, updatedAt: now, dailyByDate: {}, daily: {} };
+      store.records.push(record);
+    }
+    if (!record.dailyByDate) record.dailyByDate = {};
+
+    // Merge entries
+    for (const row of data || []) {
+      const dateKey: string = row.date;
+      const kpiId: string = row.kpi_id;
+      const value: number = Number(row.value) || 0;
+      if (!record.dailyByDate[dateKey]) record.dailyByDate[dateKey] = {};
+      record.dailyByDate[dateKey][kpiId] = Math.max(0, value);
+    }
+
+    // Recompute 7-day arrays and weekly totals from dailyByDate
+    const weekDates = getWeekDayDates(weekKey).map(toISODate);
+    const allKpiIds = new Set<string>();
+    // Collect all kpi ids present
+    Object.values(record.dailyByDate).forEach(map => {
+      Object.keys(map || {}).forEach(k => allKpiIds.add(k));
+    });
+
+    if (!record.daily) record.daily = {};
+    for (const kpiId of allKpiIds) {
+      const arr = weekDates.map(d => {
+        const dayMap = record!.dailyByDate![d];
+        return dayMap && Number.isFinite(Number(dayMap[kpiId])) ? Math.max(0, Number(dayMap[kpiId])) : 0;
+      });
+      record.daily[kpiId] = arr;
+      const sum = arr.reduce((s, n) => s + (Number.isFinite(n) ? Number(n) : 0), 0);
+      record.values[kpiId] = sum;
+    }
+
+    record.updatedAt = now;
+    await saveWeeklyKPIs(store);
+  } catch (err) {
+    console.error('Error merging weekly entries:', err);
+  }
+};
