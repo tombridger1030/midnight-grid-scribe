@@ -26,4 +26,10 @@ create trigger trg_weekly_kpi_entries_set_updated_at
 before update on weekly_kpi_entries
 for each row execute function set_updated_at_weekly_kpi_entries();
 
+-- Optional backfill/rename existing KPI ids in entries table
+-- Rename old 'coldPlunges' KPI id to new 'recoverySessions'
+update weekly_kpi_entries
+set kpi_id = 'recoverySessions'
+where kpi_id = 'coldPlunges';
+
 

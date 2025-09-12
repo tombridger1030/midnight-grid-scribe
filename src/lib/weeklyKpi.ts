@@ -9,7 +9,7 @@ export interface WeeklyKPIDefinition {
   target: number;
   minTarget?: number; // For ranges like 3-4 strength sessions
   unit: string;
-  category: 'fitness' | 'health' | 'productivity' | 'social' | 'learning';
+  category: 'fitness' | 'health' | 'productivity' | 'social' | 'learning' | 'discipline' | 'engineering';
   color: string;
 }
 
@@ -33,60 +33,79 @@ export const WEEKLY_KPI_DEFINITIONS: WeeklyKPIDefinition[] = [
     color: '#FF6B00'  // Orange for fitness
   },
   {
-    id: 'coldPlunges',
-    name: 'Cold Plunges',
+    id: 'deepWorkHours',
+    name: 'Deep Work Hours',
+    target: 30,
+    minTarget: 20,
+    unit: 'hours',
+    category: 'discipline',
+    color: '#FF6B00'  // Orange for discipline
+  },
+  {
+    id: 'recoverySessions',
+    name: 'Recovery Sessions',
     target: 5,
+    minTarget: 3,
     unit: 'sessions',
-    category: 'health',
-    color: '#53B4FF'  // Blue for health
+    category: 'fitness',
+    color: '#FF6B00'  // Orange for fitness
   },
   {
     id: 'sleepAverage',
     name: 'Sleep Average',
-    target: 6,
+    target: 7,
+    minTarget: 6,
     unit: 'hours',
-    category: 'health',
-    color: '#53B4FF'  // Blue for health
+    category: 'discipline',
+    color: '#FF6B00'  // Orange for discipline
   },
   {
-    id: 'deepWorkBlocks',
-    name: 'Deep Work Blocks',
+    id: 'prRequests',
+    name: 'PR Requests',
+    target: 2,
+    unit: 'requests',
+    category: 'engineering',
+    color: '#53B4FF'  // Blue for engineering
+  },
+  {
+    id: 'bugsClosed',
+    name: 'Bugs Closed',
     target: 10,
-    unit: 'blocks',
-    category: 'productivity',
-    color: '#5FE3B3'  // Green for productivity
+    unit: 'bugs',
+    category: 'engineering',
+    color: '#53B4FF'  // Blue for engineering
   },
   {
-    id: 'gitCommits',
-    name: 'Git Commits',
-    target: 25,
-    unit: 'commits',
-    category: 'productivity',
-    color: '#5FE3B3'  // Green for productivity
-  },
-  {
-    id: 'twitterDMs',
-    name: 'Twitter DMs',
-    target: 3,
-    unit: 'messages',
-    category: 'social',
-    color: '#FFD700'  // Yellow for social
-  },
-  {
-    id: 'linkedinMessages',
-    name: 'LinkedIn Messages',
-    target: 5,
-    unit: 'messages',
-    category: 'social',
-    color: '#FFD700'  // Yellow for social
+    id: 'contentShipped',
+    name: 'Content Shipped',
+    target: 7,
+    unit: 'items',
+    category: 'engineering',
+    color: '#53B4FF'  // Blue for engineering
   },
   {
     id: 'readingPages',
-    name: 'Reading',
-    target: 300,
+    name: 'Pages Read',
+    target: 100,
     unit: 'pages',
     category: 'learning',
     color: '#FF6B6B'  // Red for learning
+  },
+  {
+    id: 'audiobookPercent',
+    name: '% Audiobook Listened',
+    target: 100,
+    unit: '%',
+    category: 'learning',
+    color: '#FF6B6B'  // Red for learning
+  },
+  {
+    id: 'noCompromises',
+    name: 'No Compromises',
+    target: 7,
+    unit: 'days',
+    category: 'discipline',
+    color: '#FF6B00'  // Orange for discipline
   }
 ];
 
@@ -291,9 +310,22 @@ export const updateWeeklyDailyValue = async (
   if (!record.dailyByDate[dateKey]) record.dailyByDate[dateKey] = {};
   record.dailyByDate[dateKey][kpiId] = Math.max(0, Number(value) || 0);
 
-  // Keep weekly total aligned with sum of daily values (counts or quantities)
+  // Compute weekly aggregate with KPI-specific rules
   const sum = arr.reduce((s, n) => s + (Number.isFinite(n) ? Number(n) : 0), 0);
-  record.values[kpiId] = sum;
+  if (kpiId === 'sleepAverage') {
+    // Store weekly sum of sleep hours; UI will average for progress
+    record.values[kpiId] = sum;
+  } else if (kpiId === 'noCompromises') {
+    // Store longest streak within this week (consecutive 1s)
+    let best = 0, cur = 0;
+    for (const v of arr) {
+      if (Number(v) > 0) { cur += 1; best = Math.max(best, cur); } else { cur = 0; }
+    }
+    record.values[kpiId] = best;
+  } else {
+    // Default: weekly total
+    record.values[kpiId] = sum;
+  }
   record.updatedAt = now;
 
   await saveWeeklyKPIs(data);
@@ -383,8 +415,43 @@ export const loadWeeklyKPIsWithSync = async (): Promise<WeeklyKPIData> => {
 export const calculateKPIProgress = (kpiId: string, actualValue: number): number => {
   const definition = WEEKLY_KPI_DEFINITIONS.find(kpi => kpi.id === kpiId);
   if (!definition) return 0;
-  
+
+  // Special handling per KPI
+  if (kpiId === 'sleepAverage') {
+    // actualValue is the weekly sum of hours; compute average per night
+    const avg = (Number(actualValue) || 0) / 7;
+    // Optimal band is 6-7 hours (inclusive). Within band -> 100.
+    if (avg >= 6 && avg <= 7) return 100;
+    // Degrade outside the band proportionally. 0.5h outside still near 100; ~3.5h outside -> 0
+    const center = 6.5;
+    const deviation = Math.abs(avg - center);
+    const excess = Math.max(0, deviation - 0.5);
+    const progress = 100 - (excess / 3.5) * 100;
+    return Math.max(0, Math.min(100, progress));
+  }
+
+  if (kpiId === 'noCompromises') {
+    // actualValue represents streak length (0..7)
+    return Math.min(100, Math.max(0, (Number(actualValue) || 0) / 7 * 100));
+  }
+
   const target = definition.target;
+  const minTarget = definition.minTarget;
+
+  // If a range is defined (minTarget..target), map 0..minTarget -> 0..80, minTarget..target -> 80..100
+  if (typeof minTarget === 'number' && minTarget > 0 && target > minTarget) {
+    if (actualValue >= target) return 100;
+    if (actualValue <= 0) return 0;
+    if (actualValue <= minTarget) {
+      // Scale linearly up to 80% at minTarget
+      return Math.max(0, Math.min(80, (actualValue / minTarget) * 80));
+    }
+    // Between minTarget and target: scale linearly from 80% to 100%
+    const fraction = (actualValue - minTarget) / (target - minTarget);
+    return Math.max(80, Math.min(100, 80 + fraction * 20));
+  }
+
+  // Default linear scaling to 100% at target
   return Math.min(100, (actualValue / target) * 100);
 };
 

@@ -138,41 +138,44 @@ export const PREDEFINED_SKILLS: Omit<SkillData, 'checkpoints' | 'lastUpdated'>[]
 // Weekly KPI to Skill mapping with contributions
 export const WEEKLY_KPI_SKILL_MAPPING: Record<string, WeeklyKPIContribution[]> = {
   netWorth: [
-    { kpiId: 'deepWorkBlocks', weight: 40, formula: 'linear' },
-    { kpiId: 'gitCommits', weight: 30, formula: 'linear' },
-    { kpiId: 'twitterDMs', weight: 15, formula: 'exponential' },
-    { kpiId: 'linkedinMessages', weight: 15, formula: 'exponential' }
+    { kpiId: 'deepWorkHours', weight: 40, formula: 'linear' },
+    { kpiId: 'contentShipped', weight: 30, formula: 'linear' },
+    { kpiId: 'prRequests', weight: 15, formula: 'linear' },
+    { kpiId: 'bugsClosed', weight: 15, formula: 'linear' }
   ],
   jiuJitsu: [
     { kpiId: 'matHours', weight: 70, formula: 'linear' },
     { kpiId: 'strengthSessions', weight: 30, formula: 'linear' }
   ],
   cortalBuild: [
-    { kpiId: 'deepWorkBlocks', weight: 60, formula: 'linear' },
-    { kpiId: 'gitCommits', weight: 40, formula: 'linear' }
+    { kpiId: 'deepWorkHours', weight: 50, formula: 'linear' },
+    { kpiId: 'contentShipped', weight: 25, formula: 'linear' },
+    { kpiId: 'prRequests', weight: 15, formula: 'linear' },
+    { kpiId: 'bugsClosed', weight: 10, formula: 'linear' }
   ],
   cortalMRR: [
-    { kpiId: 'deepWorkBlocks', weight: 30, formula: 'linear' },
-    { kpiId: 'gitCommits', weight: 20, formula: 'linear' },
-    { kpiId: 'twitterDMs', weight: 25, formula: 'exponential' },
-    { kpiId: 'linkedinMessages', weight: 25, formula: 'exponential' }
+    { kpiId: 'deepWorkHours', weight: 30, formula: 'linear' },
+    { kpiId: 'contentShipped', weight: 30, formula: 'linear' },
+    { kpiId: 'prRequests', weight: 25, formula: 'linear' },
+    { kpiId: 'bugsClosed', weight: 15, formula: 'linear' }
   ],
   bodyComp: [
     { kpiId: 'strengthSessions', weight: 40, formula: 'threshold' },
     { kpiId: 'matHours', weight: 30, formula: 'threshold' },
-    { kpiId: 'coldPlunges', weight: 20, formula: 'threshold' },
+    { kpiId: 'recoverySessions', weight: 20, formula: 'threshold' },
     { kpiId: 'sleepAverage', weight: 10, formula: 'threshold' }
   ],
   career: [
-    { kpiId: 'deepWorkBlocks', weight: 35, formula: 'linear' },
-    { kpiId: 'twitterDMs', weight: 30, formula: 'exponential' },
-    { kpiId: 'linkedinMessages', weight: 25, formula: 'exponential' },
-    { kpiId: 'gitCommits', weight: 10, formula: 'linear' }
+    { kpiId: 'deepWorkHours', weight: 35, formula: 'linear' },
+    { kpiId: 'contentShipped', weight: 35, formula: 'linear' },
+    { kpiId: 'prRequests', weight: 20, formula: 'linear' },
+    { kpiId: 'bugsClosed', weight: 10, formula: 'linear' }
   ],
   knowledge: [
-    { kpiId: 'readingPages', weight: 50, formula: 'linear' },
-    { kpiId: 'deepWorkBlocks', weight: 30, formula: 'linear' },
-    { kpiId: 'gitCommits', weight: 20, formula: 'linear' }
+    { kpiId: 'readingPages', weight: 40, formula: 'linear' },
+    { kpiId: 'audiobookPercent', weight: 30, formula: 'linear' },
+    { kpiId: 'deepWorkHours', weight: 20, formula: 'linear' },
+    { kpiId: 'contentShipped', weight: 10, formula: 'linear' }
   ]
 };
 

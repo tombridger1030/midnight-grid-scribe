@@ -226,15 +226,33 @@ const WeeklyKPIInput: React.FC<WeeklyKPIInputProps> = ({ onWeekChange }) => {
              {category}
            </h3>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className={`grid gap-4 ${category === 'learning' 
+            ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-2' 
+            : (['fitness','discipline','engineering'].includes(category) 
+                ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3' 
+                : 'grid-cols-1 md:grid-cols-2')}`}>
             {kpis.map(kpi => {
               const currentValue = values[kpi.id] || 0;
-              const progress = calculateKPIProgress(kpi.id, currentValue);
-              const status = getKPIStatus(kpi.id, currentValue);
+              // Special-case sleep: compute progress from average across entered days; if none, treat input as average
+              const { progress, displayValueForHeader, status } = (() => {
+                if (kpi.id === 'sleepAverage') {
+                  const daily = getWeeklyDailyValues(currentWeek, kpi.id);
+                  const sum = daily.reduce((s, n) => s + (Number.isFinite(n) ? Number(n) : 0), 0);
+                  const daysWithData = daily.filter(v => Number(v) > 0).length;
+                  const effectiveAvg = daysWithData > 0 ? (sum / daysWithData) : (Number(currentValue) || 0);
+                  const weeklySumForProgress = effectiveAvg * 7;
+                  const p = calculateKPIProgress(kpi.id, weeklySumForProgress);
+                  const st = getKPIStatus(kpi.id, weeklySumForProgress);
+                  return { progress: p, displayValueForHeader: effectiveAvg, status: st };
+                }
+                const p = calculateKPIProgress(kpi.id, currentValue);
+                const st = getKPIStatus(kpi.id, currentValue);
+                return { progress: p, displayValueForHeader: currentValue, status: st };
+              })();
               const isRange = kpi.minTarget !== undefined;
               
               return (
-                <div key={kpi.id} className="space-y-3">
+                <div key={kpi.id} className="space-y-3 border-2 p-3" style={{ borderColor: '#ff6b40' }}>
                   {/* KPI Header */}
                   <div className="flex items-center justify-between">
                     <div>
@@ -245,7 +263,7 @@ const WeeklyKPIInput: React.FC<WeeklyKPIInputProps> = ({ onWeekChange }) => {
                     </div>
                     <div className="text-right">
                       <div className="text-lg font-bold" style={{ color: kpi.color }}>
-                        {currentValue}
+                        {kpi.id === 'sleepAverage' ? Number(displayValueForHeader).toFixed(1) : currentValue}
                       </div>
                       <div className="text-xs text-terminal-accent/70">
                         {Math.round(progress)}%
