@@ -3,6 +3,8 @@ import { Link, useLocation, Outlet } from 'react-router-dom';
 import { Terminal, LayoutDashboard, GitBranch, Cpu, HardDrive, Wifi, Globe, Network, Menu, X, Upload, Download, Loader2, CheckCircle2, BarChart3 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { syncAllDataToSupabase, loadAllDataFromSupabase, syncAllDataToSupabaseWithTest, testSupabaseConnection, verifySyncFunctionality } from '@/lib/storage';
+import { DeepWorkTimer } from '@/components/DeepWorkTimer';
+import { ShipClock } from '@/components/ShipClock';
 
 const TerminalLayout: React.FC = () => {
   const location = useLocation();
@@ -25,6 +27,7 @@ const TerminalLayout: React.FC = () => {
   const [isTesting, setIsTesting] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string>('');
+  
   // Removed sprint UI/state
   
   // Get current page name for terminal prompt
@@ -78,7 +81,8 @@ const TerminalLayout: React.FC = () => {
     { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
     { path: '/kpis', icon: BarChart3, label: 'Weekly KPIs' },
     { path: '/visualizer', icon: BarChart3, label: 'Analytics' },
-    { path: '/roadmap', icon: GitBranch, label: 'Roadmap' }
+    { path: '/roadmap', icon: GitBranch, label: 'Roadmap' },
+    { path: '/cash', icon: Network, label: 'Cash' }
   ];
 
   // Format time with leading zeros
@@ -177,12 +181,20 @@ const TerminalLayout: React.FC = () => {
     <div className="flex flex-col h-screen bg-black text-[#8A8D93] font-mono">
       {/* Top header bar with time and system info */}
       <div className="flex justify-between items-center px-2 sm:px-4 py-1 border-b border-[#333] bg-sidebar text-xs">
-        <div className="text-[#4eb4ff] text-lg sm:text-xl font-bold tracking-widest">
-          {formattedTime}
+        <div className="flex items-center gap-4">
+          <div className="text-[#4eb4ff] text-lg sm:text-xl font-bold tracking-widest">
+            {formattedTime}
+          </div>
+          {/* Noctisium Core Components */}
+          <div className="hidden lg:flex items-center gap-4">
+            <DeepWorkTimer />
+            <ShipClock />
+          </div>
         </div>
         <div className="hidden sm:flex items-center gap-4 text-xs uppercase">
           <span className="text-[#8A8D93] mr-3">USER: NOCTISIUM</span>
           <span className="text-[#8A8D93]">OS: DEBIAN LINUX WIRED</span>
+          
           
           {/* Sync Controls */}
           <div className="flex items-center gap-1 ml-4">
@@ -292,6 +304,7 @@ const TerminalLayout: React.FC = () => {
                 <div className="mb-4 text-center sm:text-left text-xs opacity-70 hidden md:block">
                   -- Navigation --
                 </div>
+              
                 <ul className="space-y-1 sm:space-y-2">
                   {navItems.map((item) => (
                     <li key={item.path}>

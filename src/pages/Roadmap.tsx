@@ -2,82 +2,109 @@ import React, { useState, useEffect } from 'react';
 import TypewriterText from '@/components/TypewriterText';
 import { Progress } from "@/components/ui/progress";
 import { Target, Calendar, TrendingUp, Edit3 } from 'lucide-react';
-import { useMetrics } from '@/hooks/useTracker';
-import { 
-  Goal, 
-  Month, 
-  GoalsData, 
-  loadGoalsData, 
-  saveGoalsData, 
+import {
+  Goal,
+  Month,
+  GoalsData,
+  loadGoalsData,
+  saveGoalsData,
   updateGoalMonthly,
   getCurrentMonth,
   monthNumberToName
 } from '@/lib/storage';
+import {
+  loadWeeklyKPIs,
+  getCurrentWeek,
+  WeeklyKPIData
+} from '@/lib/weeklyKpi';
 
 const Roadmap = () => {
   const [goalsData, setGoalsData] = useState<GoalsData>({ goals: [] });
   const [editMode, setEditMode] = useState(false);
   const [viewMode, setViewMode] = useState<'yearly' | 'monthly'>('yearly');
+  const [weeklyKPIData, setWeeklyKPIData] = useState<WeeklyKPIData>({ records: [] });
   const currentMonth = getCurrentMonth();
-  const { metrics, dates } = useMetrics();
 
-  // Load goals data on mount
+  // Load goals data and weekly KPI data on mount
   useEffect(() => {
-    const data = loadGoalsData();
-    setGoalsData(data);
+    const loadData = () => {
+      const data = loadGoalsData();
+      setGoalsData(data);
+      console.log('Roadmap loaded goals data:', data.goals.map(g => ({ id: g.id, name: g.name, currentTotal: g.currentTotal, monthly: g.monthly })));
+    };
+
+    loadData();
+
+    // Load weekly KPI data
+    const kpiData = loadWeeklyKPIs();
+    setWeeklyKPIData(kpiData);
+
+    // Listen for storage changes (when other components update goals)
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'noctisium-goals-data') {
+        console.log('Goals data changed in localStorage, reloading...');
+        loadData();
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+
+    // Also set up a custom event listener for same-window updates
+    const handleGoalsUpdate = () => {
+      console.log('Goals updated event received, reloading...');
+      loadData();
+    };
+
+    window.addEventListener('goalsUpdated', handleGoalsUpdate);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('goalsUpdated', handleGoalsUpdate);
+    };
   }, []);
 
-  // Calculate monthly totals from daily metrics for current month
+  // Calculate monthly totals from weekly KPI data for current month
   const calculateCurrentMonthTotals = () => {
     const currentDate = new Date();
     const currentYear = currentDate.getFullYear();
     const currentMonthNum = currentDate.getMonth() + 1; // 1-based month
-    
-    // Filter dates to current month only
-    const currentMonthDates = dates.filter(date => {
-      const dateObj = new Date(date);
-      return dateObj.getFullYear() === currentYear && 
-             dateObj.getMonth() + 1 === currentMonthNum;
-    });
 
     let monthlyDeepWorkHours = 0;
     let monthlyBjjSessions = 0;
 
-    // Find the relevant metrics
-    const deepWorkMetric = metrics.find(m => m.name === 'Deep Work (hrs)' || m.id === 'deepWork');
-    const bjjMetric = metrics.find(m => m.name === 'Jiu-Jitsu Sessions' || m.id === 'jiuJitsuSessions');
+    // Filter weekly records to current month and sum the values
+    weeklyKPIData.records.forEach(record => {
+      // Parse week key to check if it's in current month
+      const [year, weekStr] = record.weekKey.split('-W');
+      if (parseInt(year) !== currentYear) return;
 
-    // Calculate monthly totals for current month only
-    if (deepWorkMetric) {
-      currentMonthDates.forEach(date => {
-        const value = deepWorkMetric.values[date];
-        if (value && !isNaN(Number(value))) {
-          monthlyDeepWorkHours += Number(value);
-        }
-      });
-    }
+      // Get the week start date to determine which month this week belongs to
+      const weekNum = parseInt(weekStr);
+      const startOfYear = new Date(currentYear, 0, 1);
+      const daysToAdd = (weekNum - 1) * 7 - startOfYear.getDay() + 1;
+      const weekStart = new Date(startOfYear);
+      weekStart.setDate(startOfYear.getDate() + daysToAdd);
 
-    if (bjjMetric) {
-      currentMonthDates.forEach(date => {
-        const value = bjjMetric.values[date];
-        if (value && (value === true || value === 'true' || Number(value) > 0)) {
-          monthlyBjjSessions += 1;
-        }
-      });
-    }
+      // Check if week overlaps with current month (use week start date)
+      if (weekStart.getMonth() + 1 === currentMonthNum) {
+        // Add KPI values from this week
+        monthlyDeepWorkHours += record.values.deepWorkHours || 0;
+        monthlyBjjSessions += record.values.bjjSessions || 0;
+      }
+    });
 
     return { monthlyDeepWorkHours, monthlyBjjSessions };
   };
 
-  // Auto-update goals with calculated monthly values when metrics change
+  // Auto-update goals with calculated monthly values when weekly KPI data changes
   useEffect(() => {
-    if (metrics.length > 0 && dates.length > 0) {
+    if (weeklyKPIData.records.length > 0) {
       const { monthlyDeepWorkHours, monthlyBjjSessions } = calculateCurrentMonthTotals();
-      
+
       setGoalsData(prevData => {
         const updatedGoals = prevData.goals.map(goal => {
           let updatedGoal = { ...goal };
-          
+
           // Update Deep Work goal with monthly total
           if (goal.id === 'deep-work') {
             updatedGoal = {
@@ -92,7 +119,7 @@ const Roadmap = () => {
             updatedGoal.currentTotal = monthlyValues.reduce((sum, val) => sum + (val || 0), 0);
             updatedGoal.progressPct = updatedGoal.yearlyTarget > 0 ? Math.min(1, updatedGoal.currentTotal / updatedGoal.yearlyTarget) : 0;
           }
-          
+
           // Update BJJ goal with monthly total
           if (goal.id === 'bjj-sessions') {
             updatedGoal = {
@@ -107,16 +134,16 @@ const Roadmap = () => {
             updatedGoal.currentTotal = monthlyValues.reduce((sum, val) => sum + (val || 0), 0);
             updatedGoal.progressPct = updatedGoal.yearlyTarget > 0 ? Math.min(1, updatedGoal.currentTotal / updatedGoal.yearlyTarget) : 0;
           }
-          
+
           return updatedGoal;
         });
-        
+
         const newData = { goals: updatedGoals };
         saveGoalsData(newData); // Save the updated data
         return newData;
       });
     }
-  }, [metrics, dates, currentMonth]);
+  }, [weeklyKPIData, currentMonth]);
 
   // Update monthly value for a goal
   const handleUpdateMonthly = (goalId: string, month: Month, value: number) => {

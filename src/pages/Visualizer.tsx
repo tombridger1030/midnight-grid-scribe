@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, 
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Legend, Cell
 } from 'recharts';
 import TypewriterText from '@/components/TypewriterText';
@@ -35,11 +35,30 @@ const Visualizer = () => {
     const loadData = async () => {
       try {
         setIsLoading(true);
-        const data = await loadWeeklyKPIsWithSync();
-        setWeeklyData(data);
+        // Try to load from Supabase first, fall back to local
+        try {
+          const data = await loadWeeklyKPIsWithSync();
+          console.log('Loaded weekly KPI data for Visualizer:', data);
+          console.log('Number of records:', data.records.length);
+          data.records.forEach((record, index) => {
+            console.log(`Record ${index}:`, {
+              weekKey: record.weekKey,
+              values: record.values,
+              hasDaily: !!record.daily,
+              hasDailyByDate: !!record.dailyByDate
+            });
+          });
+          setWeeklyData(data);
+        } catch (syncError) {
+          console.warn('Supabase sync failed, falling back to local data:', syncError);
+          const localData = loadWeeklyKPIs();
+          console.log('Loaded local weekly KPI data for Visualizer:', localData);
+          setWeeklyData(localData);
+        }
       } catch (error) {
         console.error('Failed to load weekly KPI data:', error);
-        setWeeklyData(loadWeeklyKPIs());
+        // Provide default empty data to prevent crashes
+        setWeeklyData({ records: [] });
       } finally {
         setIsLoading(false);
       }
@@ -69,7 +88,9 @@ const Visualizer = () => {
     for (let i = weeksToShow - 1; i >= 0; i--) {
       const date = new Date(currentDate);
       date.setDate(currentDate.getDate() - (i * 7));
-      weeks.push(getWeekKey(date));
+      const weekKey = getWeekKey(date);
+      console.log('Generated week key:', weekKey, typeof weekKey);
+      weeks.push(weekKey);
     }
     
     return weeks;
@@ -88,100 +109,150 @@ const Visualizer = () => {
 
   // Prepare chart data for all KPIs over the selected period
   const getKPIProgressionData = (): WeeklyChartData[] => {
-    const weeks = getWeekRange(selectedPeriod);
-    
-    return weeks.map(weekKey => {
-      const record = weeklyData.records.find(r => r.weekKey === weekKey);
-      const dataPoint: WeeklyChartData = {
-        week: weekKey,
-        weekFormatted: formatWeekKey(weekKey)
-      };
-      
-      // Add each KPI's value for this week
-      WEEKLY_KPI_DEFINITIONS.forEach(kpi => {
-        const value = record?.values[kpi.id] || 0;
-        dataPoint[kpi.id] = value;
+    try {
+      const weeks = getWeekRange(selectedPeriod);
+      console.log('Generated weeks for KPI progression:', weeks);
+
+      if (!weeks || weeks.length === 0) {
+        console.log('No weeks available for KPI progression');
+        return [];
+      }
+
+      if (!weeklyData || !weeklyData.records) {
+        console.log('No weekly data available for KPI progression');
+        return [];
+      }
+
+      return weeks.map(weekKey => {
+        const record = weeklyData.records.find(r => r.weekKey === weekKey);
+        const dataPoint: WeeklyChartData = {
+          week: weekKey,
+          weekFormatted: formatWeekKey(weekKey)
+        };
+
+        // Add each KPI's value for this week
+        WEEKLY_KPI_DEFINITIONS.forEach(kpi => {
+          const value = record?.values?.[kpi.id] || 0;
+          dataPoint[kpi.id] = value;
+        });
+
+        console.log('KPI progression data point:', dataPoint);
+
+        // Log individual KPI values for debugging
+        WEEKLY_KPI_DEFINITIONS.forEach(kpi => {
+          const value = dataPoint[kpi.id];
+          console.log(`  ${kpi.name} (${kpi.id}): ${value}`);
+        });
+
+        return dataPoint;
       });
-      
-      return dataPoint;
-    });
+    } catch (error) {
+      console.error('Error preparing KPI progression data:', error);
+      return [];
+    }
   };
 
   // Prepare chart data for a specific KPI showing progress percentage
   const getKPIProgressChart = (kpiId: string): WeeklyChartData[] => {
-    const weeks = getWeekRange(selectedPeriod);
-    const kpi = WEEKLY_KPI_DEFINITIONS.find(k => k.id === kpiId);
-    if (!kpi) return [];
-    
-    return weeks.map(weekKey => {
-      const record = weeklyData.records.find(r => r.weekKey === weekKey);
-      const value = record?.values[kpiId] || 0;
-      const progress = calculateKPIProgress(kpiId, value);
-      
-      return {
-        week: weekKey,
-        weekFormatted: formatWeekKey(weekKey),
-        value,
-        progress,
-        target: kpi.target
-      };
-    });
+    try {
+      const weeks = getWeekRange(selectedPeriod);
+      const kpi = WEEKLY_KPI_DEFINITIONS.find(k => k.id === kpiId);
+
+      if (!kpi || !weeks || weeks.length === 0) return [];
+      if (!weeklyData || !weeklyData.records) return [];
+
+      return weeks.map(weekKey => {
+        const record = weeklyData.records.find(r => r.weekKey === weekKey);
+        const value = record?.values?.[kpiId] || 0;
+        const progress = calculateKPIProgress(kpiId, value);
+
+        return {
+          week: weekKey,
+          weekFormatted: formatWeekKey(weekKey),
+          value,
+          progress,
+          target: kpi.target
+        };
+      });
+    } catch (error) {
+      console.error('Error preparing KPI progress chart data:', error);
+      return [];
+    }
   };
 
   // Render all KPIs progression chart (vertical layout)
   const renderAllKPIsChart = () => {
     const chartData = getKPIProgressionData();
-    
+    console.log('All KPIs chart data:', chartData);
+
+    if (!chartData || chartData.length === 0) {
+      console.log('No chart data available - showing empty state');
+      console.log('Weekly data records:', weeklyData.records.length);
+      console.log('Week range for current period:', getWeekRange(selectedPeriod));
+      return (
+        <div className="text-center py-12">
+          <div className="text-terminal-accent/70 mb-2">No data available</div>
+          <div className="text-sm text-terminal-accent/50">
+            Start tracking your weekly KPIs to see progression charts here.
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div>
         <h2 className="text-lg mb-2">All Weekly KPIs Progression</h2>
         <div className="text-sm text-terminal-accent/70 mb-4">{formatPeriodRange(selectedPeriod)}</div>
         <div className="h-96">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart
+            <LineChart
               data={chartData}
-              margin={{ top: 5, right: 20, left: 40, bottom: 5 }}
+              margin={{ top: 5, right: 20, left: 40, bottom: 20 }}
             >
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--line-faint)" />
-              <XAxis 
-                type="number"
-                stroke="var(--text-muted)"
+              <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+              <XAxis
+                dataKey="weekFormatted"
+                stroke="#8A8D93"
+                fontSize={10}
+                angle={-45}
+                textAnchor="end"
+                height={60}
+              />
+              <YAxis
+                stroke="#8A8D93"
                 fontSize={10}
               />
-              <YAxis 
-                dataKey="week" 
-                type="category"
-                stroke="var(--text-muted)"
-                fontSize={10}
-                tickFormatter={(week) => {
-                  const weekNum = week.split('-W')[1];
-                  return `W${weekNum}`;
-                }}
-                interval={0}
-                width={40}
-              />
-              <Tooltip 
-                contentStyle={{ 
-                  backgroundColor: 'var(--bg-panel)', 
-                  border: '1px solid var(--line-faint)',
-                  color: 'var(--text-main)',
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: '#1a1a1a',
+                  border: '1px solid #333',
+                  color: '#8A8D93',
                   fontSize: '12px'
                 }}
-                labelFormatter={(week) => formatWeekKey(week)}
+                labelFormatter={(label) => {
+                  console.log('All KPIs tooltip labelFormatter received:', label, typeof label);
+                  return String(label);
+                }}
               />
               <Legend />
-              
-              {/* All KPIs as separate bars */}
-              {WEEKLY_KPI_DEFINITIONS.map(kpi => (
-                <Bar
-                  key={kpi.id}
-                  dataKey={kpi.id}
-                  fill={kpi.color}
-                  name={kpi.name}
-                  radius={[0, 2, 2, 0]}
-                />
-              ))}
-            </BarChart>
+
+              {/* All KPIs as separate lines */}
+              {WEEKLY_KPI_DEFINITIONS.map(kpi => {
+                console.log(`Creating line for ${kpi.name} (${kpi.id}) with color ${kpi.color}`);
+                return (
+                  <Line
+                    key={kpi.id}
+                    type="monotone"
+                    dataKey={kpi.id}
+                    stroke={kpi.color}
+                    strokeWidth={2}
+                    dot={{ fill: kpi.color, strokeWidth: 2, r: 4 }}
+                    name={kpi.name}
+                    connectNulls={false}
+                  />
+                );
+              })}
+            </LineChart>
           </ResponsiveContainer>
         </div>
       </div>
@@ -209,61 +280,60 @@ const Visualizer = () => {
         </div>
         <div className="h-80">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart
+            <LineChart
               data={chartData}
-              margin={{ top: 5, right: 20, left: 40, bottom: 5 }}
+              margin={{ top: 5, right: 20, left: 40, bottom: 20 }}
             >
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--line-faint)" />
-              <XAxis 
-                type="number"
-                stroke="var(--text-muted)"
+              <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+              <XAxis
+                dataKey="weekFormatted"
+                stroke="#8A8D93"
+                fontSize={10}
+                angle={-45}
+                textAnchor="end"
+                height={60}
+              />
+              <YAxis
+                stroke="#8A8D93"
                 fontSize={10}
                 domain={[0, kpi.target * 1.2]}
               />
-              <YAxis 
-                dataKey="week" 
-                type="category"
-                stroke="var(--text-muted)"
-                fontSize={10}
-                tickFormatter={(week) => {
-                  const weekNum = week.split('-W')[1];
-                  return `W${weekNum}`;
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: '#1a1a1a',
+                  border: '1px solid #333',
+                  color: '#8A8D93'
                 }}
-                interval={0}
-                width={40}
-              />
-              <Tooltip 
-                contentStyle={{ 
-                  backgroundColor: 'var(--bg-panel)', 
-                  border: '1px solid var(--line-faint)',
-                  color: 'var(--text-main)'
-                }}
-                labelFormatter={(week) => formatWeekKey(week)}
+                labelFormatter={(label) => String(label)}
                 formatter={(value: number, name: string) => [
                   `${value} ${kpi.unit}`,
                   name === 'value' ? 'Actual' : name === 'target' ? 'Target' : name
                 ]}
               />
               <Legend />
-              
-              {/* Target reference bar (transparent) */}
-              <Bar 
-                dataKey="target" 
-                fill="transparent"
+
+              {/* Target reference line (dashed) */}
+              <Line
+                type="monotone"
+                dataKey="target"
                 stroke={kpi.color}
-                strokeWidth={1}
+                strokeWidth={2}
                 strokeDasharray="5 5"
+                dot={false}
                 name="Target"
               />
-              
-              {/* Actual values bar */}
-              <Bar 
-                dataKey="value" 
-                fill={kpi.color}
+
+              {/* Actual values line */}
+              <Line
+                type="monotone"
+                dataKey="value"
+                stroke={kpi.color}
+                strokeWidth={3}
+                dot={{ fill: kpi.color, strokeWidth: 2, r: 5 }}
                 name="Actual"
-                radius={[0, 2, 2, 0]}
+                connectNulls={false}
               />
-            </BarChart>
+            </LineChart>
           </ResponsiveContainer>
         </div>
       </div>
@@ -312,6 +382,7 @@ const Visualizer = () => {
       </div>
     );
   }
+
 
   return (
     <div className="flex flex-col h-full">

@@ -24,13 +24,12 @@ export const WEEKLY_KPI_DEFINITIONS: WeeklyKPIDefinition[] = [
     color: '#FF6B00'  // Orange for fitness
   },
   {
-    id: 'matHours',
-    name: 'Mat Hours',
-    target: 6,
-    minTarget: 3,
-    unit: 'hours',
+    id: 'bjjSessions',
+    name: 'BJJ Sessions',
+    target: 3,
+    unit: 'sessions',
     category: 'fitness',
-    color: '#FF6B00'  // Orange for fitness
+    color: '#53B4FF'  // Blue for BJJ
   },
   {
     id: 'deepWorkHours',
@@ -39,7 +38,7 @@ export const WEEKLY_KPI_DEFINITIONS: WeeklyKPIDefinition[] = [
     minTarget: 20,
     unit: 'hours',
     category: 'discipline',
-    color: '#FF6B00'  // Orange for discipline
+    color: '#5FE3B3'  // Green for discipline
   },
   {
     id: 'recoverySessions',
@@ -48,7 +47,7 @@ export const WEEKLY_KPI_DEFINITIONS: WeeklyKPIDefinition[] = [
     minTarget: 3,
     unit: 'sessions',
     category: 'fitness',
-    color: '#FF6B00'  // Orange for fitness
+    color: '#FFD700'  // Gold for recovery
   },
   {
     id: 'sleepAverage',
@@ -57,7 +56,7 @@ export const WEEKLY_KPI_DEFINITIONS: WeeklyKPIDefinition[] = [
     minTarget: 6,
     unit: 'hours',
     category: 'discipline',
-    color: '#FF6B00'  // Orange for discipline
+    color: '#9D4EDD'  // Purple for sleep
   },
   {
     id: 'prRequests',
@@ -65,7 +64,7 @@ export const WEEKLY_KPI_DEFINITIONS: WeeklyKPIDefinition[] = [
     target: 2,
     unit: 'requests',
     category: 'engineering',
-    color: '#53B4FF'  // Blue for engineering
+    color: '#4A90E2'  // Slightly different blue for PRs
   },
   {
     id: 'bugsClosed',
@@ -73,7 +72,7 @@ export const WEEKLY_KPI_DEFINITIONS: WeeklyKPIDefinition[] = [
     target: 10,
     unit: 'bugs',
     category: 'engineering',
-    color: '#53B4FF'  // Blue for engineering
+    color: '#FF6B6B'  // Red for bug fixes
   },
   {
     id: 'contentShipped',
@@ -81,7 +80,7 @@ export const WEEKLY_KPI_DEFINITIONS: WeeklyKPIDefinition[] = [
     target: 7,
     unit: 'items',
     category: 'engineering',
-    color: '#53B4FF'  // Blue for engineering
+    color: '#00CED1'  // Turquoise for content
   },
   {
     id: 'readingPages',
@@ -89,7 +88,7 @@ export const WEEKLY_KPI_DEFINITIONS: WeeklyKPIDefinition[] = [
     target: 100,
     unit: 'pages',
     category: 'learning',
-    color: '#FF6B6B'  // Red for learning
+    color: '#FFA500'  // Dark orange for reading
   },
   {
     id: 'audiobookPercent',
@@ -97,7 +96,7 @@ export const WEEKLY_KPI_DEFINITIONS: WeeklyKPIDefinition[] = [
     target: 100,
     unit: '%',
     category: 'learning',
-    color: '#FF6B6B'  // Red for learning
+    color: '#DA70D6'  // Orchid for audiobooks
   },
   {
     id: 'noCompromises',
@@ -105,7 +104,7 @@ export const WEEKLY_KPI_DEFINITIONS: WeeklyKPIDefinition[] = [
     target: 7,
     unit: 'days',
     category: 'discipline',
-    color: '#FF6B00'  // Orange for discipline
+    color: '#32CD32'  // Lime green for discipline
   }
 ];
 
@@ -606,4 +605,65 @@ export const loadWeeklyEntriesForWeek = async (weekKey: string, userId: string =
   } catch (err) {
     console.error('Error merging weekly entries:', err);
   }
+};
+
+/**
+ * Sync deep work hours from Noctisium data to weekly KPIs
+ */
+export const syncDeepWorkHours = async (): Promise<void> => {
+  try {
+    // Import the function here to avoid circular dependencies
+    const { loadNoctisiumData } = await import('./storage');
+    const noctisiumData = loadNoctisiumData();
+
+    // Group completed deep work sessions by date
+    const sessionsPerDate: Record<string, number> = {};
+
+    noctisiumData.deepWorkSessions.forEach(session => {
+      if (!session.isActive && session.durationMinutes && session.durationMinutes > 0) {
+        const date = new Date(session.startTime).toISOString().split('T')[0]; // YYYY-MM-DD
+        const hours = session.durationMinutes / 60;
+        sessionsPerDate[date] = (sessionsPerDate[date] || 0) + hours;
+      }
+    });
+
+    // Update KPI values for each date
+    for (const [date, hours] of Object.entries(sessionsPerDate)) {
+      const weekKey = getWeekKeyFromDate(date);
+      const dayIndex = getDayIndexFromDate(date);
+
+      if (dayIndex >= 0 && dayIndex < 7) {
+        await updateWeeklyKPIDaily(weekKey, 'deepWorkHours', dayIndex, hours);
+      }
+    }
+  } catch (error) {
+    console.error('Failed to sync deep work hours:', error);
+  }
+};
+
+/**
+ * Get week key from date string (YYYY-MM-DD)
+ */
+const getWeekKeyFromDate = (dateStr: string): string => {
+  const date = new Date(dateStr + 'T00:00:00');
+  const year = date.getFullYear();
+  const month = date.getMonth() + 1;
+  const day = date.getDate();
+  const dayOfWeek = date.getDay(); // 0 = Sunday
+
+  // Calculate Monday of this week
+  const mondayDate = new Date(year, month - 1, day - dayOfWeek + (dayOfWeek === 0 ? -6 : 1));
+
+  return `${mondayDate.getFullYear()}-W${(mondayDate.getMonth() + 1).toString().padStart(2, '0')}-${mondayDate.getDate().toString().padStart(2, '0')}`;
+};
+
+/**
+ * Get day index from date string (0=Monday, 6=Sunday)
+ */
+const getDayIndexFromDate = (dateStr: string): number => {
+  const date = new Date(dateStr + 'T00:00:00');
+  const dayOfWeek = date.getDay(); // 0 = Sunday, 1 = Monday, ...
+
+  // Convert to Monday=0, Sunday=6
+  return dayOfWeek === 0 ? 6 : dayOfWeek - 1;
 };

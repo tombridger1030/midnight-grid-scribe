@@ -82,6 +82,101 @@ export interface GoalsData {
   goals: Goal[];
 }
 
+// Noctisium Core Data Models
+export interface NoctisiumEvent {
+  id: string;
+  type: 'deep_work_start' | 'deep_work_stop' | 'ship';
+  timestamp: string;
+  sliceId?: string;
+  proofUrl?: string;
+  description?: string;
+  metadata?: Record<string, any>;
+}
+
+export interface ShipRecord {
+  id: string;
+  sliceId: string;
+  timestamp: string;
+  description: string;
+  proofUrl?: string;
+  source: 'manual' | 'github_pr' | 'social_media' | 'content_publish';
+  cycleTimeMinutes?: number;
+  firstWorkStartTime?: string;
+}
+
+export interface DeepWorkSession {
+  id: string;
+  startTime: string;
+  endTime?: string;
+  durationMinutes?: number;
+  sliceId?: string;
+  priority?: string;
+  isActive: boolean;
+}
+
+export interface WorkSlice {
+  id: string;
+  priority: string;
+  startedAt: string;
+  shippedAt?: string;
+  cycleTimeMinutes?: number;
+  description: string;
+  firstDeepWorkStart?: string;
+  isActive: boolean;
+}
+
+export interface WeeklyConstraint {
+  id: string;
+  weekStart: string;
+  constraint: string;
+  reason?: string;
+  isActive: boolean;
+}
+
+export interface RunwayData {
+  id: string;
+  monthYear: string;
+  totalBalance: number;
+  monthlyBurn: number;
+  monthsRemaining: number;
+  lastUpdated: string;
+  suggestedCuts?: string[];
+  suggestedIncomeTargets?: string[];
+}
+
+export interface SocialMediaPost {
+  id: string;
+  platform: 'twitter' | 'instagram' | 'youtube';
+  postId: string;
+  url: string;
+  content: string;
+  publishedAt: string;
+  autoShipCreated: boolean;
+}
+
+export interface NoctisiumAlert {
+  id: string;
+  type: 'no_ship' | 'low_runway';
+  isActive: boolean;
+  createdAt: string;
+  suggestedActions: string[];
+  metadata?: Record<string, any>;
+}
+
+export interface NoctisiumData {
+  events: NoctisiumEvent[];
+  ships: ShipRecord[];
+  deepWorkSessions: DeepWorkSession[];
+  workSlices: WorkSlice[];
+  weeklyConstraints: WeeklyConstraint[];
+  runwayData: RunwayData[];
+  socialMediaPosts: SocialMediaPost[];
+  alerts: NoctisiumAlert[];
+  currentPriority: string;
+  currentSliceId?: string;
+  lastUpdated: string;
+}
+
 const STORAGE_KEY = 'noctisium-tracker-data';
 
 // Predefined metrics
@@ -520,6 +615,87 @@ export function calculateGoalProgress(goal: Pick<Goal, 'monthly' | 'yearlyTarget
   return { currentTotal, progressPct };
 }
 
+// Cash Console storage
+export type CashHolding =
+  | { type: 'equity'; ticker: string; name?: string; quantity: number; lastPriceUsd?: number; prevCloseUsd?: number; currentValueUsd?: number }
+  | { type: 'cash'; currency: 'USD'; amountUsd: number };
+
+export type CashExpense = {
+  id: string;
+  item?: string;
+  category: string;
+  date?: string; // ISO YYYY-MM-DD
+  amountUsd: number;
+};
+
+export type CashConsoleData = {
+  investments: {
+    weekStartValueUsd?: number;
+    holdings: CashHolding[];
+    lastPricesUpdatedAt?: string;
+    history?: { date: string; totalUsd: number }[];
+  };
+  expenses: {
+    monthlyIncomeUsd?: number;
+    targetPctOfIncome?: number;
+    items: CashExpense[];
+    categories?: string[];
+  };
+  cortal: {
+    burnRateUsdPerMonth?: number; // derived from items for selected month
+    items?: { id: string; category: string; date: string; amountUsd: number }[];
+    categories?: string[]; // e.g., ['dev','designContent']
+    cashReservesUsd?: number;
+  };
+  baseCurrency?: 'USD' | 'CAD';
+  fx?: {
+    usdToCad?: number;
+    lastFxUpdatedAt?: string;
+  };
+};
+
+export function defaultCashConsoleData(): CashConsoleData {
+  return {
+    investments: {
+      weekStartValueUsd: 0,
+      holdings: [],
+      lastPricesUpdatedAt: undefined,
+      history: []
+    },
+    expenses: {
+      monthlyIncomeUsd: 0,
+      targetPctOfIncome: 40,
+      items: [],
+      categories: ['food', 'rent', 'subscriptions', 'discretionary', 'transport', 'utilities', 'other']
+    },
+    cortal: {
+      burnRateUsdPerMonth: 0,
+      items: [],
+      categories: ['dev', 'designContent'],
+      cashReservesUsd: 0
+    },
+    baseCurrency: 'CAD',
+    fx: { usdToCad: undefined, lastFxUpdatedAt: undefined }
+  };
+}
+
+export function loadCashConsoleData(): CashConsoleData {
+  try {
+    const raw = localStorage.getItem('noctisium-cash-console');
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return defaultCashConsoleData();
+}
+
+export async function saveCashConsoleData(data: CashConsoleData): Promise<void> {
+  try {
+    localStorage.setItem('noctisium-cash-console', JSON.stringify(data));
+    // Optionally push to Supabase in future
+  } catch (e) {
+    console.error('Failed to save cash console:', e);
+  }
+}
+
 /**
  * Update a goal with new derived values
  */
@@ -688,6 +864,10 @@ export function loadGoalsData(): GoalsData {
 export function saveGoalsData(data: GoalsData): void {
   try {
     localStorage.setItem('noctisium-goals-data', JSON.stringify(data));
+
+    // Dispatch custom event to notify other components of the update
+    window.dispatchEvent(new CustomEvent('goalsUpdated', { detail: data }));
+    console.log('Goals data saved and event dispatched');
   } catch (error) {
     console.error('Failed to save goals data:', error);
   }
@@ -861,6 +1041,14 @@ export async function updateGoalMonthlySupabase(goalId: string, month: Month, va
     // Fallback to local storage
     return updateGoalMonthly(goalId, month, value);
   }
+}
+
+/**
+ * Update net worth goal from investments data
+ */
+export function updateNetWorthFromInvestments(totalInvestmentsCAD: number): GoalsData {
+  const currentMonth = getCurrentMonth();
+  return updateGoalMonthly('net-worth', currentMonth, totalInvestmentsCAD);
 }
 
 /**
@@ -1061,32 +1249,8 @@ export async function loadAllDataFromSupabase(): Promise<{ success: boolean; mes
 // Sync sprint data
 export async function syncSprintData(): Promise<void> {
   try {
-    // Get sprint start date from localStorage
-    const sprintStartDate = localStorage.getItem('noctisium-sprint-start-date');
-    
-    if (sprintStartDate) {
-      // Check if we already have an active sprint
-      const { data: existingSprints } = await supabase
-        // .from('sprints') removed
-        .select('*')
-        .eq('user_id', FIXED_USER_ID)
-        .eq('status', 'active');
-      
-      if (!existingSprints || existingSprints.length === 0) {
-        // Create an active sprint - let database defaults handle timestamps
-        const { error } = await supabase
-          // .from('sprints') removed
-          .insert([{
-            user_id: FIXED_USER_ID,
-            start_date: new Date(sprintStartDate).toISOString().split('T')[0],
-            status: 'active'
-          }]);
-        
-        if (error) {
-          throw new Error(`Failed to sync sprint data: ${error.message}`);
-        }
-      }
-    }
+    // Sprint table removed; keep function no-op to avoid runtime errors
+    return;
   } catch (err) {
     console.error('Error syncing sprint data:', err);
     throw err;
@@ -2070,4 +2234,348 @@ export async function validateDataMigration(): Promise<{ success: boolean; messa
       }
     };
   }
+}
+
+// ================================
+// NOCTISIUM CORE FUNCTIONALITY
+// ================================
+
+const NOCTISIUM_STORAGE_KEY = 'noctisium-data';
+const DEFAULT_NOCTISIUM_DATA: NoctisiumData = {
+  events: [],
+  ships: [],
+  deepWorkSessions: [],
+  workSlices: [],
+  weeklyConstraints: [],
+  runwayData: [],
+  socialMediaPosts: [],
+  alerts: [],
+  currentPriority: '',
+  lastUpdated: new Date().toISOString()
+};
+
+/**
+ * Load Noctisium data from localStorage
+ */
+export function loadNoctisiumData(): NoctisiumData {
+  try {
+    const stored = localStorage.getItem(NOCTISIUM_STORAGE_KEY);
+    if (stored) {
+      return { ...DEFAULT_NOCTISIUM_DATA, ...JSON.parse(stored) };
+    }
+  } catch (error) {
+    console.error('Failed to load Noctisium data from localStorage:', error);
+  }
+  return { ...DEFAULT_NOCTISIUM_DATA };
+}
+
+/**
+ * Save Noctisium data to localStorage
+ */
+export function saveNoctisiumData(data: NoctisiumData): void {
+  try {
+    data.lastUpdated = new Date().toISOString();
+    localStorage.setItem(NOCTISIUM_STORAGE_KEY, JSON.stringify(data));
+  } catch (error) {
+    console.error('Failed to save Noctisium data to localStorage:', error);
+  }
+}
+
+/**
+ * Start a deep work session
+ */
+export function startDeepWorkSession(priority: string): DeepWorkSession {
+  const data = loadNoctisiumData();
+  const now = new Date().toISOString();
+
+  // End any active session first
+  data.deepWorkSessions.forEach(session => {
+    if (session.isActive) {
+      session.endTime = now;
+      session.durationMinutes = Math.round((Date.now() - new Date(session.startTime).getTime()) / 60000);
+      session.isActive = false;
+    }
+  });
+
+  // Create new session
+  const session: DeepWorkSession = {
+    id: `dw-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    startTime: now,
+    priority,
+    isActive: true,
+    sliceId: data.currentSliceId
+  };
+
+  // Create or update work slice
+  if (!data.currentSliceId || !data.workSlices.find(s => s.id === data.currentSliceId && s.isActive)) {
+    const slice: WorkSlice = {
+      id: `slice-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      priority,
+      startedAt: now,
+      description: priority,
+      firstDeepWorkStart: now,
+      isActive: true
+    };
+    data.workSlices.push(slice);
+    data.currentSliceId = slice.id;
+    session.sliceId = slice.id;
+  } else {
+    // Update existing slice if needed
+    const slice = data.workSlices.find(s => s.id === data.currentSliceId);
+    if (slice && !slice.firstDeepWorkStart) {
+      slice.firstDeepWorkStart = now;
+    }
+  }
+
+  // Create event
+  const event: NoctisiumEvent = {
+    id: `event-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    type: 'deep_work_start',
+    timestamp: now,
+    sliceId: session.sliceId,
+    description: priority
+  };
+
+  data.events.push(event);
+  data.deepWorkSessions.push(session);
+  data.currentPriority = priority;
+
+  saveNoctisiumData(data);
+  return session;
+}
+
+/**
+ * Stop the current deep work session
+ */
+export function stopDeepWorkSession(): DeepWorkSession | null {
+  const data = loadNoctisiumData();
+  const now = new Date().toISOString();
+
+  const activeSession = data.deepWorkSessions.find(s => s.isActive);
+  if (!activeSession) return null;
+
+  activeSession.endTime = now;
+  activeSession.durationMinutes = Math.round((Date.now() - new Date(activeSession.startTime).getTime()) / 60000);
+  activeSession.isActive = false;
+
+  // Create stop event
+  const event: NoctisiumEvent = {
+    id: `event-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    type: 'deep_work_stop',
+    timestamp: now,
+    sliceId: activeSession.sliceId,
+    description: `Session ended (${activeSession.durationMinutes} min)`
+  };
+
+  data.events.push(event);
+  saveNoctisiumData(data);
+  return activeSession;
+}
+
+/**
+ * Log a ship (user-visible value delivery)
+ */
+export function logShip(description: string, proofUrl?: string, source: ShipRecord['source'] = 'manual'): ShipRecord {
+  const data = loadNoctisiumData();
+  const now = new Date().toISOString();
+  const sliceId = data.currentSliceId || `slice-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+  // Calculate cycle time if we have an active slice
+  let cycleTimeMinutes: number | undefined;
+  let firstWorkStartTime: string | undefined;
+
+  const slice = data.workSlices.find(s => s.id === sliceId);
+  if (slice?.firstDeepWorkStart) {
+    cycleTimeMinutes = Math.round((Date.now() - new Date(slice.firstDeepWorkStart).getTime()) / 60000);
+    firstWorkStartTime = slice.firstDeepWorkStart;
+
+    // Complete the slice
+    slice.shippedAt = now;
+    slice.cycleTimeMinutes = cycleTimeMinutes;
+    slice.isActive = false;
+  }
+
+  // Create ship record
+  const ship: ShipRecord = {
+    id: `ship-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    sliceId,
+    timestamp: now,
+    description,
+    proofUrl,
+    source,
+    cycleTimeMinutes,
+    firstWorkStartTime
+  };
+
+  // Create event
+  const event: NoctisiumEvent = {
+    id: `event-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    type: 'ship',
+    timestamp: now,
+    sliceId,
+    proofUrl,
+    description
+  };
+
+  data.ships.push(ship);
+  data.events.push(event);
+
+  // Clear current slice after shipping
+  data.currentSliceId = undefined;
+  data.currentPriority = '';
+
+  // Clear any no-ship alerts
+  data.alerts = data.alerts.filter(alert => alert.type !== 'no_ship' || !alert.isActive);
+
+  saveNoctisiumData(data);
+  return ship;
+}
+
+/**
+ * Get time since last ship in hours
+ */
+export function getTimeSinceLastShip(): number {
+  const data = loadNoctisiumData();
+  if (data.ships.length === 0) return 0;
+
+  const lastShip = data.ships.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
+  return (Date.now() - new Date(lastShip.timestamp).getTime()) / (1000 * 60 * 60);
+}
+
+/**
+ * Get current deep work session if active
+ */
+export function getCurrentDeepWorkSession(): DeepWorkSession | null {
+  const data = loadNoctisiumData();
+  return data.deepWorkSessions.find(s => s.isActive) || null;
+}
+
+/**
+ * Get current work slice if active
+ */
+export function getCurrentWorkSlice(): WorkSlice | null {
+  const data = loadNoctisiumData();
+  if (!data.currentSliceId) return null;
+  return data.workSlices.find(s => s.id === data.currentSliceId && s.isActive) || null;
+}
+
+/**
+ * Set weekly constraint
+ */
+export function setWeeklyConstraint(constraint: string, reason?: string): WeeklyConstraint {
+  const data = loadNoctisiumData();
+  const now = new Date();
+  const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay()).toISOString().split('T')[0];
+
+  // Deactivate any existing constraint for this week
+  data.weeklyConstraints.forEach(c => {
+    if (c.weekStart === weekStart) {
+      c.isActive = false;
+    }
+  });
+
+  const newConstraint: WeeklyConstraint = {
+    id: `constraint-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    weekStart,
+    constraint,
+    reason,
+    isActive: true
+  };
+
+  data.weeklyConstraints.push(newConstraint);
+  saveNoctisiumData(data);
+  return newConstraint;
+}
+
+/**
+ * Get current weekly constraint
+ */
+export function getCurrentWeeklyConstraint(): WeeklyConstraint | null {
+  const data = loadNoctisiumData();
+  const now = new Date();
+  const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay()).toISOString().split('T')[0];
+
+  return data.weeklyConstraints.find(c => c.weekStart === weekStart && c.isActive) || null;
+}
+
+/**
+ * Update runway data
+ */
+export function updateRunwayData(totalBalance: number, monthlyBurn: number): RunwayData {
+  const data = loadNoctisiumData();
+  const now = new Date();
+  const monthYear = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}`;
+
+  const monthsRemaining = monthlyBurn > 0 ? Math.floor(totalBalance / monthlyBurn) : 999;
+
+  // Remove existing data for this month
+  data.runwayData = data.runwayData.filter(r => r.monthYear !== monthYear);
+
+  const runway: RunwayData = {
+    id: `runway-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    monthYear,
+    totalBalance,
+    monthlyBurn,
+    monthsRemaining,
+    lastUpdated: new Date().toISOString(),
+    suggestedCuts: monthsRemaining < 12 ? ['Reduce subscription services', 'Cut dining out', 'Pause gym membership'] : undefined,
+    suggestedIncomeTargets: monthsRemaining < 12 ? ['Freelance consulting', 'Sell unused equipment', 'Side project revenue'] : undefined
+  };
+
+  data.runwayData.push(runway);
+
+  // Create/update low runway alert
+  const existingAlert = data.alerts.find(a => a.type === 'low_runway' && a.isActive);
+  if (monthsRemaining < 12) {
+    if (!existingAlert) {
+      data.alerts.push({
+        id: `alert-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        type: 'low_runway',
+        isActive: true,
+        createdAt: new Date().toISOString(),
+        suggestedActions: runway.suggestedCuts?.concat(runway.suggestedIncomeTargets || []) || [],
+        metadata: { monthsRemaining, totalBalance, monthlyBurn }
+      });
+    }
+  } else if (existingAlert) {
+    existingAlert.isActive = false;
+  }
+
+  saveNoctisiumData(data);
+  return runway;
+}
+
+/**
+ * Check and create alerts
+ */
+export function checkAndCreateAlerts(): NoctisiumAlert[] {
+  const data = loadNoctisiumData();
+  const now = Date.now();
+  const createdAlerts: NoctisiumAlert[] = [];
+
+  // Check for no-ship alert (48-72 hours)
+  const timeSinceLastShip = getTimeSinceLastShip();
+  const existingNoShipAlert = data.alerts.find(a => a.type === 'no_ship' && a.isActive);
+
+  if (timeSinceLastShip > 48 && !existingNoShipAlert) {
+    const alert: NoctisiumAlert = {
+      id: `alert-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      type: 'no_ship',
+      isActive: true,
+      createdAt: new Date().toISOString(),
+      suggestedActions: [
+        'Create minimum viable feature',
+        'Write documentation update',
+        'Fix small bug or improvement',
+        'Create tutorial or example'
+      ],
+      metadata: { timeSinceLastShip }
+    };
+
+    data.alerts.push(alert);
+    createdAlerts.push(alert);
+  }
+
+  saveNoctisiumData(data);
+  return createdAlerts;
 }

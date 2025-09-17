@@ -8,6 +8,7 @@ import Index from "./pages/Index";
 import Dashboard from "./pages/Dashboard";
 import Visualizer from "./pages/Visualizer";
 import Roadmap from "./pages/Roadmap";
+import Cash from "./pages/Cash";
 import NotFound from "./pages/NotFound";
 import { useState, useEffect } from "react";
 import PinUnlockOverlay from "@/components/PinUnlockOverlay";
@@ -64,6 +65,7 @@ const App = () => {
                 <Route path="dashboard" element={<Dashboard />} />
                 <Route path="visualizer" element={<Visualizer />} />
                 <Route path="roadmap" element={<Roadmap />} />
+                <Route path="cash" element={<Cash />} />
               </Route>
               <Route path="*" element={<NotFound />} />
             </Routes>
