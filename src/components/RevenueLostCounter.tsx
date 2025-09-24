@@ -76,7 +76,7 @@ const RevenueLostCounter: React.FC<RevenueLostCounterProps> = ({
     
     // Cleanup
     return () => clearInterval(interval);
-  }, [startDate, targetARR, remainingOpportunity]);
+  }, [startDate, targetARR]);
 
   // Get category color
   const getCategoryColor = (category: string) => {

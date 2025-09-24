@@ -82,7 +82,8 @@ const TerminalLayout: React.FC = () => {
     { path: '/kpis', icon: BarChart3, label: 'Weekly KPIs' },
     { path: '/visualizer', icon: BarChart3, label: 'Analytics' },
     { path: '/roadmap', icon: GitBranch, label: 'Roadmap' },
-    { path: '/cash', icon: Network, label: 'Cash' }
+    { path: '/cash', icon: Network, label: 'Cash' },
+    { path: '/content', icon: BarChart3, label: 'Content' }
   ];
 
   // Format time with leading zeros
@@ -306,27 +307,34 @@ const TerminalLayout: React.FC = () => {
                 </div>
               
                 <ul className="space-y-1 sm:space-y-2">
-                  {navItems.map((item) => (
-                    <li key={item.path}>
-                      <Link
-                        to={item.path}
-                        className={cn(
-                          "flex items-center justify-center md:justify-start p-3 hover:bg-[#5FE3B3] hover:text-black transition-colors text-xs min-h-[44px] rounded-sm",
-                          location.pathname === item.path && "bg-[#1D1D1D]",
-                          mobileMenuOpen ? "justify-start pl-4" : ""
-                        )}
-                        onClick={() => setMobileMenuOpen(false)}
-                      >
-                        <item.icon className="h-5 w-5 md:h-4 md:w-4 md:mr-2 shrink-0" />
-                        <span className={cn(
-                          "hidden md:inline ml-2",
-                          mobileMenuOpen && "inline"
-                        )}>
-                          {item.label}
-                        </span>
-                      </Link>
-                    </li>
-                  ))}
+                  {navItems.map((item) => {
+                    const isActive =
+                      location.pathname === item.path ||
+                      (item.path !== "/" && location.pathname.startsWith(item.path));
+
+                    return (
+                      <li key={item.path}>
+                        <Link
+                          to={item.path}
+                          aria-current={isActive ? "page" : undefined}
+                          className={cn(
+                            "flex items-center justify-center md:justify-start p-3 hover:bg-[#5FE3B3] hover:text-black transition-colors text-xs min-h-[44px] rounded-sm",
+                            isActive && "bg-[#5FE3B3] text-black",
+                            mobileMenuOpen ? "justify-start pl-4" : ""
+                          )}
+                          onClick={() => setMobileMenuOpen(false)}
+                        >
+                          <item.icon className="h-5 w-5 md:h-4 md:w-4 md:mr-2 shrink-0" />
+                          <span className={cn(
+                            "hidden md:inline ml-2",
+                            mobileMenuOpen && "inline"
+                          )}>
+                            {item.label}
+                          </span>
+                        </Link>
+                      </li>
+                    );
+                  })}
                 </ul>
               </nav>
             </div>

@@ -10,6 +10,11 @@ import Visualizer from "./pages/Visualizer";
 import Roadmap from "./pages/Roadmap";
 import Cash from "./pages/Cash";
 import NotFound from "./pages/NotFound";
+import Content from "./pages/Content";
+import ContentRoot from "./pages/ContentRoot";
+import ContentDashboard from "./pages/ContentDashboard";
+import ContentWeekly from "./pages/ContentWeekly";
+import ContentInput from "./pages/ContentInput";
 import { useState, useEffect } from "react";
 import PinUnlockOverlay from "@/components/PinUnlockOverlay";
 import { loadMetrics } from "@/lib/storage";
@@ -66,6 +71,12 @@ const App = () => {
                 <Route path="visualizer" element={<Visualizer />} />
                 <Route path="roadmap" element={<Roadmap />} />
                 <Route path="cash" element={<Cash />} />
+                <Route path="content" element={<Content />}>
+                  <Route index element={<ContentDashboard />} />
+                  <Route path="dashboard" element={<ContentDashboard />} />
+                  <Route path="weekly" element={<ContentWeekly />} />
+                  <Route path="input" element={<ContentInput />} />
+                </Route>
               </Route>
               <Route path="*" element={<NotFound />} />
             </Routes>

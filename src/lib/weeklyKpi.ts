@@ -419,12 +419,12 @@ export const calculateKPIProgress = (kpiId: string, actualValue: number): number
   if (kpiId === 'sleepAverage') {
     // actualValue is the weekly sum of hours; compute average per night
     const avg = (Number(actualValue) || 0) / 7;
-    // Optimal band is 6-7 hours (inclusive). Within band -> 100.
-    if (avg >= 6 && avg <= 7) return 100;
-    // Degrade outside the band proportionally. 0.5h outside still near 100; ~3.5h outside -> 0
-    const center = 6.5;
+    // Optimal band is 6.5–7.0 hours (inclusive). Within band -> 100.
+    if (avg >= 6.5 && avg <= 7) return 100;
+    // Degrade outside the band proportionally. 0.25h outside still near 100; ~3.5h outside -> 0
+    const center = 6.75;
     const deviation = Math.abs(avg - center);
-    const excess = Math.max(0, deviation - 0.5);
+    const excess = Math.max(0, deviation - 0.25);
     const progress = 100 - (excess / 3.5) * 100;
     return Math.max(0, Math.min(100, progress));
   }

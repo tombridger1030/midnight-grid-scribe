@@ -18,6 +18,7 @@ import {
   loadGoalsData, 
   getCurrentMonth
 } from '@/lib/storage';
+import { loadRecentContent } from '@/lib/storage';
 import {
   WEEKLY_KPI_DEFINITIONS,
   loadWeeklyKPIs,
@@ -32,6 +33,7 @@ const Dashboard = () => {
   const [goalsData, setGoalsData] = useState<GoalsData>({ goals: [] });
   const [currentWeekData, setCurrentWeekData] = useState<WeeklyKPIValues>({});
   const [isLoading, setIsLoading] = useState(true);
+  const [contentSnapshot, setContentSnapshot] = useState<{ views: number; follows: number } | null>(null);
   const currentWeek = getCurrentWeek();
   const currentMonth = getCurrentMonth();
   
@@ -67,6 +69,14 @@ const Dashboard = () => {
         
         // Calculate skill progression from current week's KPIs
         await calculateProgressFromKPIs();
+
+        // Content snapshot (recent 10 items)
+        try {
+          const recent = await loadRecentContent(10);
+          const views = recent.reduce((s, r) => s + (Number(r.views || 0)), 0);
+          const follows = recent.reduce((s, r) => s + (Number(r.follows || 0)), 0);
+          setContentSnapshot({ views, follows });
+        } catch (e) {}
         
       } catch (error) {
         console.error('Failed to load dashboard data:', error);
@@ -205,6 +215,16 @@ const Dashboard = () => {
             </div>
             <div className="text-xl font-bold text-[#FFD700]">{goalsData.goals.length}</div>
             <div className="text-xs text-terminal-accent/70">Active Goals</div>
+          </div>
+
+          {/* Content Snapshot */}
+          <div className="border border-terminal-accent/30 p-4 bg-terminal-bg/20">
+            <div className="flex items-center justify-between mb-2">
+              <Ship size={16} className="text-terminal-accent" />
+              <span className="text-xs text-terminal-accent/50">Content (Recent)</span>
+            </div>
+            <div className="text-xl font-bold text-terminal-accent">{contentSnapshot?.views ?? '—'} views</div>
+            <div className="text-xs text-terminal-accent/70">{contentSnapshot?.follows ?? '—'} follows</div>
           </div>
         </div>
 

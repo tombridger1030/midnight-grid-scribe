@@ -1495,6 +1495,383 @@ export interface KanbanData {
   columnOrder: string[];
 }
 
+// --------------------
+// Content types & APIs
+// --------------------
+
+export async function areContentTablesReady(): Promise<boolean> {
+  try {
+    const { error: itemsErr } = await supabase
+      .from('content_items')
+      .select('id')
+      .limit(1);
+    if (itemsErr) {
+      const msg = (itemsErr as any)?.message?.toLowerCase?.() || '';
+      const code = (itemsErr as any)?.code || '';
+      if (msg.includes('does not exist') || msg.includes('not found') || code === '42P01' || String(code).startsWith('PGRST')) {
+        return false;
+      }
+    }
+    const { error: metricsErr } = await supabase
+      .from('content_metrics')
+      .select('id')
+      .limit(1);
+    if (metricsErr) {
+      const msg = (metricsErr as any)?.message?.toLowerCase?.() || '';
+      const code = (metricsErr as any)?.code || '';
+      if (msg.includes('does not exist') || msg.includes('not found') || code === '42P01' || String(code).startsWith('PGRST')) {
+        return false;
+      }
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export interface ContentItemInput {
+  platform: 'youtube' | 'tiktok' | 'instagram';
+  format: 'long_form' | 'short';
+  account_handle?: string;
+  title: string;
+  caption?: string;
+  script?: string;
+  primary_hook?: string;
+  published_at: string; // ISO date
+  video_length_seconds?: number;
+  url?: string;
+  platform_video_id?: string;
+  roadmap_id?: string;
+  kanban_task_id?: string;
+  tags?: string[];
+}
+
+export interface ContentMetricsInput {
+  views?: number;
+  shares?: number;
+  saves?: number;
+  follows?: number;
+  average_watch_time_seconds?: number;
+  retention_ratio?: number;
+  shares_per_view?: number;
+  saves_per_view?: number;
+  followers_per_reach?: number;
+  non_follower_reach_ratio?: number;
+  reach?: number;
+  likes?: number;
+  comments?: number;
+  extra?: any;
+}
+
+export async function saveContentItemWithMetrics(
+  item: ContentItemInput,
+  metrics?: ContentMetricsInput
+): Promise<{ contentId: string }> {
+  // If tables aren't ready, bail with a clear error so UI can handle gracefully
+  const ready = await areContentTablesReady();
+  if (!ready) {
+    throw new Error('Content tables are not ready. Run migration 013_content_tables.sql.');
+  }
+  // Insert content item
+  const { data: insertedItem, error: itemError } = await supabase
+    .from('content_items')
+    .insert([
+      {
+        user_id: FIXED_USER_ID,
+        ...item
+      }
+    ])
+    .select('id')
+    .single();
+
+  if (itemError) {
+    const details = (itemError as any)?.message || (itemError as any)?.details || JSON.stringify(itemError);
+    throw new Error(`Failed to save content item: ${details}`);
+  }
+
+  const contentId = insertedItem.id as string;
+
+  // Optionally insert metrics snapshot (with computed ratios if needed)
+  if (metrics) {
+    const m = { ...metrics } as any;
+    if (
+      (m.retention_ratio == null || isNaN(m.retention_ratio)) &&
+      typeof metrics.average_watch_time_seconds === 'number' &&
+      typeof item.video_length_seconds === 'number' &&
+      item.video_length_seconds! > 0
+    ) {
+      m.retention_ratio = Math.max(
+        0,
+        Math.min(1, Number(metrics.average_watch_time_seconds) / Number(item.video_length_seconds))
+      );
+    }
+
+    if (m.shares_per_view == null && typeof metrics.shares === 'number' && typeof metrics.views === 'number' && metrics.views! > 0) {
+      m.shares_per_view = Number(metrics.shares) / Number(metrics.views);
+    }
+    if (m.saves_per_view == null && typeof metrics.saves === 'number' && typeof metrics.views === 'number' && metrics.views! > 0) {
+      m.saves_per_view = Number(metrics.saves) / Number(metrics.views);
+    }
+
+    const { error: metricsError } = await supabase
+      .from('content_metrics')
+      .insert([
+        {
+          user_id: FIXED_USER_ID,
+          content_id: contentId,
+          ...m
+        }
+      ]);
+
+    if (metricsError) {
+      const mDetails = (metricsError as any)?.message || (metricsError as any)?.details || JSON.stringify(metricsError);
+      throw new Error(`Failed to save content metrics: ${mDetails}`);
+    }
+  }
+
+  return { contentId };
+}
+
+export interface ContentListItem {
+  id: string;
+  platform: string;
+  format: string;
+  account_handle: string | null;
+  title: string;
+  published_at: string;
+  tags: string[] | null;
+  views?: number;
+  follows?: number;
+  retention_ratio?: number;
+}
+
+export async function loadRecentContent(limit: number = 20): Promise<ContentListItem[]> {
+  // Short-circuit if tables are missing
+  try {
+    const ready = await areContentTablesReady();
+    if (!ready) return [];
+  } catch {}
+
+  const { data, error } = await supabase
+    .from('content_items')
+    .select('id, platform, format, account_handle, title, published_at, tags')
+    .eq('user_id', FIXED_USER_ID)
+    .order('published_at', { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    const msg = (error as any)?.message?.toLowerCase?.() || '';
+    if (msg.includes('does not exist') || msg.includes('not found')) return [];
+    throw new Error(`Failed to load content: ${error.message}`);
+  }
+  const items = data || [];
+
+  // Attach latest metrics per item
+  const ids = items.map((r: any) => r.id);
+  if (ids.length === 0) return [];
+
+  const { data: metricsData, error: metricsErr } = await supabase
+    .from('content_metrics')
+    .select('content_id, views, follows, retention_ratio, snapshot_date')
+    .in('content_id', ids)
+    .order('snapshot_date', { ascending: false });
+
+  if (metricsErr) {
+    const msg = (metricsErr as any)?.message?.toLowerCase?.() || '';
+    if (msg.includes('does not exist') || msg.includes('not found')) return items;
+    throw new Error(`Failed to load content metrics: ${metricsErr.message}`);
+  }
+
+  const latestById = new Map<string, any>();
+  (metricsData || []).forEach((m: any) => {
+    if (!latestById.has(m.content_id)) latestById.set(m.content_id, m);
+  });
+
+  return items.map((r: any) => {
+    const m = latestById.get(r.id);
+    return {
+      id: r.id,
+      platform: r.platform,
+      format: r.format,
+      account_handle: r.account_handle,
+      title: r.title,
+      published_at: r.published_at,
+      tags: r.tags,
+      views: m?.views,
+      follows: m?.follows,
+      retention_ratio: m?.retention_ratio
+    } as ContentListItem;
+  });
+}
+
+export interface WeeklyContentSummary {
+  weekKey: string;
+  videos_published: number;
+  total_views: number;
+  followers_gained: number;
+  avg_retention: number | null;
+}
+
+export interface WeeklyContentDetail {
+  weekKey: string;
+  weekStart: string;
+  weekEnd: string;
+  summary: WeeklyContentSummary;
+  items: ContentListItem[];
+}
+
+export async function loadWeeklyContentDetail(weekKey: string): Promise<WeeklyContentDetail> {
+  // Parse week key (YYYY-WW format)
+  const [year, weekNum] = weekKey.split('-W').map(Number);
+
+  // Calculate week start and end dates
+  const jan1 = new Date(year, 0, 1);
+  const jan1DayOfWeek = jan1.getDay();
+  const daysToFirstMonday = jan1DayOfWeek === 1 ? 0 : (8 - jan1DayOfWeek) % 7;
+  const firstMonday = new Date(year, 0, 1 + daysToFirstMonday);
+
+  const weekStart = new Date(firstMonday);
+  weekStart.setDate(firstMonday.getDate() + (weekNum - 1) * 7);
+
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekStart.getDate() + 6);
+
+  const startStr = weekStart.toISOString().slice(0, 10);
+  const endStr = weekEnd.toISOString().slice(0, 10);
+
+  // Load content items for this week
+  const { data: items, error: itemsErr } = await supabase
+    .from('content_items')
+    .select('id, platform, format, account_handle, title, published_at, url')
+    .eq('user_id', FIXED_USER_ID)
+    .gte('published_at', startStr)
+    .lte('published_at', endStr)
+    .order('published_at', { ascending: false });
+
+  if (itemsErr) throw new Error(`Failed to load weekly content: ${itemsErr.message}`);
+
+  const contentItems = items || [];
+  const ids = contentItems.map(r => r.id);
+
+  // Load metrics for these items
+  const { data: metrics, error: metricsErr } = await supabase
+    .from('content_metrics')
+    .select('content_id, views, follows, retention_ratio, snapshot_date')
+    .in('content_id', ids)
+    .order('snapshot_date', { ascending: false });
+
+  if (metricsErr) throw new Error(`Failed to load weekly metrics: ${metricsErr.message}`);
+
+  // Get latest metrics for each content item
+  const latestMetrics = new Map<string, any>();
+  (metrics || []).forEach(m => {
+    if (!latestMetrics.has(m.content_id)) latestMetrics.set(m.content_id, m);
+  });
+
+  // Combine items with metrics
+  const itemsWithMetrics: ContentListItem[] = contentItems.map(item => {
+    const m = latestMetrics.get(item.id);
+    return {
+      ...item,
+      views: m?.views,
+      follows: m?.follows,
+      retention_ratio: m?.retention_ratio
+    };
+  });
+
+  // Calculate summary
+  const totalViews = itemsWithMetrics.reduce((sum, item) => sum + (item.views || 0), 0);
+  const totalFollows = itemsWithMetrics.reduce((sum, item) => sum + (item.follows || 0), 0);
+  const retentionValues = itemsWithMetrics
+    .map(item => item.retention_ratio)
+    .filter(r => r !== null && r !== undefined) as number[];
+
+  const avgRetention = retentionValues.length > 0
+    ? retentionValues.reduce((sum, r) => sum + r, 0) / retentionValues.length
+    : null;
+
+  return {
+    weekKey,
+    weekStart: startStr,
+    weekEnd: endStr,
+    summary: {
+      weekKey,
+      videos_published: itemsWithMetrics.length,
+      total_views: totalViews,
+      followers_gained: totalFollows,
+      avg_retention: avgRetention
+    },
+    items: itemsWithMetrics
+  };
+}
+
+export async function loadWeeklyContentSummary(weeks: string[]): Promise<WeeklyContentSummary[]> {
+  if (weeks.length === 0) return [];
+  // naive client aggregation; can be moved to SQL views later
+  const start = weeks[weeks.length - 1];
+  const end = weeks[0];
+  // Load items over a wide date window
+  const { data: items, error: itemsErr } = await supabase
+    .from('content_items')
+    .select('id, published_at')
+    .eq('user_id', FIXED_USER_ID)
+    .order('published_at', { ascending: false })
+    .limit(1000);
+  if (itemsErr) throw new Error(itemsErr.message);
+
+  const ids = (items || []).map((r: any) => r.id);
+  const { data: metrics, error: metricsErr } = await supabase
+    .from('content_metrics')
+    .select('content_id, views, follows, retention_ratio, snapshot_date')
+    .in('content_id', ids)
+    .order('snapshot_date', { ascending: false });
+  if (metricsErr) throw new Error(metricsErr.message);
+
+  const resultMap = new Map<string, WeeklyContentSummary>();
+  weeks.forEach(w => resultMap.set(w, { weekKey: w, videos_published: 0, total_views: 0, followers_gained: 0, avg_retention: null }));
+
+  const weekOf = (d: string) => {
+    // reuse weeklyKpi week key format (YYYY-WW)
+    const date = new Date(d + 'T00:00:00');
+    const jan1 = new Date(date.getFullYear(), 0, 1);
+    const days = Math.floor((date.getTime() - jan1.getTime()) / 86400000) + jan1.getDay();
+    const week = Math.ceil(days / 7);
+    return `${date.getFullYear()}-W${String(week).padStart(2, '0')}`;
+  };
+
+  const metricsByContent = new Map<string, any>();
+  (metrics || []).forEach((m: any) => {
+    if (!metricsByContent.has(m.content_id)) metricsByContent.set(m.content_id, m);
+  });
+
+  (items || []).forEach((it: any) => {
+    const wk = weekOf(it.published_at);
+    if (!resultMap.has(wk)) return;
+    const current = resultMap.get(wk)!;
+    current.videos_published += 1;
+    const m = metricsByContent.get(it.id);
+    if (m) {
+      current.total_views += Number(m.views || 0);
+      current.followers_gained += Number(m.follows || 0);
+      const r = Number(m.retention_ratio);
+      if (!isNaN(r)) {
+        if (current.avg_retention == null) current.avg_retention = 0;
+        current.avg_retention = Number(((current.avg_retention || 0) + r) as any);
+      }
+    }
+  });
+
+  // finalize avg
+  weeks.forEach(w => {
+    const cur = resultMap.get(w)!;
+    if (cur.avg_retention != null && cur.videos_published > 0) {
+      cur.avg_retention = Number((cur.avg_retention / cur.videos_published).toFixed(3));
+    }
+  });
+
+  return weeks.map(w => resultMap.get(w)!).filter(Boolean);
+}
+
 /**
  * Load Kanban data from Supabase
  */
