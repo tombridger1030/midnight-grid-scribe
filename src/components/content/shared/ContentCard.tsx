@@ -22,6 +22,8 @@ interface ContentCardProps {
   showMetrics?: boolean;
   className?: string;
   onClick?: () => void;
+  onEdit?: (contentId: string) => void;
+  showEditButton?: boolean;
 }
 
 const ContentCard: React.FC<ContentCardProps> = ({
@@ -29,7 +31,9 @@ const ContentCard: React.FC<ContentCardProps> = ({
   variant = 'detailed',
   showMetrics = true,
   className = '',
-  onClick
+  onClick,
+  onEdit,
+  showEditButton = false
 }) => {
   const formatDate = (dateStr: string): string => {
     const date = new Date(dateStr);
@@ -108,22 +112,40 @@ const ContentCard: React.FC<ContentCardProps> = ({
           )}
         </div>
 
-        {/* External Link */}
-        {content.url && (
-          <div className="flex-shrink-0">
+        {/* Actions */}
+        <div className="flex-shrink-0 flex items-center gap-2">
+          {/* Edit Button */}
+          {showEditButton && onEdit && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onEdit(content.id);
+              }}
+              className="text-[#8A8D93] hover:text-terminal-accent transition-colors p-1"
+              title="Edit content"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+            </button>
+          )}
+
+          {/* External Link */}
+          {content.url && (
             <a
               href={content.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-[#8A8D93] hover:text-terminal-accent transition-colors"
+              className="text-[#8A8D93] hover:text-terminal-accent transition-colors p-1"
               onClick={(e) => e.stopPropagation()}
+              title="Open external link"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
               </svg>
             </a>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );

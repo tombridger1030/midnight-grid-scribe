@@ -21,7 +21,7 @@ export const WEEKLY_KPI_DEFINITIONS: WeeklyKPIDefinition[] = [
     minTarget: 2,
     unit: 'sessions',
     category: 'fitness',
-    color: '#FF6B00'  // Orange for fitness
+    color: '#FF073A'  // Neon red for fitness
   },
   {
     id: 'bjjSessions',
@@ -34,8 +34,8 @@ export const WEEKLY_KPI_DEFINITIONS: WeeklyKPIDefinition[] = [
   {
     id: 'deepWorkHours',
     name: 'Deep Work Hours',
-    target: 30,
-    minTarget: 20,
+    target: 100,
+    minTarget: 80,
     unit: 'hours',
     category: 'discipline',
     color: '#5FE3B3'  // Green for discipline
@@ -43,8 +43,8 @@ export const WEEKLY_KPI_DEFINITIONS: WeeklyKPIDefinition[] = [
   {
     id: 'recoverySessions',
     name: 'Recovery Sessions',
-    target: 5,
-    minTarget: 3,
+    target: 2,
+    // No minTarget for recovery; aim for 2/week
     unit: 'sessions',
     category: 'fitness',
     color: '#FFD700'  // Gold for recovery
@@ -130,34 +130,50 @@ export interface WeeklyKPIData {
   records: WeeklyKPIRecord[];
 }
 
-// Helper functions for week calculations
+// Helper functions for fiscal-week calculations (Week 1 = Sep 1–Sep 7)
+const FISCAL_START_MONTH = 8; // 0-based (8 = September)
+const FISCAL_START_DAY = 1;
+
+function toMidnight(date: Date): Date {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function getFiscalYearStart(date: Date): Date {
+  const y = date.getFullYear();
+  const sepFirstThisYear = new Date(y, FISCAL_START_MONTH, FISCAL_START_DAY);
+  return toMidnight(date >= sepFirstThisYear ? sepFirstThisYear : new Date(y - 1, FISCAL_START_MONTH, FISCAL_START_DAY));
+}
+
+function getFiscalYearLabel(date: Date): number {
+  const y = date.getFullYear();
+  const sepFirstThisYear = new Date(y, FISCAL_START_MONTH, FISCAL_START_DAY);
+  return date >= sepFirstThisYear ? y : (y - 1);
+}
+
 export const getCurrentWeek = (): string => {
-  const now = new Date();
-  const startOfYear = new Date(now.getFullYear(), 0, 1);
-  const days = Math.floor((now.getTime() - startOfYear.getTime()) / (24 * 60 * 60 * 1000));
-  const weekNumber = Math.ceil((days + startOfYear.getDay() + 1) / 7);
-  return `${now.getFullYear()}-W${weekNumber.toString().padStart(2, '0')}`;
+  return getWeekKey(new Date());
 };
 
 export const getWeekKey = (date: Date): string => {
-  const startOfYear = new Date(date.getFullYear(), 0, 1);
-  const days = Math.floor((date.getTime() - startOfYear.getTime()) / (24 * 60 * 60 * 1000));
-  const weekNumber = Math.ceil((days + startOfYear.getDay() + 1) / 7);
-  return `${date.getFullYear()}-W${weekNumber.toString().padStart(2, '0')}`;
+  const midnight = toMidnight(date);
+  const fiscalStart = getFiscalYearStart(midnight);
+  const msPerDay = 24 * 60 * 60 * 1000;
+  const dayIndex = Math.floor((midnight.getTime() - fiscalStart.getTime()) / msPerDay);
+  const weekNumber = Math.floor(dayIndex / 7) + 1; // Week 1 = Sep 1–Sep 7
+  const yearLabel = getFiscalYearLabel(midnight);
+  return `${yearLabel}-W${weekNumber.toString().padStart(2, '0')}`;
 };
 
 export const getWeekDates = (weekKey: string): { start: Date; end: Date } => {
   const [year, week] = weekKey.split('-W').map(Number);
-  const startOfYear = new Date(year, 0, 1);
-  const daysToAdd = (week - 1) * 7 - startOfYear.getDay() + 1;
-  
-  const start = new Date(startOfYear);
-  start.setDate(startOfYear.getDate() + daysToAdd);
-  
+  const fiscalStart = new Date(year, FISCAL_START_MONTH, FISCAL_START_DAY);
+  const start = new Date(fiscalStart);
+  start.setDate(fiscalStart.getDate() + (week - 1) * 7);
   const end = new Date(start);
   end.setDate(start.getDate() + 6);
-  
-  return { start, end };
+  return { start: toMidnight(start), end: toMidnight(end) };
 };
 
 // Get the 7 dates for a week key (start..start+6)
@@ -211,6 +227,107 @@ export const saveWeeklyKPIs = async (data: WeeklyKPIData): Promise<void> => {
     console.error('Failed to save weekly KPIs:', error);
   }
 };
+
+/**
+ * Migration: Map legacy ISO-week keys (year-based) to fiscal-week keys (Sep 1 anchor)
+ * Strategy:
+ *  - Detect records whose weekKey doesn't match computed fiscal key for any included date.
+ *  - If dailyByDate is present, derive the weekKey from the first date in that week window.
+ *  - Merge values when collisions occur.
+ */
+export async function migrateWeeklyKPIsToFiscalWeeks(original: WeeklyKPIData): Promise<WeeklyKPIData> {
+  try {
+    const input = JSON.parse(JSON.stringify(original)) as WeeklyKPIData;
+    const byWeek = new Map<string, WeeklyKPIRecord>();
+
+    const mergeRecord = (target: WeeklyKPIRecord, src: WeeklyKPIRecord) => {
+      target.values = { ...(target.values || {}), ...(src.values || {}) };
+      if (src.dailyByDate) {
+        if (!target.dailyByDate) target.dailyByDate = {};
+        Object.entries(src.dailyByDate).forEach(([d, map]) => {
+          target.dailyByDate![d] = { ...(target.dailyByDate![d] || {}), ...(map || {}) };
+        });
+      }
+      if (src.daily) {
+        if (!target.daily) target.daily = {} as any;
+        Object.entries(src.daily).forEach(([kpiId, arr]) => {
+          const existing = (target.daily![kpiId] || new Array(7).fill(0)).slice();
+          for (let i = 0; i < 7; i++) existing[i] = Math.max(0, Number(arr[i] || existing[i] || 0));
+          target.daily![kpiId] = existing;
+        });
+      }
+      target.updatedAt = new Date().toISOString();
+    };
+
+    for (const rec of input.records || []) {
+      let newKey = rec.weekKey;
+      // Prefer exact date-based mapping if available
+      const dates = rec.dailyByDate ? Object.keys(rec.dailyByDate) : [];
+      if (dates.length > 0) {
+        // Choose the minimum date seen for stability
+        const minDate = dates.slice().sort()[0];
+        newKey = getWeekKey(new Date(minDate + 'T00:00:00'));
+      } else {
+        // Fallback: compute from the old interpreted start date of the stored key
+        try {
+          const { start } = getWeekDates(rec.weekKey);
+          newKey = getWeekKey(start);
+        } catch {}
+      }
+
+      const merged = byWeek.get(newKey);
+      if (!merged) {
+        byWeek.set(newKey, { ...rec, weekKey: newKey });
+      } else {
+        mergeRecord(merged, { ...rec, weekKey: newKey });
+      }
+    }
+
+    const migrated: WeeklyKPIData = { records: Array.from(byWeek.values()).sort((a, b) => a.weekKey.localeCompare(b.weekKey)) };
+    return migrated;
+  } catch (e) {
+    console.warn('Weekly KPI fiscal migration failed or not needed:', e);
+    return original;
+  }
+}
+
+/**
+ * Background migration for Supabase weekly_kpi_entries week_key values
+ */
+async function migrateSupabaseWeeklyEntriesWeekKeys(): Promise<void> {
+  try {
+    const { data, error } = await supabase
+      .from('weekly_kpi_entries')
+      .select('id, date, week_key, kpi_id, value')
+      .eq('user_id', FIXED_USER_ID)
+      .limit(2000);
+    if (error || !data) return;
+
+    const updates: { id: string; week_key: string }[] = [];
+    for (const row of data as any[]) {
+      if (!row?.date) continue;
+      const expected = getWeekKey(new Date(row.date + 'T00:00:00'));
+      if (row.week_key !== expected) {
+        updates.push({ id: row.id, week_key: expected });
+      }
+    }
+    if (updates.length === 0) return;
+
+    // Batch updates in chunks
+    const chunkSize = 200;
+    for (let i = 0; i < updates.length; i += chunkSize) {
+      const chunk = updates.slice(i, i + chunkSize);
+      const { error: updErr } = await supabase
+        .from('weekly_kpi_entries')
+        .upsert(chunk, { onConflict: 'id' });
+      if (updErr) {
+        console.warn('Failed to migrate weekly_kpi_entries chunk:', updErr);
+      }
+    }
+  } catch (e) {
+    console.warn('Supabase weekly_kpi_entries migration skipped:', e);
+  }
+}
 
 export const getWeeklyKPIRecord = (weekKey: string): WeeklyKPIRecord | null => {
   const data = loadWeeklyKPIs();
@@ -399,14 +516,31 @@ export const loadWeeklyKPIsWithSync = async (): Promise<WeeklyKPIData> => {
     if (supabaseData) {
       // Save to localStorage for offline access
       localStorage.setItem('noctisium-weekly-kpis', JSON.stringify(supabaseData));
-      return supabaseData;
+      // Run migration on freshly loaded data (no-op if already migrated)
+      const migrated = await migrateWeeklyKPIsToFiscalWeeks(supabaseData);
+      // Persist after migration
+      await saveWeeklyKPIs(migrated);
+      // Also attempt a background Supabase entries migration (non-blocking)
+      // Temporarily disabled due to 400 errors
+      // void migrateSupabaseWeeklyEntriesWeekKeys();
+      return migrated;
     } else {
       // Fall back to localStorage
-      return loadWeeklyKPIs();
+      const local = loadWeeklyKPIs();
+      const migrated = await migrateWeeklyKPIsToFiscalWeeks(local);
+      await saveWeeklyKPIs(migrated);
+      // Temporarily disabled due to 400 errors
+      // void migrateSupabaseWeeklyEntriesWeekKeys();
+      return migrated;
     }
   } catch (error) {
     console.error('Failed to sync weekly KPIs from Supabase, using localStorage:', error);
-    return loadWeeklyKPIs();
+    const local = loadWeeklyKPIs();
+    const migrated = await migrateWeeklyKPIsToFiscalWeeks(local);
+    await saveWeeklyKPIs(migrated);
+    // Temporarily disabled due to 400 errors
+    // void migrateSupabaseWeeklyEntriesWeekKeys();
+    return migrated;
   }
 };
 
@@ -642,28 +776,20 @@ export const syncDeepWorkHours = async (): Promise<void> => {
 };
 
 /**
- * Get week key from date string (YYYY-MM-DD)
+ * Get fiscal week key from date string (YYYY-MM-DD) using Sep 1 anchor
  */
 const getWeekKeyFromDate = (dateStr: string): string => {
   const date = new Date(dateStr + 'T00:00:00');
-  const year = date.getFullYear();
-  const month = date.getMonth() + 1;
-  const day = date.getDate();
-  const dayOfWeek = date.getDay(); // 0 = Sunday
-
-  // Calculate Monday of this week
-  const mondayDate = new Date(year, month - 1, day - dayOfWeek + (dayOfWeek === 0 ? -6 : 1));
-
-  return `${mondayDate.getFullYear()}-W${(mondayDate.getMonth() + 1).toString().padStart(2, '0')}-${mondayDate.getDate().toString().padStart(2, '0')}`;
+  return getWeekKey(date);
 };
 
 /**
- * Get day index from date string (0=Monday, 6=Sunday)
+ * Get day index within the fiscal week (0..6 relative to the week start)
  */
 const getDayIndexFromDate = (dateStr: string): number => {
   const date = new Date(dateStr + 'T00:00:00');
-  const dayOfWeek = date.getDay(); // 0 = Sunday, 1 = Monday, ...
-
-  // Convert to Monday=0, Sunday=6
-  return dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  const wk = getWeekKey(date);
+  const { start } = getWeekDates(wk);
+  const msPerDay = 24 * 60 * 60 * 1000;
+  return Math.floor((toMidnight(date).getTime() - toMidnight(start).getTime()) / msPerDay);
 };

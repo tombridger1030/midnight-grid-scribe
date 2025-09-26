@@ -165,6 +165,139 @@ const WeeklyKPIInput: React.FC<WeeklyKPIInputProps> = ({ onWeekChange }) => {
 
   const overallCompletion = calculateWeekCompletion(values);
 
+  // Helper: compute suggested per-day values needed to reach minTarget or target
+  const getPerDaySuggestions = (kpiId: string) => {
+    const kpi = WEEKLY_KPI_DEFINITIONS.find(k => k.id === kpiId);
+    if (!kpi) return null;
+
+    const daily = getWeeklyDailyValues(currentWeek, kpiId);
+    const weekDates = getWeekDayDates(currentWeek);
+    const today = new Date();
+    today.setHours(0,0,0,0);
+
+    // Determine remaining days including today if today has not passed
+    const remainingDayIndexes: number[] = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(weekDates[i]);
+      d.setHours(0,0,0,0);
+      if (d.getTime() >= today.getTime()) {
+        remainingDayIndexes.push(i);
+      }
+    }
+    if (remainingDayIndexes.length === 0) return null;
+
+    const achieved = daily.reduce((s, n) => s + (Number.isFinite(n) ? Number(n) : 0), 0);
+    
+    // Handle special KPIs
+    let goalMin: number;
+    let remainingTotal: number;
+    
+    if (kpiId === 'sleepAverage') {
+      // For sleep, we want to achieve the target average per night
+      const targetHoursPerNight = typeof kpi.minTarget === 'number' && kpi.minTarget > 0 ? kpi.minTarget : kpi.target;
+      const daysWithData = daily.filter(v => Number(v) > 0).length;
+      const currentAvg = daysWithData > 0 ? achieved / daysWithData : 0;
+      
+      // If we're already meeting the target average, no suggestions needed
+      if (currentAvg >= targetHoursPerNight) return new Array(7).fill('');
+      
+      // For remaining days, suggest the target hours per night
+      goalMin = targetHoursPerNight;
+      remainingTotal = goalMin * remainingDayIndexes.length; // Each remaining day needs target hours
+    } else if (kpiId === 'noCompromises') {
+      // For no compromises, suggest 1 for each remaining day if not already perfect
+      const currentStreak = Math.max(...daily.map((_, i) => {
+        let streak = 0;
+        for (let j = i; j < daily.length && daily[j] > 0; j++) streak++;
+        return streak;
+      }));
+      
+      if (currentStreak >= 7) return new Array(7).fill(''); // Already perfect
+      
+      // Suggest 1 for each remaining day
+      const suggestions: (string | '')[] = new Array(7).fill('');
+      remainingDayIndexes.forEach(idx => {
+        suggestions[idx] = '1';
+      });
+      return suggestions;
+    } else {
+      // Standard KPIs
+      goalMin = typeof kpi.minTarget === 'number' && kpi.minTarget > 0 ? kpi.minTarget : kpi.target;
+      remainingTotal = Math.max(0, goalMin - achieved);
+      
+      // Debug logging for problematic KPIs
+      if (kpiId === 'deepWorkHours' || kpiId === 'bjjSessions' || kpiId === 'prRequests') {
+        console.log(`${kpiId} Debug:`, {
+          achieved,
+          goalMin,
+          minTarget: kpi.minTarget,
+          target: kpi.target,
+          remainingTotal,
+          remainingDays: remainingDayIndexes.length,
+          perDay: remainingTotal / remainingDayIndexes.length,
+          dailyValues: daily
+        });
+      }
+    }
+    
+    if (remainingTotal <= 0) return new Array(7).fill('');
+
+    const n = remainingDayIndexes.length;
+    const base = remainingTotal / n;
+
+    // Format to fit 1–2 digits: for hours, show at most one decimal (e.g., 16.3)
+    const formatCompact = (v: number): string => {
+      if (kpi.unit === 'hours') {
+        // Round to nearest 0.25 to align with existing 0.5 step while staying compact
+        const rounded = Math.round(v * 4) / 4;
+        if (rounded < 10) {
+          return rounded.toFixed(1).replace(/\.0$/, '');
+        } else {
+          return Math.round(rounded).toString();
+        }
+      }
+      // For non-hour units, round up to ensure we hit the goal
+      // (e.g., if you need 0.67 sessions per day, suggest 1 session)
+      return String(Math.ceil(v));
+    };
+
+    // Spread remainder cleanly by adding small increments to the earliest remaining days
+    const suggestions: (string | '')[] = new Array(7).fill('');
+    
+    if (kpi.unit === 'hours') {
+      // For hours, use fractional distribution
+      const step = 0.25;
+      const remainder = remainingTotal - base * n;
+      let extraUnits = Math.round(remainder / step);
+      
+      remainingDayIndexes.forEach((idx, i) => {
+        let val = base;
+        if (extraUnits > 0) {
+          val += step;
+          extraUnits -= 1;
+        }
+        suggestions[idx] = formatCompact(val);
+      });
+    } else {
+      // For sessions/requests, distribute whole units intelligently
+      let remaining = Math.round(remainingTotal);
+      const basePerDay = Math.floor(remaining / n);
+      const extraDays = remaining % n;
+      
+      remainingDayIndexes.forEach((idx, i) => {
+        let val = basePerDay;
+        if (i < extraDays) {
+          val += 1; // Give extra unit to first few days
+        }
+        if (val > 0) {
+          suggestions[idx] = String(val);
+        }
+      });
+    }
+
+    return suggestions;
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center p-8">
@@ -250,6 +383,14 @@ const WeeklyKPIInput: React.FC<WeeklyKPIInputProps> = ({ onWeekChange }) => {
                 return { progress: p, displayValueForHeader: currentValue, status: st };
               })();
               const isRange = kpi.minTarget !== undefined;
+              const activeIdxForInput = Number.isInteger(editingDay[kpi.id] as number) ? (editingDay[kpi.id] as number) : null;
+              const inputValue = (() => {
+                if (activeIdxForInput !== null) {
+                  const daily = getWeeklyDailyValues(currentWeek, kpi.id);
+                  return Number(daily[activeIdxForInput] || 0);
+                }
+                return currentValue;
+              })();
               
               return (
                 <div key={kpi.id} className="space-y-3 border-2 p-3" style={{ borderColor: '#ff6b40' }}>
@@ -298,25 +439,33 @@ const WeeklyKPIInput: React.FC<WeeklyKPIInputProps> = ({ onWeekChange }) => {
                         return (
                           <div className="w-full">
                             <div className="grid grid-cols-7 gap-2 w-full px-2 justify-items-center">
-                              {daily.map((val, idx) => (
-                                <div key={idx} className="relative flex flex-col items-center justify-center w-6">
-                                  <div className="relative">
-                                    <button
-                                      onClick={() => setEditingDay(prev => ({ ...prev, [kpi.id]: (prev[kpi.id] === idx ? null : idx) }))}
-                                      className={`h-2 w-2 rounded-full transition-colors focus:outline-none border-2 ${editingDay[kpi.id] === idx
-                                        ? 'bg-[#FF6B00] border-white' // active edit (orange)
-                                        : (val > 0 ? 'bg-[#5FE3B3] border-white' : 'bg-white/10 border-white/70')}`}
-                                      title={dayNames[idx]}
-                                      tabIndex={0}
-                                    />
-                                    {(val > 0 || editingDay[kpi.id] === idx) && (
-                                      <span className="absolute inset-0 flex items-center justify-center text-[8px] leading-none text-white pointer-events-none">
-                                        {formatCount(val, kpi.unit)}
-                                      </span>
-                                    )}
+                              {(() => {
+                                const suggestions = getPerDaySuggestions(kpi.id);
+                                return daily.map((val, idx) => (
+                                  <div key={idx} className="relative flex flex-col items-center justify-center w-6">
+                                    <div className="relative">
+                                      <button
+                                        onClick={() => setEditingDay(prev => ({ ...prev, [kpi.id]: (prev[kpi.id] === idx ? null : idx) }))}
+                                        className={`h-2 w-2 rounded-full transition-colors focus:outline-none border-2 ${editingDay[kpi.id] === idx
+                                          ? 'bg-[#FF6B00] border-white' // active edit (orange)
+                                          : (val > 0 ? 'bg-[#5FE3B3] border-white' : 'bg-white/10 border-white/70')}`}
+                                        title={dayNames[idx]}
+                                        tabIndex={0}
+                                      />
+                                      {(val > 0 || editingDay[kpi.id] === idx) && (
+                                        <span className="absolute inset-0 flex items-center justify-center text-[8px] leading-none text-white pointer-events-none">
+                                          {formatCount(val, kpi.unit)}
+                                        </span>
+                                      )}
+                                      {suggestions && suggestions[idx] && val <= 0 && (
+                                        <span className="absolute inset-0 flex items-center justify-center text-[8px] leading-none text-terminal-accent/90 pointer-events-none">
+                                          {suggestions[idx] as string}
+                                        </span>
+                                      )}
+                                    </div>
                                   </div>
-                                </div>
-                              ))}
+                                ));
+                              })()}
                             </div>
                             <div className="grid grid-cols-7 gap-2 w-full px-2 mt-1 text-[10px] text-terminal-accent/70 justify-items-center">
                               {dayLetters.map((l, idx) => (
@@ -346,7 +495,7 @@ const WeeklyKPIInput: React.FC<WeeklyKPIInputProps> = ({ onWeekChange }) => {
                        onClick={() => decrementKPI(kpi.id)}
                        className="w-10 h-10 rounded border border-terminal-accent/30 hover:border-terminal-accent/60 bg-terminal-bg hover:bg-terminal-accent/10 flex items-center justify-center transition-colors"
                        style={{ borderColor: kpi.color + '40', color: kpi.color }}
-                       disabled={currentValue <= 0}
+                       disabled={inputValue <= 0}
                      >
                        <Minus size={16} />
                      </button>
@@ -356,7 +505,7 @@ const WeeklyKPIInput: React.FC<WeeklyKPIInputProps> = ({ onWeekChange }) => {
                        type="number"
                        min="0"
                        step={kpi.unit === 'hours' ? '0.5' : '1'}
-                       value={currentValue}
+                       value={inputValue}
                        onChange={async (e) => {
                         const raw = parseFloat(e.target.value);
                         const parsed = Number.isFinite(raw) ? raw : 0;

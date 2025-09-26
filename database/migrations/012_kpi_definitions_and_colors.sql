@@ -36,8 +36,8 @@ truncate table kpi_definitions;
 insert into kpi_definitions (id, name, target, min_target, unit, category, color) values
   ('strengthSessions', 'Strength Sessions', 3, 2, 'sessions', 'fitness', '#FF6B00'),
   ('bjjSessions', 'BJJ Sessions', 3, null, 'sessions', 'fitness', '#53B4FF'),
-  ('deepWorkHours', 'Deep Work Hours', 30, 20, 'hours', 'discipline', '#5FE3B3'),
-  ('recoverySessions', 'Recovery Sessions', 5, 3, 'sessions', 'fitness', '#FFD700'),
+  ('deepWorkHours', 'Deep Work Hours', 100, 80, 'hours', 'discipline', '#5FE3B3'),
+  ('recoverySessions', 'Recovery Sessions', 2, null, 'sessions', 'fitness', '#FFD700'),
   ('sleepAverage', 'Sleep Average', 7, 6, 'hours', 'discipline', '#9D4EDD'),
   ('prRequests', 'PR Requests', 2, null, 'requests', 'engineering', '#4A90E2'),
   ('bugsClosed', 'Bugs Closed', 10, null, 'bugs', 'engineering', '#FF6B6B'),

@@ -1,4 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=Fira+Mono:wght@400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;400;500;600;700&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -100,24 +101,24 @@ input, select, textarea {
   
   --text-main: #E0E0E0;
   --text-muted: #808080;
-  --text-accent: #FF6B00;
+  --text-accent: #FF073A;
   
-  --accent-cyan: #00C853;
+  --accent-cyan: #00FFF7;
   --accent-blue: #2196F3;
-  --accent-orange: #FF6B00;
-  --accent-red: #F44336;
-  --accent-yellow: #FFC107;
+  --accent-orange: #FF073A;
+  --accent-red: #FF005C;
+  --accent-yellow: #FCEE09;
   --accent-pink: #E91E63;
   --accent-purple: #9C27B0;
-  --accent-sprint: #FF6B00;
+  --accent-sprint: #FF073A;
   
   --line-main: #2A2A2A;
   --line-faint: #1A1A1A;
   
   --terminal-bg: #0A0A0A;
   --terminal-text: #E0E0E0;
-  --terminal-accent: #FF6B00;
-  --terminal-accent-secondary: #00C853;
+  --terminal-accent: #FF073A;
+  --terminal-accent-secondary: #00FFF7;
 }
 
 body {
@@ -158,7 +159,7 @@ body {
 .terminal-input {
   @apply bg-transparent border text-terminal-text p-2 text-xs;
   @apply focus:border-terminal-accent focus:outline-none;
-  border-color: rgba(255, 107, 0, 0.3);
+  border-color: rgba(255, 7, 58, 0.3);
 }
 
 .terminal-input::placeholder {
@@ -178,11 +179,11 @@ body {
   @apply hover:border-terminal-accent transition-colors;
   @apply focus:border-terminal-accent focus:outline-none;
   @apply min-h-[44px] flex items-center justify-center;
-  border-color: rgba(255, 107, 0, 0.3);
+  border-color: rgba(255, 7, 58, 0.3);
 }
 
 .terminal-button:hover {
-  background-color: rgba(255, 107, 0, 0.1);
+  background-color: rgba(255, 7, 58, 0.1);
 }
 
 /* Mobile-optimized button */
@@ -203,7 +204,7 @@ body {
 
 .sprint-progress-bar {
   height: 100%;
-  background: linear-gradient(90deg, #FF6B00 0%, #FF8C42 100%);
+  background: linear-gradient(90deg, #FF073A 0%, #FF073A 100%);
   transition: width 0.3s ease;
 }
 
@@ -240,7 +241,7 @@ html {
   }
   
   ::-webkit-scrollbar-thumb {
-    background: rgba(255, 107, 0, 0.3);
+    background: rgba(255, 7, 58, 0.3);
     border-radius: 3px;
   }
 }
@@ -252,13 +253,14 @@ html {
     --bg-panel:         #141414; /* panel background */
     --text-main:        #E0E0E0; /* light gray text */
     --text-muted:       #808080; /* muted gray text */
-    --accent-red:       #F44336; /* error red */
-    --accent-orange:    #FF6B00; /* primary orange accent */
+    --accent-red:       #FF005C; /* hot magenta */
+    --accent-orange:    #FF073A; /* primary neon red accent */
     --accent-amber:     #FFC107; /* warning amber */
-    --accent-cyan:      #00C853; /* success green */
-    --line-faint:       rgba(255, 107, 0, 0.15); /* faint orange lines */
-    --accent-sprint:    #FF8C42; /* lighter orange for sprint */
-    --cursor-color:     #FF6B00; /* cursor color matches primary accent */
+    --accent-yellow:    #FCEE09; /* electric yellow */
+    --accent-cyan:      #00FFF7; /* neon cyan */
+    --line-faint:       rgba(255, 7, 58, 0.15); /* faint neon red lines */
+    --accent-sprint:    #FF073A; /* neon red for sprint */
+    --cursor-color:     #FF073A; /* cursor color matches primary accent */
   }
 
   * {
@@ -453,7 +455,7 @@ html {
   }
   
   .day--sprint-off {
-    border: 1px solid rgba(255, 107, 0, 0.6) !important;
+    border: 1px solid rgba(255, 7, 58, 0.6) !important;
   }
 
   /* Sprint calendar day borders - specific classes to override global rule */
@@ -529,4 +531,187 @@ html {
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
+}
+
+/* ====== CYBERPUNK 2077 STYLING ====== */
+
+/* Cyberpunk font classes */
+.cyberpunk-header {
+  font-family: 'Rajdhani', sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* Glow effects for cyberpunk aesthetic */
+.cyberpunk-glow-cyan {
+  text-shadow: 0 0 6px var(--accent-cyan);
+  transition: text-shadow 0.3s ease;
+}
+
+.cyberpunk-glow-magenta {
+  text-shadow: 0 0 6px var(--accent-red);
+  transition: text-shadow 0.3s ease;
+}
+
+.cyberpunk-glow-yellow {
+  text-shadow: 0 0 6px var(--accent-yellow);
+  transition: text-shadow 0.3s ease;
+}
+
+.cyberpunk-glow-neon-red {
+  text-shadow: 0 0 8px var(--accent-orange), 0 0 16px var(--accent-orange);
+  transition: text-shadow 0.3s ease;
+}
+
+/* Enhanced terminal accent with neon glow */
+.terminal-accent-glow {
+  color: var(--accent-orange);
+  text-shadow: 0 0 10px var(--accent-orange), 0 0 20px var(--accent-orange), 0 0 30px var(--accent-orange);
+}
+
+/* Tab/Navigation hover effects */
+.cyberpunk-tab:hover {
+  text-shadow: 0 0 8px var(--accent-cyan);
+  color: var(--accent-cyan);
+  transition: all 0.3s ease;
+}
+
+.cyberpunk-nav-link:hover {
+  text-shadow: 0 0 6px var(--accent-cyan);
+  border-color: var(--accent-cyan);
+  transition: all 0.3s ease;
+}
+
+/* Terminal accent nav links with enhanced neon glow */
+.cyberpunk-nav-link.terminal-accent-active {
+  color: var(--accent-orange);
+  text-shadow: 0 0 10px var(--accent-orange);
+  border-color: var(--accent-orange);
+  box-shadow: 0 0 15px rgba(255, 7, 58, 0.3);
+}
+
+/* Pulse animation for critical values */
+@keyframes cyberpunk-pulse {
+  0%, 100% { 
+    opacity: 1; 
+    text-shadow: 0 0 4px var(--accent-red);
+  }
+  50% { 
+    opacity: 0.7;
+    text-shadow: 0 0 8px var(--accent-red);
+  }
+}
+
+.cyberpunk-pulse {
+  animation: cyberpunk-pulse 2s ease-in-out infinite;
+}
+
+.cyberpunk-pulse-critical {
+  animation: cyberpunk-pulse 1.5s ease-in-out infinite;
+  color: var(--accent-red);
+}
+
+/* Angled dividers - cyberpunk style */
+.cyberpunk-divider {
+  border: none;
+  height: 2px;
+  background: linear-gradient(135deg, transparent 0%, var(--accent-cyan) 20%, var(--accent-cyan) 80%, transparent 100%);
+  margin: 1rem 0;
+  position: relative;
+}
+
+.cyberpunk-divider::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 20px;
+  height: 20px;
+  background: linear-gradient(45deg, transparent 50%, var(--accent-cyan) 50%);
+  transform: translateY(-50%) rotate(45deg);
+}
+
+.cyberpunk-divider::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 50%;
+  width: 20px;
+  height: 20px;
+  background: linear-gradient(45deg, var(--accent-cyan) 50%, transparent 50%);
+  transform: translateY(-50%) rotate(45deg);
+}
+
+/* Angled section separator with slashes */
+.cyberpunk-slash-divider::before {
+  content: '///';
+  color: var(--accent-cyan);
+  font-family: 'Fira Mono', monospace;
+  font-size: 0.8rem;
+  opacity: 0.6;
+  letter-spacing: 2px;
+}
+
+/* Enhanced border effects for panels */
+.cyberpunk-panel {
+  border: 1px solid var(--accent-cyan);
+  box-shadow: 0 0 10px rgba(0, 255, 247, 0.1);
+  transition: box-shadow 0.3s ease;
+}
+
+.cyberpunk-panel:hover {
+  box-shadow: 0 0 15px rgba(0, 255, 247, 0.2);
+}
+
+.cyberpunk-panel-neon-red {
+  border: 1px solid var(--accent-orange);
+  box-shadow: 0 0 10px rgba(255, 7, 58, 0.2);
+  transition: box-shadow 0.3s ease;
+}
+
+.cyberpunk-panel-neon-red:hover {
+  box-shadow: 0 0 20px rgba(255, 7, 58, 0.4);
+}
+
+/* Warning/error states with magenta glow */
+.cyberpunk-warning {
+  color: var(--accent-red);
+  text-shadow: 0 0 4px var(--accent-red);
+}
+
+/* Highlight lines for graphs */
+.cyberpunk-highlight-line {
+  stroke: var(--accent-yellow);
+  filter: drop-shadow(0 0 3px var(--accent-yellow));
+}
+
+/* Data emphasis */
+.cyberpunk-data-critical {
+  color: var(--accent-yellow);
+  font-weight: bold;
+  text-shadow: 0 0 4px var(--accent-yellow);
+}
+
+/* Subtle scanline effect for large panels */
+.cyberpunk-scanlines {
+  position: relative;
+  overflow: hidden;
+}
+
+.cyberpunk-scanlines::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: repeating-linear-gradient(
+    90deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 255, 247, 0.03) 2px,
+    rgba(0, 255, 247, 0.03) 4px
+  );
+  pointer-events: none;
 }

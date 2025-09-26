@@ -16,6 +16,7 @@ type ContentForm = {
   caption?: string;
   script?: string;
   views?: number;
+  likes?: number;
   shares?: number;
   saves?: number;
   follows?: number;
@@ -23,6 +24,9 @@ type ContentForm = {
   retention_ratio?: number;
   followers_per_reach?: number;
   non_follower_reach_ratio?: number;
+  // YouTube Shorts specific fields
+  swipe_rate?: number;
+  new_viewers_percent?: number;
 };
 
 const steps = [
@@ -80,13 +84,16 @@ const ContentWizard: React.FC<ContentWizardProps> = ({ onComplete, onCancel }) =
         },
         {
           views: data.views,
+          likes: data.likes,
           shares: data.shares,
           saves: data.saves,
           follows: data.follows,
           average_watch_time_seconds: data.average_watch_time_seconds,
           retention_ratio: data.retention_ratio || retention,
           followers_per_reach: data.followers_per_reach,
-          non_follower_reach_ratio: data.non_follower_reach_ratio
+          non_follower_reach_ratio: data.non_follower_reach_ratio,
+          swipe_rate: data.swipe_rate,
+          new_viewers_percent: data.new_viewers_percent
         }
       );
       reset();
@@ -281,6 +288,79 @@ const ContentWizard: React.FC<ContentWizardProps> = ({ onComplete, onCancel }) =
         );
 
       case 'metrics':
+        // YouTube Shorts specific metrics
+        if (selectedPlatform === 'youtube' && watch('format') === 'short') {
+          return (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-white mb-1">Views</label>
+                  <input
+                    type="number"
+                    min="0"
+                    className="w-full bg-[#0F0F0F] border border-[#333] p-3 rounded-sm text-white placeholder-[#666]"
+                    placeholder="1000"
+                    {...register('views', { valueAsNumber: true })}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-white mb-1">Likes</label>
+                  <input
+                    type="number"
+                    min="0"
+                    className="w-full bg-[#0F0F0F] border border-[#333] p-3 rounded-sm text-white placeholder-[#666]"
+                    placeholder="100"
+                    {...register('likes', { valueAsNumber: true })}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-white mb-1">Retention %</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.1"
+                    className="w-full bg-[#0F0F0F] border border-[#333] p-3 rounded-sm text-white placeholder-[#666]"
+                    placeholder="18.5"
+                    {...register('retention_ratio', { valueAsNumber: true })}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-white mb-1">Swipe Rate %</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.1"
+                    className="w-full bg-[#0F0F0F] border border-[#333] p-3 rounded-sm text-white placeholder-[#666]"
+                    placeholder="12.3"
+                    {...register('swipe_rate', { valueAsNumber: true })}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-white mb-1">New Viewers %</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.1"
+                    className="w-full bg-[#0F0F0F] border border-[#333] p-3 rounded-sm text-white placeholder-[#666]"
+                    placeholder="75.2"
+                    {...register('new_viewers_percent', { valueAsNumber: true })}
+                  />
+                </div>
+              </div>
+            </div>
+          );
+        }
+
+        // Default metrics form for other platforms/formats
         return (
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">

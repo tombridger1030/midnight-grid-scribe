@@ -86,10 +86,12 @@ export default {
 				'accent-orange': 'var(--accent-orange)',
 				'accent-amber': 'var(--accent-amber)',
 				'accent-cyan': 'var(--accent-cyan)',
+				'accent-yellow': 'var(--accent-yellow)',
 				'line-faint': 'var(--line-faint)',
 			},
 			fontFamily: {
 				'mono': ['Fira Mono', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'Liberation Mono', 'Courier New', 'monospace'],
+				'cyberpunk': ['Rajdhani', 'ui-sans-serif', 'system-ui', 'sans-serif'],
 			},
 			borderRadius: {
 				lg: 'var(--radius)',

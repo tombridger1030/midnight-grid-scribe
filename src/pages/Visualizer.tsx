@@ -388,7 +388,7 @@ const Visualizer = () => {
     <div className="flex flex-col h-full">
       {/* Header section */}
       <div className="mb-4">
-        <TypewriterText text="Weekly KPI Visualizer" className="text-xl mb-2" />
+        <TypewriterText text="Weekly KPI Visualizer" className="text-xl mb-2 cyberpunk-header" />
         <p className="text-terminal-accent/70 text-sm mb-3">Analyze weekly KPI progression over time.</p>
         
         {/* Controls */}

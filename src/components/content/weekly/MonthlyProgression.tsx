@@ -1,14 +1,28 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { ContentListItem } from '@/lib/storage';
 import MetricDisplay from '../shared/MetricDisplay';
+import ContentCard from '../shared/ContentCard';
 
 interface MonthlyProgressionProps {
   items: ContentListItem[];
   className?: string;
+  onEdit?: (contentId: string) => void;
 }
 
-const MonthlyProgression: React.FC<MonthlyProgressionProps> = ({ items, className = '' }) => {
+const MonthlyProgression: React.FC<MonthlyProgressionProps> = ({ items, className = '', onEdit }) => {
+  const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set());
+
+  const toggleMonth = (monthKey: string) => {
+    const newExpanded = new Set(expandedMonths);
+    if (newExpanded.has(monthKey)) {
+      newExpanded.delete(monthKey);
+    } else {
+      newExpanded.add(monthKey);
+    }
+    setExpandedMonths(newExpanded);
+  };
+
   // Group content by month
   const monthlyData = items.reduce((acc, item) => {
     const date = new Date(item.published_at);
@@ -96,15 +110,35 @@ const MonthlyProgression: React.FC<MonthlyProgressionProps> = ({ items, classNam
             const postsTrend = previousMonth ? calculateTrend(data.items.length, previousMonth.items.length) : { trend: 'neutral' as const, percentage: 0 };
             const retentionTrend = previousMonth ? calculateTrend(data.avgRetention, previousMonth.avgRetention) : { trend: 'neutral' as const, percentage: 0 };
 
+            const isExpanded = expandedMonths.has(monthKey);
+
             return (
               <div key={monthKey} className="border border-[#333] bg-[#111] rounded-sm p-4">
                 <div className="flex items-center justify-between mb-4">
-                  <h4 className="text-sm font-medium text-white">{data.label}</h4>
-                  {index === 0 && (
-                    <div className="px-2 py-1 bg-terminal-accent/20 text-terminal-accent text-xs rounded-sm">
-                      Current
-                    </div>
-                  )}
+                  <div className="flex items-center gap-3">
+                    <h4 className="text-sm font-medium text-white">{data.label}</h4>
+                    <button
+                      onClick={() => toggleMonth(monthKey)}
+                      className="text-[#8A8D93] hover:text-white transition-colors p-1"
+                      title={isExpanded ? 'Hide content list' : 'Show content list'}
+                    >
+                      <svg
+                        className={cn('w-4 h-4 transition-transform', isExpanded && 'rotate-180')}
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {index === 0 && (
+                      <div className="px-2 py-1 bg-terminal-accent/20 text-terminal-accent text-xs rounded-sm">
+                        Current
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Key Metrics */}
@@ -183,36 +217,36 @@ const MonthlyProgression: React.FC<MonthlyProgressionProps> = ({ items, classNam
                     )}
                   </div>
                 </div>
+
+                {/* Expandable Content List */}
+                {isExpanded && data.items.length > 0 && (
+                  <div className="mt-4 pt-4 border-t border-[#333]">
+                    <div className="flex items-center justify-between mb-3">
+                      <h5 className="text-xs font-medium text-[#8A8D93]">Content This Month ({data.items.length})</h5>
+                    </div>
+                    <div className="space-y-2">
+                      {data.items
+                        .sort((a, b) => new Date(b.published_at).getTime() - new Date(a.published_at).getTime())
+                        .map((item) => (
+                          <ContentCard
+                            key={item.id}
+                            content={item}
+                            variant="compact"
+                            showMetrics={true}
+                            showEditButton={!!onEdit}
+                            onEdit={onEdit}
+                          />
+                        ))}
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}
         </div>
       )}
 
-      {/* 2025 Growth Targets Progress (from your Weekly AnalyticsOLD sheet) */}
-      <div className="border border-terminal-accent/30 bg-terminal-accent/5 rounded-sm p-4">
-        <div className="flex items-center gap-2 mb-3">
-          <span className="text-sm">🎯</span>
-          <h4 className="text-sm font-medium text-white">2025 Growth Targets</h4>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-          <div>
-            <div className="text-terminal-accent font-medium">Instagram Target</div>
-            <div className="text-white">Q1 2025: 15,000 followers</div>
-            <div className="text-[#8A8D93]">Q4 2025: 100,000 followers</div>
-          </div>
-          <div>
-            <div className="text-terminal-accent font-medium">TikTok Target</div>
-            <div className="text-white">Q1 2025: 10,000 followers</div>
-            <div className="text-[#8A8D93]">Q4 2025: 100,000 followers</div>
-          </div>
-          <div>
-            <div className="text-terminal-accent font-medium">YouTube Target</div>
-            <div className="text-white">Q1 2025: 2,000 subscribers</div>
-            <div className="text-[#8A8D93]">Q4 2025: 10,000 subscribers</div>
-          </div>
-        </div>
-      </div>
+      {/* Removed 2025 Growth Targets section */}
     </div>
   );
 };

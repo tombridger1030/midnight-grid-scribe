@@ -1632,6 +1632,123 @@ export async function saveContentItemWithMetrics(
   return { contentId };
 }
 
+export async function updateContentItemWithMetrics(
+  contentId: string,
+  item: Partial<ContentItemInput>,
+  metrics?: Partial<ContentMetricsInput>
+): Promise<void> {
+  const ready = await areContentTablesReady();
+  if (!ready) {
+    throw new Error('Content tables are not ready. Run migration 013_content_tables.sql.');
+  }
+
+  // Update content item if provided
+  if (item && Object.keys(item).length > 0) {
+    const { error: itemError } = await supabase
+      .from('content_items')
+      .update({
+        ...item,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', contentId)
+      .eq('user_id', FIXED_USER_ID);
+
+    if (itemError) {
+      throw new Error(`Failed to update content item: ${itemError.message}`);
+    }
+  }
+
+  // Update metrics if provided
+  if (metrics && Object.keys(metrics).length > 0) {
+    const today = new Date().toISOString().slice(0, 10);
+
+    // Check if metrics exist for today
+    const { data: existingMetrics } = await supabase
+      .from('content_metrics')
+      .select('id')
+      .eq('content_id', contentId)
+      .eq('user_id', FIXED_USER_ID)
+      .eq('snapshot_date', today)
+      .single();
+
+    if (existingMetrics) {
+      // Update existing metrics
+      const { error: updateError } = await supabase
+        .from('content_metrics')
+        .update(metrics)
+        .eq('id', existingMetrics.id);
+
+      if (updateError) {
+        throw new Error(`Failed to update content metrics: ${updateError.message}`);
+      }
+    } else {
+      // Insert new metrics
+      const { error: insertError } = await supabase
+        .from('content_metrics')
+        .insert({
+          user_id: FIXED_USER_ID,
+          content_id: contentId,
+          snapshot_date: today,
+          ...metrics
+        });
+
+      if (insertError) {
+        throw new Error(`Failed to insert new content metrics: ${insertError.message}`);
+      }
+    }
+  }
+}
+
+export async function deleteContentItem(contentId: string): Promise<void> {
+  const ready = await areContentTablesReady();
+  if (!ready) {
+    throw new Error('Content tables are not ready. Run migration 013_content_tables.sql.');
+  }
+
+  // Delete content item (metrics will cascade delete due to foreign key)
+  const { error } = await supabase
+    .from('content_items')
+    .delete()
+    .eq('id', contentId)
+    .eq('user_id', FIXED_USER_ID);
+
+  if (error) {
+    throw new Error(`Failed to delete content item: ${error.message}`);
+  }
+}
+
+export async function loadContentItemDetail(contentId: string): Promise<{
+  item: ContentItemInput & { id: string };
+  metrics: ContentMetricsInput | null;
+} | null> {
+  const ready = await areContentTablesReady();
+  if (!ready) return null;
+
+  // Load content item
+  const { data: itemData, error: itemError } = await supabase
+    .from('content_items')
+    .select('*')
+    .eq('id', contentId)
+    .eq('user_id', FIXED_USER_ID)
+    .single();
+
+  if (itemError || !itemData) return null;
+
+  // Load latest metrics
+  const { data: metricsData } = await supabase
+    .from('content_metrics')
+    .select('*')
+    .eq('content_id', contentId)
+    .order('snapshot_date', { ascending: false })
+    .limit(1)
+    .single();
+
+  return {
+    item: itemData,
+    metrics: metricsData || null
+  };
+}
+
 export interface ContentListItem {
   id: string;
   platform: string;
@@ -1640,6 +1757,7 @@ export interface ContentListItem {
   title: string;
   published_at: string;
   tags: string[] | null;
+  url?: string;
   views?: number;
   follows?: number;
   retention_ratio?: number;
@@ -1654,7 +1772,7 @@ export async function loadRecentContent(limit: number = 20): Promise<ContentList
 
   const { data, error } = await supabase
     .from('content_items')
-    .select('id, platform, format, account_handle, title, published_at, tags')
+    .select('id, platform, format, account_handle, title, published_at, tags, url')
     .eq('user_id', FIXED_USER_ID)
     .order('published_at', { ascending: false })
     .limit(limit);
@@ -1721,23 +1839,11 @@ export interface WeeklyContentDetail {
 }
 
 export async function loadWeeklyContentDetail(weekKey: string): Promise<WeeklyContentDetail> {
-  // Parse week key (YYYY-WW format)
-  const [year, weekNum] = weekKey.split('-W').map(Number);
-
-  // Calculate week start and end dates
-  const jan1 = new Date(year, 0, 1);
-  const jan1DayOfWeek = jan1.getDay();
-  const daysToFirstMonday = jan1DayOfWeek === 1 ? 0 : (8 - jan1DayOfWeek) % 7;
-  const firstMonday = new Date(year, 0, 1 + daysToFirstMonday);
-
-  const weekStart = new Date(firstMonday);
-  weekStart.setDate(firstMonday.getDate() + (weekNum - 1) * 7);
-
-  const weekEnd = new Date(weekStart);
-  weekEnd.setDate(weekStart.getDate() + 6);
-
-  const startStr = weekStart.toISOString().slice(0, 10);
-  const endStr = weekEnd.toISOString().slice(0, 10);
+  // Use fiscal week utilities to derive start/end from weekKey (Sep 1 anchor)
+  const { getWeekDates } = await import('./weeklyKpi');
+  const { start: wkStart, end: wkEnd } = getWeekDates(weekKey);
+  const startStr = wkStart.toISOString().slice(0, 10);
+  const endStr = wkEnd.toISOString().slice(0, 10);
 
   // Load content items for this week
   const { data: items, error: itemsErr } = await supabase
@@ -1810,6 +1916,7 @@ export async function loadWeeklyContentSummary(weeks: string[]): Promise<WeeklyC
   // naive client aggregation; can be moved to SQL views later
   const start = weeks[weeks.length - 1];
   const end = weeks[0];
+  const { getWeekKey } = await import('./weeklyKpi');
   // Load items over a wide date window
   const { data: items, error: itemsErr } = await supabase
     .from('content_items')
@@ -1831,12 +1938,9 @@ export async function loadWeeklyContentSummary(weeks: string[]): Promise<WeeklyC
   weeks.forEach(w => resultMap.set(w, { weekKey: w, videos_published: 0, total_views: 0, followers_gained: 0, avg_retention: null }));
 
   const weekOf = (d: string) => {
-    // reuse weeklyKpi week key format (YYYY-WW)
+    // Map date to fiscal week key with Sep 1 anchor
     const date = new Date(d + 'T00:00:00');
-    const jan1 = new Date(date.getFullYear(), 0, 1);
-    const days = Math.floor((date.getTime() - jan1.getTime()) / 86400000) + jan1.getDay();
-    const week = Math.ceil(days / 7);
-    return `${date.getFullYear()}-W${String(week).padStart(2, '0')}`;
+    return getWeekKey(date);
   };
 
   const metricsByContent = new Map<string, any>();

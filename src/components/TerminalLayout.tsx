@@ -302,7 +302,7 @@ const TerminalLayout: React.FC = () => {
                 : "w-12 sm:w-16 md:w-48"
             )}>
               <nav className="p-1 sm:p-2">
-                <div className="mb-4 text-center sm:text-left text-xs opacity-70 hidden md:block">
+                <div className="mb-4 text-center sm:text-left text-xs opacity-70 hidden md:block cyberpunk-header">
                   -- Navigation --
                 </div>
               
@@ -318,8 +318,8 @@ const TerminalLayout: React.FC = () => {
                           to={item.path}
                           aria-current={isActive ? "page" : undefined}
                           className={cn(
-                            "flex items-center justify-center md:justify-start p-3 hover:bg-[#5FE3B3] hover:text-black transition-colors text-xs min-h-[44px] rounded-sm",
-                            isActive && "bg-[#5FE3B3] text-black",
+                            "flex items-center justify-center md:justify-start p-3 cyberpunk-nav-link hover:bg-accent-cyan hover:text-black transition-colors text-xs min-h-[44px] rounded-sm",
+                            isActive && "bg-accent-cyan text-black cyberpunk-glow-cyan",
                             mobileMenuOpen ? "justify-start pl-4" : ""
                           )}
                           onClick={() => setMobileMenuOpen(false)}
@@ -343,7 +343,7 @@ const TerminalLayout: React.FC = () => {
             <div className="flex-1 bg-panel p-2 sm:p-4 overflow-y-auto relative min-h-0">
               <Outlet />
               <div className="absolute bottom-4 right-4 h-4 flex items-center">
-                <span className={cn("w-2 h-4 bg-[#5FE3B3]", cursorVisible ? "opacity-100" : "opacity-0")}></span>
+                <span className={cn("w-2 h-4 bg-accent-cyan", cursorVisible ? "opacity-100" : "opacity-0")}></span>
               </div>
             </div>
           </div>
