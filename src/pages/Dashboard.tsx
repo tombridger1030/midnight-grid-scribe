@@ -173,61 +173,6 @@ const Dashboard = () => {
           />
         </div>
 
-
-
-        {/* System Health & Quick Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* System Status */}
-          <div className="border border-terminal-accent/30 p-4 bg-terminal-bg/20">
-            <div className="flex items-center justify-between mb-2">
-              <CheckCircle2 size={16} className="text-[#5FE3B3]" />
-              <span className="text-xs text-terminal-accent/50">System</span>
-            </div>
-            <div className="text-xl font-bold text-[#5FE3B3]">Online</div>
-            <div className="text-xs text-terminal-accent/70">Data Synced</div>
-          </div>
-
-          {/* Active KPIs */}
-          <div className="border border-terminal-accent/30 p-4 bg-terminal-bg/20">
-            <div className="flex items-center justify-between mb-2">
-              <BarChart3 size={16} className="text-terminal-accent" />
-              <span className="text-xs text-terminal-accent/50">Tracking</span>
-            </div>
-            <div className="text-xl font-bold text-terminal-accent">{WEEKLY_KPI_DEFINITIONS.length}</div>
-            <div className="text-xs text-terminal-accent/70">Weekly KPIs</div>
-          </div>
-
-          {/* Performance Trend */}
-          <div className="border border-terminal-accent/30 p-4 bg-terminal-bg/20">
-            <div className="flex items-center justify-between mb-2">
-              <TrendingUp size={16} className="text-[#5FE3B3]" />
-              <span className="text-xs text-terminal-accent/50">Trend</span>
-            </div>
-            <div className="text-xl font-bold text-[#5FE3B3]">↗ {weekCompletion}%</div>
-            <div className="text-xs text-terminal-accent/70">This Week</div>
-          </div>
-
-          {/* Goals Tracking */}
-          <div className="border border-terminal-accent/30 p-4 bg-terminal-bg/20">
-            <div className="flex items-center justify-between mb-2">
-              <Award size={16} className="text-[#FFD700]" />
-              <span className="text-xs text-terminal-accent/50">Goals</span>
-            </div>
-            <div className="text-xl font-bold text-[#FFD700]">{goalsData.goals.length}</div>
-            <div className="text-xs text-terminal-accent/70">Active Goals</div>
-          </div>
-
-          {/* Content Snapshot */}
-          <div className="border border-terminal-accent/30 p-4 bg-terminal-bg/20">
-            <div className="flex items-center justify-between mb-2">
-              <Ship size={16} className="text-terminal-accent" />
-              <span className="text-xs text-terminal-accent/50">Content (Recent)</span>
-            </div>
-            <div className="text-xl font-bold text-terminal-accent">{contentSnapshot?.views ?? '—'} views</div>
-            <div className="text-xs text-terminal-accent/70">{contentSnapshot?.follows ?? '—'} follows</div>
-          </div>
-        </div>
-
       </div>
     </div>
   );

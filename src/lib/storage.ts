@@ -99,7 +99,7 @@ export interface ShipRecord {
   timestamp: string;
   description: string;
   proofUrl?: string;
-  source: 'manual' | 'github_pr' | 'social_media' | 'content_publish';
+  source: 'manual' | 'github_pr' | 'social_media' | 'content_publish' | 'content_input';
   cycleTimeMinutes?: number;
   firstWorkStartTime?: string;
 }
@@ -163,6 +163,13 @@ export interface NoctisiumAlert {
   metadata?: Record<string, any>;
 }
 
+export interface AvoidanceItem {
+  id: string;
+  text: string;
+  isCompleted: boolean;
+  createdAt: string;
+}
+
 export interface NoctisiumData {
   events: NoctisiumEvent[];
   ships: ShipRecord[];
@@ -172,7 +179,8 @@ export interface NoctisiumData {
   runwayData: RunwayData[];
   socialMediaPosts: SocialMediaPost[];
   alerts: NoctisiumAlert[];
-  currentPriority: string;
+  currentPriority: string; // Keep for backwards compatibility
+  avoidanceItems: AvoidanceItem[];
   currentSliceId?: string;
   lastUpdated: string;
 }
@@ -2732,6 +2740,7 @@ const DEFAULT_NOCTISIUM_DATA: NoctisiumData = {
   socialMediaPosts: [],
   alerts: [],
   currentPriority: '',
+  avoidanceItems: [],
   lastUpdated: new Date().toISOString()
 };
 
@@ -2760,6 +2769,52 @@ export function saveNoctisiumData(data: NoctisiumData): void {
   } catch (error) {
     console.error('Failed to save Noctisium data to localStorage:', error);
   }
+}
+
+/**
+ * Add a new avoidance item
+ */
+export function addAvoidanceItem(text: string): AvoidanceItem {
+  const data = loadNoctisiumData();
+  const item: AvoidanceItem = {
+    id: `avoid-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    text: text.trim(),
+    isCompleted: false,
+    createdAt: new Date().toISOString()
+  };
+  
+  data.avoidanceItems.push(item);
+  saveNoctisiumData(data);
+  return item;
+}
+
+/**
+ * Toggle completion status of an avoidance item
+ */
+export function toggleAvoidanceItem(itemId: string): void {
+  const data = loadNoctisiumData();
+  const item = data.avoidanceItems.find(item => item.id === itemId);
+  if (item) {
+    item.isCompleted = !item.isCompleted;
+    saveNoctisiumData(data);
+  }
+}
+
+/**
+ * Delete an avoidance item
+ */
+export function deleteAvoidanceItem(itemId: string): void {
+  const data = loadNoctisiumData();
+  data.avoidanceItems = data.avoidanceItems.filter(item => item.id !== itemId);
+  saveNoctisiumData(data);
+}
+
+/**
+ * Get all avoidance items
+ */
+export function getAvoidanceItems(): AvoidanceItem[] {
+  const data = loadNoctisiumData();
+  return data.avoidanceItems || [];
 }
 
 /**
@@ -2854,6 +2909,54 @@ export function stopDeepWorkSession(): DeepWorkSession | null {
 }
 
 /**
+ * Handle content creation: update KPI and log ship entry
+ */
+export async function handleContentCreation(title: string, publishedAt: string, url?: string, platform?: string): Promise<void> {
+  try {
+    // Import here to avoid circular dependency
+    const { incrementContentShippedKPI } = await import('./weeklyKpi');
+    
+    // Update the contentShipped KPI for the published date
+    await incrementContentShippedKPI(publishedAt);
+    
+    // Log ship entry (prefer YouTube URL if available)
+    const shipUrl = getYouTubeUrl(url, platform);
+    logContentShip(title, shipUrl, platform);
+    
+    console.log(`📱 Content ship created: ${title} (${platform || 'unknown platform'})`);
+  } catch (error) {
+    console.error('Failed to handle content creation:', error);
+  }
+}
+
+/**
+ * Extract YouTube URL if available, otherwise use provided URL
+ */
+function getYouTubeUrl(url?: string, platform?: string): string | undefined {
+  if (!url) return undefined;
+  
+  // If it's already a YouTube URL, return it
+  if (url.includes('youtube.com') || url.includes('youtu.be')) {
+    return url;
+  }
+  
+  // For now, just return the provided URL
+  // In the future, we could implement platform-specific URL extraction
+  return url;
+}
+
+/**
+ * Log a content ship automatically when content is created
+ */
+export function logContentShip(title: string, url?: string, platform?: string): ShipRecord {
+  const description = platform 
+    ? `📱 ${title} (${platform})`
+    : `📱 ${title}`;
+    
+  return logShip(description, url, 'content_input');
+}
+
+/**
  * Log a ship (user-visible value delivery)
  */
 export function logShip(description: string, proofUrl?: string, source: ShipRecord['source'] = 'manual'): ShipRecord {
@@ -2918,10 +3021,12 @@ export function logShip(description: string, proofUrl?: string, source: ShipReco
 export function getTimeSinceLastShip(): number {
   const data = loadNoctisiumData();
   if (data.ships.length === 0) return 0;
-
+  
   const lastShip = data.ships.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
   return (Date.now() - new Date(lastShip.timestamp).getTime()) / (1000 * 60 * 60);
 }
+
+// Removed duplicate function - using existing handleContentCreation system
 
 /**
  * Get current deep work session if active

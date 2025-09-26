@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Play, Pause, Square, Clock, Target } from 'lucide-react';
+import { Play, Pause, Square, Clock, Target, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   startDeepWorkSession,
@@ -110,12 +110,12 @@ export const DeepWorkTimer: React.FC<DeepWorkTimerProps> = ({ className }) => {
     return (
       <div className={cn("flex items-center gap-2", className)}>
         <form onSubmit={handleSetPriority} className="flex items-center gap-2">
-          <Target size={16} className="text-[#5FE3B3]" />
+          <AlertCircle size={16} className="text-[#5FE3B3]" />
           <input
             type="text"
             value={priority}
             onChange={(e) => setPriority(e.target.value)}
-            placeholder="What's your Top 1 priority?"
+            placeholder="What are you tackling right now?"
             className="bg-transparent border-b border-terminal-accent/30 text-terminal-accent text-sm px-2 py-1 focus:outline-none focus:border-[#5FE3B3] min-w-[200px]"
             autoFocus
             maxLength={50}

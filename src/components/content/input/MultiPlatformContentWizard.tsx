@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { cn } from '@/lib/utils';
 import { saveMultiPlatformContent, MultiPlatformContentInput, InstagramMetrics, TikTokMetrics, YouTubeShortMetrics, YouTubeLongFormMetrics } from '@/lib/multiPlatformStorage';
+import { handleContentCreation } from '@/lib/storage';
 import PlatformIcon from '../shared/PlatformIcon';
 import PlatformMetricsForm from './PlatformMetricsForm';
 
@@ -189,6 +190,40 @@ const MultiPlatformContentWizard: React.FC<MultiPlatformContentWizardProps> = ({
       };
 
       await saveMultiPlatformContent(input);
+      
+      // Handle KPI update for each platform
+      for (const platform of selectedPlatforms) {
+        const platformData = data[platform];
+        if (platformData.enabled) {
+          // Import here to avoid circular dependency
+          const { incrementContentShippedKPI } = await import('@/lib/weeklyKpi');
+          await incrementContentShippedKPI(data.published_at);
+        }
+      }
+      
+      // Create single consolidated ship for multi-platform post
+      const platformNames = Array.from(selectedPlatforms);
+      const description = platformNames.length > 1 
+        ? `📱 ${data.title} (${platformNames.length} platforms: ${platformNames.join(', ')})`
+        : `📱 ${data.title} (${platformNames[0]})`;
+      
+      // Get the best URL (prefer YouTube if available)
+      let bestUrl: string | undefined;
+      for (const platform of ['youtube_long', 'youtube_short', 'tiktok', 'instagram']) {
+        const platformData = data[platform as keyof typeof data];
+        if (platformData?.enabled && platformData.url) {
+          bestUrl = platformData.url;
+          break;
+        }
+      }
+      
+      // Import and create ship
+      const { logShip } = await import('@/lib/storage');
+      logShip(description, bestUrl, 'content_input');
+      
+      console.log(`📱 Multi-platform content ship created: ${data.title} (${platformNames.join(', ')})`);
+      
+      
       onComplete?.();
     } catch (error) {
       console.error('Error saving multi-platform content:', error);

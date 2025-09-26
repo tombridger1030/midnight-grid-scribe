@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { cn } from '@/lib/utils';
-import { saveContentItemWithMetrics } from '@/lib/storage';
+import { saveContentItemWithMetrics, handleContentCreation } from '@/lib/storage';
 import PlatformIcon from '../shared/PlatformIcon';
 
 type ContentForm = {
@@ -96,6 +96,15 @@ const ContentWizard: React.FC<ContentWizardProps> = ({ onComplete, onCancel }) =
           new_viewers_percent: data.new_viewers_percent
         }
       );
+      
+      // Handle KPI update and ship feed entry
+      await handleContentCreation(
+        data.title,
+        data.published_at,
+        data.url,
+        data.platform
+      );
+      
       reset();
       onComplete?.();
     } catch (error) {

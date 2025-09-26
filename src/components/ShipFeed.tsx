@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Ship, ExternalLink, Github, Twitter, Youtube, Instagram, Plus, Clock } from 'lucide-react';
+import { Ship, ExternalLink, Github, Twitter, Youtube, Instagram, Plus, Clock, RefreshCw, Wifi, WifiOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   loadNoctisiumData,
@@ -7,6 +7,13 @@ import {
   ShipRecord,
   getTimeSinceLastShip
 } from '@/lib/storage';
+import {
+  syncGitHubShips,
+  getGitHubSyncStatus,
+  triggerManualSync,
+  isGitHubConfigured,
+  testGitHubIntegration
+} from '@/lib/github';
 
 interface ShipFeedProps {
   className?: string;
@@ -19,9 +26,13 @@ export const ShipFeed: React.FC<ShipFeedProps> = ({ className, maxItems = 10 }) 
   const [newShipUrl, setNewShipUrl] = useState('');
   const [isAddingShip, setIsAddingShip] = useState(false);
   const [timeSinceLastShip, setTimeSinceLastShip] = useState(0);
+  const [githubSyncStatus, setGithubSyncStatus] = useState<any>(null);
+  const [isGithubSyncing, setIsGithubSyncing] = useState(false);
+  const [githubSyncResult, setGithubSyncResult] = useState<string | null>(null);
 
   useEffect(() => {
-    const loadShips = () => {
+    const loadShips = async () => {
+      // Load local ship data
       const data = loadNoctisiumData();
       const sortedShips = data.ships
         .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
@@ -30,14 +41,44 @@ export const ShipFeed: React.FC<ShipFeedProps> = ({ className, maxItems = 10 }) 
 
       const timeSince = getTimeSinceLastShip();
       setTimeSinceLastShip(timeSince);
+
+      // Update GitHub sync status
+      const status = getGitHubSyncStatus();
+      setGithubSyncStatus(status);
+
+      // Auto-sync GitHub if configured and due for sync
+      if (status.configured && !isGithubSyncing) {
+        try {
+          const result = await syncGitHubShips();
+          if (result.success && result.shipsCreated > 0) {
+            // Reload ships after successful GitHub sync
+            const updatedData = loadNoctisiumData();
+            const updatedShips = updatedData.ships
+              .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+              .slice(0, maxItems);
+            setShips(updatedShips);
+            
+            // Update result message
+            if (result.shipsCreated > 0) {
+              setGithubSyncResult(`✅ Synced ${result.shipsCreated} new ships from GitHub`);
+              setTimeout(() => setGithubSyncResult(null), 5000);
+            }
+          } else if (!result.success && result.error !== 'Sync not needed yet') {
+            setGithubSyncResult(`❌ GitHub sync failed: ${result.error}`);
+            setTimeout(() => setGithubSyncResult(null), 10000);
+          }
+        } catch (error) {
+          console.error('GitHub sync error:', error);
+        }
+      }
     };
 
     loadShips();
 
-    // Refresh every minute
+    // Refresh every minute (GitHub sync has its own 30-min interval)
     const interval = setInterval(loadShips, 60000);
     return () => clearInterval(interval);
-  }, [maxItems]);
+  }, [maxItems, isGithubSyncing]);
 
   const handleAddShip = (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,12 +98,53 @@ export const ShipFeed: React.FC<ShipFeedProps> = ({ className, maxItems = 10 }) 
     setTimeSinceLastShip(0);
   };
 
+  const handleManualGitHubSync = async () => {
+    if (!isGitHubConfigured() || isGithubSyncing) return;
+    
+    setIsGithubSyncing(true);
+    setGithubSyncResult(null);
+    
+    try {
+      const result = await triggerManualSync();
+      
+      if (result.success) {
+        // Reload ships after sync
+        const data = loadNoctisiumData();
+        const sortedShips = data.ships
+          .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+          .slice(0, maxItems);
+        setShips(sortedShips);
+        
+        setGithubSyncResult(
+          result.shipsCreated > 0 
+            ? `✅ Synced ${result.shipsCreated} new ships from GitHub`
+            : '✅ GitHub sync complete - no new ships'
+        );
+        
+        // Update sync status
+        const status = getGitHubSyncStatus();
+        setGithubSyncStatus(status);
+      } else {
+        setGithubSyncResult(`❌ GitHub sync failed: ${result.error}`);
+      }
+    } catch (error) {
+      setGithubSyncResult(`❌ GitHub sync error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsGithubSyncing(false);
+      setTimeout(() => setGithubSyncResult(null), 5000);
+    }
+  };
+
   const getSourceIcon = (source: ShipRecord['source']) => {
     switch (source) {
       case 'github_pr':
         return <Github size={14} className="text-[#333]" />;
       case 'social_media':
         return <Twitter size={14} className="text-[#1DA1F2]" />;
+      case 'content_publish':
+        return <Youtube size={14} className="text-[#FF0000]" />;
+      case 'content_input':
+        return <Youtube size={14} className="text-[#FF6B00]" />;
       default:
         return <Ship size={14} className="text-[#5FE3B3]" />;
     }
@@ -76,6 +158,8 @@ export const ShipFeed: React.FC<ShipFeedProps> = ({ className, maxItems = 10 }) 
         return 'Social';
       case 'content_publish':
         return 'Content';
+      case 'content_input':
+        return 'Content Post';
       case 'manual':
         return 'Manual';
       default:
@@ -142,11 +226,36 @@ export const ShipFeed: React.FC<ShipFeedProps> = ({ className, maxItems = 10 }) 
         <div className="flex items-center gap-3">
           <Ship size={20} className="text-[#5FE3B3]" />
           <h2 className="text-lg text-terminal-accent">Ship Feed</h2>
+          {githubSyncStatus?.configured && (
+            <div className="flex items-center gap-1">
+              {githubSyncStatus.configured ? (
+                <Wifi size={14} className="text-[#5FE3B3]" title="GitHub connected" />
+              ) : (
+                <WifiOff size={14} className="text-terminal-accent/50" title="GitHub not configured" />
+              )}
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <div className={cn("text-sm font-medium", getUrgencyColor())}>
             {getUrgencyMessage()}
           </div>
+          
+          {/* GitHub sync controls */}
+          {githubSyncStatus?.configured && (
+            <button
+              onClick={handleManualGitHubSync}
+              disabled={isGithubSyncing}
+              className="p-1 hover:bg-[#333] transition-colors rounded disabled:opacity-50"
+              title="Sync with GitHub now"
+            >
+              <RefreshCw size={16} className={cn(
+                "text-[#5FE3B3]",
+                isGithubSyncing && "animate-spin"
+              )} />
+            </button>
+          )}
+          
           <button
             onClick={() => setIsAddingShip(true)}
             className="p-1 hover:bg-[#333] transition-colors rounded"
@@ -156,6 +265,33 @@ export const ShipFeed: React.FC<ShipFeedProps> = ({ className, maxItems = 10 }) 
           </button>
         </div>
       </div>
+
+      {/* GitHub sync status and result messages */}
+      {githubSyncStatus?.configured && (
+        <div className="flex items-center justify-between text-xs text-terminal-accent/70">
+          <div>
+            Repos: {githubSyncStatus.repositories.join(', ')} • 
+            Next sync: {githubSyncStatus.nextSync ? 
+              new Date(githubSyncStatus.nextSync).toLocaleTimeString() : 'Unknown'}
+          </div>
+          <button
+            onClick={() => {
+              console.log('🧪 Running GitHub integration test...');
+              testGitHubIntegration();
+            }}
+            className="text-xs px-2 py-1 bg-terminal-accent/10 hover:bg-terminal-accent/20 border border-terminal-accent/30 rounded transition-colors"
+            title="Run GitHub integration test (check console)"
+          >
+            Test GitHub
+          </button>
+        </div>
+      )}
+      
+      {githubSyncResult && (
+        <div className="text-xs px-2 py-1 bg-terminal-bg/20 border border-terminal-accent/30 rounded">
+          {githubSyncResult}
+        </div>
+      )}
 
       {/* New ship input */}
       {isAddingShip && (

@@ -742,6 +742,30 @@ export const loadWeeklyEntriesForWeek = async (weekKey: string, userId: string =
 };
 
 /**
+ * Update contentShipped KPI when content is created
+ */
+export const incrementContentShippedKPI = async (publishedDate?: string): Promise<void> => {
+  try {
+    const date = publishedDate ? new Date(publishedDate) : new Date();
+    const weekKey = getWeekKey(date);
+    const dayIndex = getDayIndexFromDate(date.toISOString().split('T')[0]);
+
+    if (dayIndex >= 0 && dayIndex < 7) {
+      // Get current daily values
+      const currentDaily = getWeeklyDailyValues(weekKey, 'contentShipped');
+      const newValue = currentDaily[dayIndex] + 1;
+      
+      // Update the specific day
+      await updateWeeklyDailyValue(weekKey, 'contentShipped', dayIndex, newValue);
+      
+      console.log(`Updated contentShipped KPI: +1 for ${date.toISOString().split('T')[0]} (week ${weekKey})`);
+    }
+  } catch (error) {
+    console.error('Failed to update contentShipped KPI:', error);
+  }
+};
+
+/**
  * Sync deep work hours from Noctisium data to weekly KPIs
  */
 export const syncDeepWorkHours = async (): Promise<void> => {
