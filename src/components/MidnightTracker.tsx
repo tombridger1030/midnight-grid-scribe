@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FIXED_USER_ID } from '@/lib/storage';
+import { userStorage } from '@/lib/userStorage';
 import { useMetrics } from '@/hooks/useTracker';
 import MetricGrid from './MetricGrid';
 import { useToast } from '@/components/ui/use-toast';
@@ -69,7 +69,7 @@ const MidnightTracker: React.FC = () => {
       const { data: upsertData, error } = await supabase
         .from('metrics')
         .upsert([{ 
-          user_id: FIXED_USER_ID, 
+          user_id: userStorage.getCurrentUserId(), 
           date: testDate, 
           data: metricsOnly 
         }], 

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { predefinedMetrics, FIXED_USER_ID, MetricData } from '@/lib/storage';
+import { predefinedMetrics, MetricData } from '@/lib/storage';
+import { userStorage } from '@/lib/userStorage';
 import { useDate } from '@/contexts/DateContext';
 import { useToast } from '@/components/ui/use-toast';
 import { useMetrics } from '@/hooks/useTracker';
@@ -95,7 +96,7 @@ const MetricGrid: React.FC<MetricGridProps> = ({ onAddDay }) => {
 
       // Upsert the changed day's data to Supabase
       const payload = [{
-        user_id: FIXED_USER_ID,
+        user_id: userStorage.getCurrentUserId(),
         date,
         data: metricsOnly
       }];

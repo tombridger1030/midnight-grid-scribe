@@ -15,76 +15,109 @@ import ContentRoot from "./pages/ContentRoot";
 import ContentDashboard from "./pages/ContentDashboard";
 import ContentWeekly from "./pages/ContentWeekly";
 import ContentInput from "./pages/ContentInput";
+import Profile from "./pages/Profile";
 import { useState, useEffect } from "react";
-import PinUnlockOverlay from "@/components/PinUnlockOverlay";
-import { loadMetrics } from "@/lib/storage";
+import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import CyberpunkLogin from "@/components/cyberpunk/CyberpunkLogin";
+import MatrixBackground from "@/components/cyberpunk/MatrixBackground";
+import SoundEffects from "@/components/cyberpunk/SoundEffects";
+import { kpiManager } from "@/lib/configurableKpis";
+import { userStorage } from "@/lib/userStorage";
+import { preferencesManager } from "@/lib/userPreferences";
+import { supabase } from "@/lib/supabase";
 
 const queryClient = new QueryClient();
 
-const App = () => {
-  const [unlocked, setUnlocked] = useState(sessionStorage.getItem('noctisium_unlocked') === 'true');
-  const [isLoadingData, setIsLoadingData] = useState(false);
+// Inner App component that uses auth context
+const AppContent = () => {
+  const { user, profile, loading } = useAuth();
+  const [isInitializing, setIsInitializing] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(false);
 
   useEffect(() => {
-    if (unlocked) {
-      const loadInitialData = async () => {
-        setIsLoadingData(true);
+    if (user && !isInitializing) {
+      const initializeUser = async () => {
+        setIsInitializing(true);
         try {
-          await loadMetrics();
+          // Note: userStorage.setUserId is now handled in AuthContext to prevent race conditions
+          
+          // Initialize default KPIs if this is a new user
+          await kpiManager.initializeDefaultKPIs();
+
+          // Load sound preference
+          const soundPref = await preferencesManager.shouldEnableSound();
+          setSoundEnabled(soundPref);
+
+          console.log('User initialized successfully');
         } catch (error) {
-          console.error('Failed to load initial data:', error);
+          console.error('Failed to initialize user:', error);
         } finally {
-          setIsLoadingData(false);
+          setIsInitializing(false);
         }
       };
-      loadInitialData();
+
+      initializeUser();
     }
-  }, [unlocked]);
+  }, [user]); // Removed isInitializing from dependencies to prevent infinite loop
 
-  const handleUnlock = () => {
-    setUnlocked(true);
-  };
-
-  if (isLoadingData) {
+  if (loading || isInitializing) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-black text-[#8A8D93] font-mono">
-        <div className="text-center">
-          <div className="text-xl mb-2">Loading data...</div>
-          <div className="text-sm opacity-70">Syncing with neural network</div>
+        <MatrixBackground opacity={0.05} />
+        <div className="text-center relative z-10">
+          <div className="text-xl mb-2">
+            {loading ? 'Connecting to neural network...' : 'Initializing user profile...'}
+          </div>
+          <div className="text-sm opacity-70">Please wait</div>
         </div>
       </div>
     );
   }
 
+  if (!user) {
+    return <CyberpunkLogin />;
+  }
+
+  // Let users into the app even without profiles loaded
+  // The app will work with localStorage regardless of profile status
+
+  return (
+    <>
+      <SoundEffects enabled={soundEnabled} />
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<TerminalLayout />}>
+          <Route index element={<Dashboard />} />
+          <Route path="kpis" element={<Index />} />
+          <Route path="dashboard" element={<Dashboard />} />
+          <Route path="visualizer" element={<Visualizer />} />
+          <Route path="roadmap" element={<Roadmap />} />
+          <Route path="cash" element={<Cash />} />
+          <Route path="profile" element={<Profile />} />
+          <Route path="content" element={<Content />}>
+            <Route index element={<ContentDashboard />} />
+            <Route path="dashboard" element={<ContentDashboard />} />
+            <Route path="weekly" element={<ContentWeekly />} />
+            <Route path="input" element={<ContentInput />} />
+          </Route>
+        </Route>
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    </BrowserRouter>
+    </>
+  );
+};
+
+const App = () => {
   return (
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        {unlocked ? (
-          <BrowserRouter>
-            <Routes>
-              <Route path="/" element={<TerminalLayout />}>
-                <Route index element={<Dashboard />} />
-                <Route path="kpis" element={<Index />} />
-                <Route path="dashboard" element={<Dashboard />} />
-                <Route path="visualizer" element={<Visualizer />} />
-                <Route path="roadmap" element={<Roadmap />} />
-                <Route path="cash" element={<Cash />} />
-                <Route path="content" element={<Content />}>
-                  <Route index element={<ContentDashboard />} />
-                  <Route path="dashboard" element={<ContentDashboard />} />
-                  <Route path="weekly" element={<ContentWeekly />} />
-                  <Route path="input" element={<ContentInput />} />
-                </Route>
-              </Route>
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </BrowserRouter>
-        ) : (
-          <PinUnlockOverlay onUnlock={handleUnlock} />
-        )}
-      </TooltipProvider>
+      <AuthProvider>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <AppContent />
+        </TooltipProvider>
+      </AuthProvider>
     </QueryClientProvider>
   );
 };

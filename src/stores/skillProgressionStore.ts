@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { supabase } from '@/lib/supabase';
-import { FIXED_USER_ID } from '@/lib/storage';
+import { userStorage } from '@/lib/userStorage';
 import {
   SkillData,
   SkillCheckpoint,
@@ -250,7 +250,7 @@ export const useSkillProgressionStore = create<SkillProgressionStore>()(
           const { data, error } = await supabase
             .from('skill_progression')
             .select('*')
-            .eq('user_id', FIXED_USER_ID)
+            .eq('user_id', userStorage.getCurrentUserId())
             .order('created_at', { ascending: false })
             .limit(1);
           
@@ -268,7 +268,9 @@ export const useSkillProgressionStore = create<SkillProgressionStore>()(
           } else {
             // Initialize with default skills if no data exists
             get().initializeSkills();
-            await get().saveSkillsToSupabase();
+            // Don't auto-save to Supabase if RLS is not set up properly
+            // User can manually save later when database is ready
+            console.log('Initialized default skills (not saved to database due to RLS policy)');
           }
         } catch (error) {
           console.error('Failed to load skills from Supabase:', error);
@@ -291,14 +293,21 @@ export const useSkillProgressionStore = create<SkillProgressionStore>()(
           const { error } = await supabase
             .from('skill_progression')
             .upsert({
-              user_id: FIXED_USER_ID,
+              user_id: userStorage.getCurrentUserId(),
               data: progressionData,
               updated_at: new Date().toISOString()
             });
           
           if (error) {
             console.error('Error saving skills to Supabase:', error);
+            // If RLS policy error, provide helpful message
+            if (error.code === '42501') {
+              console.warn('RLS policy violation: Please run the database setup script in Supabase SQL Editor');
+              console.warn('Script location: database-complete-setup.sql');
+            }
+            return false; // Indicate save failed
           }
+          return true; // Indicate save succeeded
         } catch (error) {
           console.error('Failed to save skills to Supabase:', error);
         }

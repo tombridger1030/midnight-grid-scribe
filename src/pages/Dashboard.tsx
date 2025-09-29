@@ -20,20 +20,23 @@ import {
 } from '@/lib/storage';
 import { loadRecentContent } from '@/lib/storage';
 import {
-  WEEKLY_KPI_DEFINITIONS,
   loadWeeklyKPIs,
   getCurrentWeek,
   getWeeklyKPIRecord,
   calculateWeekCompletion,
   WeeklyKPIValues,
-  loadWeeklyKPIsWithSync
+  loadWeeklyKPIsWithSync,
+  calculateKPIProgress,
+  getKPIStatus
 } from '@/lib/weeklyKpi';
+import { kpiManager, ConfigurableKPI } from '@/lib/configurableKpis';
 
 const Dashboard = () => {
   const [goalsData, setGoalsData] = useState<GoalsData>({ goals: [] });
   const [currentWeekData, setCurrentWeekData] = useState<WeeklyKPIValues>({});
   const [isLoading, setIsLoading] = useState(true);
   const [contentSnapshot, setContentSnapshot] = useState<{ views: number; follows: number } | null>(null);
+  const [userKPIs, setUserKPIs] = useState<ConfigurableKPI[]>([]);
   const currentWeek = getCurrentWeek();
   const currentMonth = getCurrentMonth();
   
@@ -56,6 +59,10 @@ const Dashboard = () => {
         // Load goals data
         const goals = loadGoalsData();
         setGoalsData(goals);
+
+        // Load user's configured KPIs first
+        const activeKPIs = await kpiManager.getActiveKPIs();
+        setUserKPIs(activeKPIs);
 
         // Load weekly KPI data from Supabase
         await loadWeeklyKPIsWithSync();
@@ -91,19 +98,14 @@ const Dashboard = () => {
     loadDashboardData();
   }, [currentWeek]);
 
-  // Get category color
-  const getCategoryColor = (category: string) => {
-    switch (category) {
-      case 'professional': return 'text-[#FF6B00]';
-      case 'fitness': return 'text-[#53B4FF]';
-      case 'financial': return 'text-[#FFD700]';
-      case 'personal': return 'text-[#FF6B6B]';
-      default: return 'text-terminal-accent';
-    }
+  // Get category color (use first KPI color from each category)
+  const getCategoryColor = (category: string): string => {
+    const firstKPI = userKPIs.find(kpi => kpi.category === category);
+    return firstKPI?.color || '#FF6B00';
   };
 
   // Calculate overall week completion
-  const weekCompletion = calculateWeekCompletion(currentWeekData);
+  const weekCompletion = Math.round(kpiManager.calculateWeekCompletion(currentWeekData, userKPIs));
 
   // Get KPI summary stats
   const getKPISummary = () => {
@@ -112,14 +114,24 @@ const Dashboard = () => {
     let fair = 0;
     let poor = 0;
 
-    WEEKLY_KPI_DEFINITIONS.forEach(kpi => {
-      const value = currentWeekData[kpi.id] || 0;
-      const progress = Math.min(100, (value / kpi.target) * 100);
-      
-      if (progress >= 100) excellent++;
-      else if (progress >= 80) good++;
-      else if (progress >= 50) fair++;
-      else poor++;
+    userKPIs.forEach(kpi => {
+      const value = currentWeekData[kpi.kpi_id] || 0;
+      const status = getKPIStatus(kpi.kpi_id, value);
+
+      switch (status) {
+        case 'excellent':
+          excellent++;
+          break;
+        case 'good':
+          good++;
+          break;
+        case 'fair':
+          fair++;
+          break;
+        case 'poor':
+          poor++;
+          break;
+      }
     });
 
     return { excellent, good, fair, poor };
@@ -158,7 +170,7 @@ const Dashboard = () => {
             <WeeklyConstraint />
           </div>
 
-          {/* Ship Feed */}
+          {/* Ship Feed with GitHub Commits and Recent Content */}
           <div>
             <ShipFeed maxItems={5} />
           </div>

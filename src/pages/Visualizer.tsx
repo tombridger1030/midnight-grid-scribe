@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Legend, Cell
 } from 'recharts';
+import { RefreshCw } from 'lucide-react';
 import TypewriterText from '@/components/TypewriterText';
 import {
-  WEEKLY_KPI_DEFINITIONS,
   loadWeeklyKPIs,
   loadWeeklyKPIsWithSync,
   getWeekKey,
@@ -13,6 +13,7 @@ import {
   calculateKPIProgress,
   WeeklyKPIData
 } from '@/lib/weeklyKpi';
+import { kpiManager, ConfigurableKPI } from '@/lib/configurableKpis';
 
 // Period types for the selector
 type PeriodType = 'month' | 'quarter' | 'year';
@@ -28,44 +29,49 @@ const Visualizer = () => {
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>('month');
   const [selectedKPIId, setSelectedKPIId] = useState<string | null>(null);
   const [weeklyData, setWeeklyData] = useState<WeeklyKPIData>({ records: [] });
+  const [activeKPIs, setActiveKPIs] = useState<ConfigurableKPI[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Load weekly KPI data on mount
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        setIsLoading(true);
-        // Try to load from Supabase first, fall back to local
-        try {
-          const data = await loadWeeklyKPIsWithSync();
-          console.log('Loaded weekly KPI data for Visualizer:', data);
-          console.log('Number of records:', data.records.length);
-          data.records.forEach((record, index) => {
-            console.log(`Record ${index}:`, {
-              weekKey: record.weekKey,
-              values: record.values,
-              hasDaily: !!record.daily,
-              hasDailyByDate: !!record.dailyByDate
-            });
-          });
-          setWeeklyData(data);
-        } catch (syncError) {
-          console.warn('Supabase sync failed, falling back to local data:', syncError);
-          const localData = loadWeeklyKPIs();
-          console.log('Loaded local weekly KPI data for Visualizer:', localData);
-          setWeeklyData(localData);
-        }
-      } catch (error) {
-        console.error('Failed to load weekly KPI data:', error);
-        // Provide default empty data to prevent crashes
-        setWeeklyData({ records: [] });
-      } finally {
-        setIsLoading(false);
+  // Refresh function to reload data when KPIs change
+  const refreshData = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      
+      // Load active KPIs first
+      const kpis = await kpiManager.getActiveKPIs();
+      console.log('Refreshed active KPIs for Visualizer:', kpis);
+      setActiveKPIs(kpis);
+      
+      // Clear selected KPI if it no longer exists
+      if (selectedKPIId && !kpis.find(k => k.kpi_id === selectedKPIId)) {
+        setSelectedKPIId(null);
       }
-    };
+      
+      // Try to load weekly data from Supabase first, fall back to local
+      try {
+        const data = await loadWeeklyKPIsWithSync();
+        console.log('Refreshed weekly KPI data for Visualizer:', data);
+        setWeeklyData(data);
+      } catch (syncError) {
+        console.warn('Supabase sync failed, falling back to local data:', syncError);
+        const localData = loadWeeklyKPIs();
+        console.log('Refreshed local weekly KPI data for Visualizer:', localData);
+        setWeeklyData(localData);
+      }
+    } catch (error) {
+      console.error('Failed to refresh data for Visualizer:', error);
+      // Provide default empty data to prevent crashes
+      setWeeklyData({ records: [] });
+      setActiveKPIs([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [selectedKPIId]);
 
-    loadData();
-  }, []);
+  // Load weekly KPI data and active KPIs on mount
+  useEffect(() => {
+    refreshData();
+  }, [refreshData]);
 
   // Get week range based on selected period
   const getWeekRange = (period: PeriodType): string[] => {
@@ -131,17 +137,17 @@ const Visualizer = () => {
         };
 
         // Add each KPI's value for this week
-        WEEKLY_KPI_DEFINITIONS.forEach(kpi => {
-          const value = record?.values?.[kpi.id] || 0;
-          dataPoint[kpi.id] = value;
+        activeKPIs.forEach(kpi => {
+          const value = record?.values?.[kpi.kpi_id] || 0;
+          dataPoint[kpi.kpi_id] = value;
         });
 
         console.log('KPI progression data point:', dataPoint);
 
         // Log individual KPI values for debugging
-        WEEKLY_KPI_DEFINITIONS.forEach(kpi => {
-          const value = dataPoint[kpi.id];
-          console.log(`  ${kpi.name} (${kpi.id}): ${value}`);
+        activeKPIs.forEach(kpi => {
+          const value = dataPoint[kpi.kpi_id];
+          console.log(`  ${kpi.name} (${kpi.kpi_id}): ${value}`);
         });
 
         return dataPoint;
@@ -156,7 +162,7 @@ const Visualizer = () => {
   const getKPIProgressChart = (kpiId: string): WeeklyChartData[] => {
     try {
       const weeks = getWeekRange(selectedPeriod);
-      const kpi = WEEKLY_KPI_DEFINITIONS.find(k => k.id === kpiId);
+      const kpi = activeKPIs.find(k => k.kpi_id === kpiId);
 
       if (!kpi || !weeks || weeks.length === 0) return [];
       if (!weeklyData || !weeklyData.records) return [];
@@ -164,7 +170,8 @@ const Visualizer = () => {
       return weeks.map(weekKey => {
         const record = weeklyData.records.find(r => r.weekKey === weekKey);
         const value = record?.values?.[kpiId] || 0;
-        const progress = calculateKPIProgress(kpiId, value);
+        // Use a simple progress calculation since we don't have the static calculateKPIProgress function for dynamic KPIs
+        const progress = Math.min(100, (value / kpi.target) * 100);
 
         return {
           week: weekKey,
@@ -237,13 +244,13 @@ const Visualizer = () => {
               <Legend />
 
               {/* All KPIs as separate lines */}
-              {WEEKLY_KPI_DEFINITIONS.map(kpi => {
-                console.log(`Creating line for ${kpi.name} (${kpi.id}) with color ${kpi.color}`);
+              {activeKPIs.map(kpi => {
+                console.log(`Creating line for ${kpi.name} (${kpi.kpi_id}) with color ${kpi.color}`);
                 return (
                   <Line
-                    key={kpi.id}
+                    key={kpi.kpi_id}
                     type="monotone"
-                    dataKey={kpi.id}
+                    dataKey={kpi.kpi_id}
                     stroke={kpi.color}
                     strokeWidth={2}
                     dot={{ fill: kpi.color, strokeWidth: 2, r: 4 }}
@@ -261,7 +268,7 @@ const Visualizer = () => {
 
   // Render individual KPI chart with target reference (vertical layout)
   const renderKPIChart = (kpiId: string) => {
-    const kpi = WEEKLY_KPI_DEFINITIONS.find(k => k.id === kpiId);
+    const kpi = activeKPIs.find(k => k.kpi_id === kpiId);
     if (!kpi) {
       return <div className="text-center p-4">KPI not found</div>;
     }
@@ -343,7 +350,7 @@ const Visualizer = () => {
   // Calculate KPI summary for selected period
   const getKPISummary = (kpiId: string) => {
     const weeks = getWeekRange(selectedPeriod);
-    const kpi = WEEKLY_KPI_DEFINITIONS.find(k => k.id === kpiId);
+    const kpi = activeKPIs.find(k => k.kpi_id === kpiId);
     if (!kpi) return null;
     
     const values = weeks.map(week => {
@@ -421,6 +428,16 @@ const Visualizer = () => {
             </button>
           )}
           
+          {/* Refresh button */}
+          <button
+            className="px-2 py-1 text-xs border border-terminal-accent/30 hover:border-terminal-accent/50 transition-colors flex items-center gap-1"
+            onClick={refreshData}
+            disabled={isLoading}
+          >
+            <RefreshCw size={12} className={isLoading ? 'animate-spin' : ''} />
+            Refresh
+          </button>
+          
           {/* Period range display */}
           <div className="text-terminal-accent/50 text-xs ml-auto">
             {formatPeriodRange(selectedPeriod)}
@@ -428,27 +445,33 @@ const Visualizer = () => {
         </div>
         
         {/* KPI selector */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 mb-4">
-          {WEEKLY_KPI_DEFINITIONS.map(kpi => (
-            <button 
-              key={kpi.id}
-              className={`px-3 py-2 text-xs border text-left transition-colors ${
-                selectedKPIId === kpi.id 
-                  ? 'text-white' 
-                  : 'border-terminal-accent/30 hover:border-terminal-accent/50'
-              }`}
-              style={selectedKPIId === kpi.id 
-                ? { backgroundColor: kpi.color, borderColor: kpi.color }
-                : { borderColor: kpi.color + '40', color: kpi.color }
-              }
-              onClick={() => setSelectedKPIId(selectedKPIId === kpi.id ? null : kpi.id)}
-              title={`${kpi.name} - Target: ${kpi.target} ${kpi.unit}`}
-            >
-              <div className="font-medium">{kpi.name}</div>
-              <div className="text-xs opacity-70">{kpi.target} {kpi.unit}</div>
-            </button>
-          ))}
-        </div>
+        {activeKPIs.length > 0 ? (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 mb-4">
+            {activeKPIs.map(kpi => (
+              <button 
+                key={kpi.kpi_id}
+                className={`px-3 py-2 text-xs border text-left transition-colors ${
+                  selectedKPIId === kpi.kpi_id 
+                    ? 'text-white' 
+                    : 'border-terminal-accent/30 hover:border-terminal-accent/50'
+                }`}
+                style={selectedKPIId === kpi.kpi_id 
+                  ? { backgroundColor: kpi.color, borderColor: kpi.color }
+                  : { borderColor: kpi.color + '40', color: kpi.color }
+                }
+                onClick={() => setSelectedKPIId(selectedKPIId === kpi.kpi_id ? null : kpi.kpi_id)}
+                title={`${kpi.name} - Target: ${kpi.target} ${kpi.unit}`}
+              >
+                <div className="font-medium">{kpi.name}</div>
+                <div className="text-xs opacity-70">{kpi.target} {kpi.unit}</div>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-4 text-terminal-accent/60 text-sm mb-4">
+            No KPIs configured. Visit the KPI Management section to add some KPIs first.
+          </div>
+        )}
       </div>
       
       {/* Main visualization area */}

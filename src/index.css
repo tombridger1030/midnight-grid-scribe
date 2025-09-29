@@ -715,3 +715,19 @@ html {
   );
   pointer-events: none;
 }
+
+/* Cyberpunk animations for login sequence */
+@keyframes scanLine {
+  0%, 100% {
+    top: 20%;
+    opacity: 0;
+  }
+  50% {
+    top: 80%;
+    opacity: 1;
+  }
+}
+
+.scan-line {
+  animation: scanLine 3s ease-in-out infinite;
+}

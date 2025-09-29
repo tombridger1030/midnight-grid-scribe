@@ -1,12 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation, Outlet } from 'react-router-dom';
-import { Terminal, LayoutDashboard, GitBranch, Cpu, HardDrive, Wifi, Globe, Network, Menu, X, Upload, Download, Loader2, CheckCircle2, BarChart3 } from 'lucide-react';
+import { Terminal, LayoutDashboard, GitBranch, Cpu, HardDrive, Wifi, Globe, Network, Menu, X, Upload, Download, Loader2, CheckCircle2, BarChart3, Settings, User, TrendingUp, FileText, LogOut, LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { syncAllDataToSupabase, loadAllDataFromSupabase, syncAllDataToSupabaseWithTest, testSupabaseConnection, verifySyncFunctionality } from '@/lib/storage';
 import { DeepWorkTimer } from '@/components/DeepWorkTimer';
 import { ShipClock } from '@/components/ShipClock';
+import { useAuth } from '@/contexts/AuthContext';
+import { preferencesManager } from '@/lib/userPreferences';
+import { userStorage } from '@/lib/userStorage';
+
+interface NavItem {
+  path: string;
+  icon: LucideIcon;
+  label: string;
+  id: string;
+}
 
 const TerminalLayout: React.FC = () => {
+  const { user, profile, signOut } = useAuth();
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [systemStats, setSystemStats] = useState({
@@ -27,8 +38,71 @@ const TerminalLayout: React.FC = () => {
   const [isTesting, setIsTesting] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string>('');
-  
-  // Removed sprint UI/state
+  const [enabledNavItems, setEnabledNavItems] = useState<NavItem[]>([]);
+  const [disabledNavItems, setDisabledNavItems] = useState<NavItem[]>([]);
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [preferencesVersion, setPreferencesVersion] = useState(0); // Force re-render when preferences change
+
+  // Note: userStorage.setUserId is now handled in AuthContext to prevent race conditions
+
+  // Listen for preference changes
+  useEffect(() => {
+    const handlePreferenceChange = () => {
+      setPreferencesVersion(prev => prev + 1);
+    };
+
+    // Listen for storage events (when preferences change)
+    window.addEventListener('storage', handlePreferenceChange);
+    
+    // Listen for custom preference update events
+    window.addEventListener('preferencesUpdated', handlePreferenceChange);
+
+    return () => {
+      window.removeEventListener('storage', handlePreferenceChange);
+      window.removeEventListener('preferencesUpdated', handlePreferenceChange);
+    };
+  }, []);
+
+  // Load user's enabled and disabled navigation items
+  useEffect(() => {
+    const loadNavItems = async () => {
+      const preferences = await preferencesManager.getUserPreferences();
+      const allModules = preferencesManager.getAvailableModules();
+      
+      // Convert modules to the format expected by the UI
+      const iconMap: { [key: string]: LucideIcon } = {
+        LayoutDashboard,
+        BarChart3,
+        TrendingUp,
+        GitBranch,
+        Network,
+        FileText
+      };
+
+      const convertModule = (item: { id: string; name: string; icon: string }): NavItem => ({
+        path: item.id === 'dashboard' ? '/' : `/${item.id}`,
+        icon: iconMap[item.icon] || BarChart3,
+        label: item.name,
+        id: item.id
+      });
+
+      // Split modules into enabled and disabled
+      const enabled = allModules
+        .filter(module => preferences.enabled_modules.includes(module.id))
+        .map(convertModule);
+      
+      const disabled = allModules
+        .filter(module => !preferences.enabled_modules.includes(module.id))
+        .map(convertModule);
+
+      setEnabledNavItems(enabled);
+      setDisabledNavItems(disabled);
+    };
+
+    if (user) {
+      loadNavItems();
+    }
+  }, [user, preferencesVersion]);
   
   // Get current page name for terminal prompt
   const getCurrentPagePath = () => {
@@ -76,15 +150,30 @@ const TerminalLayout: React.FC = () => {
     setMobileMenuOpen(false);
   }, [location.pathname]);
 
-  // Navigation items
-  const navItems = [
-    { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
-    { path: '/kpis', icon: BarChart3, label: 'Weekly KPIs' },
-    { path: '/visualizer', icon: BarChart3, label: 'Analytics' },
-    { path: '/roadmap', icon: GitBranch, label: 'Roadmap' },
-    { path: '/cash', icon: Network, label: 'Cash' },
-    { path: '/content', icon: BarChart3, label: 'Content' }
-  ];
+  // Get user display info
+  const getUserDisplayInfo = () => {
+    if (profile?.username === 'midnight') {
+      return {
+        username: 'MIDNIGHT',
+        email: 'midnight@noctisium',
+        displayName: profile.display_name || 'Midnight Operator'
+      };
+    }
+
+    return {
+      username: profile?.username?.toUpperCase() || 'USER',
+      email: user?.email || 'user@noctisium',
+      displayName: profile?.display_name || 'Anonymous User'
+    };
+  };
+
+  const userInfo = getUserDisplayInfo();
+
+  // Handle sign out
+  const handleSignOut = async () => {
+    await signOut();
+    setShowProfileMenu(false);
+  };
 
   // Format time with leading zeros
   const formatTimeComponent = (n: number) => n.toString().padStart(2, '0');
@@ -193,7 +282,40 @@ const TerminalLayout: React.FC = () => {
           </div>
         </div>
         <div className="hidden sm:flex items-center gap-4 text-xs uppercase">
-          <span className="text-[#8A8D93] mr-3">USER: NOCTISIUM</span>
+          <div className="relative">
+            <button
+              onClick={() => setShowProfileMenu(!showProfileMenu)}
+              className="text-[#8A8D93] mr-3 hover:text-[#5FE3B3] transition-colors flex items-center"
+            >
+              USER: {userInfo.username}
+              <User size={12} className="ml-1" />
+            </button>
+
+            {showProfileMenu && (
+              <div className="absolute top-full right-0 mt-1 bg-black border border-[#5FE3B3] z-50 min-w-48">
+                <div className="p-2 border-b border-[#5FE3B3]/30">
+                  <div className="text-[#5FE3B3] text-xs font-bold">{userInfo.displayName}</div>
+                  <div className="text-[#8A8D93] text-xs">{userInfo.email}</div>
+                </div>
+                <div className="p-1">
+                  <Link
+                    to="/profile"
+                    className="block px-2 py-1 text-xs hover:bg-[#5FE3B3]/10 text-[#8A8D93] hover:text-[#5FE3B3]"
+                    onClick={() => setShowProfileMenu(false)}
+                  >
+                    <Settings size={12} className="inline mr-2" />
+                    Profile & Settings
+                  </Link>
+                  <button
+                    onClick={handleSignOut}
+                    className="block w-full text-left px-2 py-1 text-xs hover:bg-[#FF6B6B]/10 text-[#8A8D93] hover:text-[#FF6B6B]"
+                  >
+                    Sign Out
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
           <span className="text-[#8A8D93]">OS: DEBIAN LINUX WIRED</span>
           
           
@@ -263,7 +385,7 @@ const TerminalLayout: React.FC = () => {
             <div className="flex items-center justify-between">
               <div className="flex items-center overflow-hidden">
                 <Terminal size={14} className="mr-2 text-[#5FE3B3] shrink-0" />
-                <span className="mr-4 truncate">noctisium@terminal:~$ cd {getCurrentPagePath()}</span>
+                <span className="mr-4 truncate">{userInfo.username}@terminal:~$ cd {getCurrentPagePath()}</span>
                 <span className={cn("shrink-0", cursorVisible ? "opacity-100" : "opacity-0")}>_</span>
               </div>
               <div className="hidden md:flex gap-2 lg:gap-4 text-xs">
@@ -295,19 +417,20 @@ const TerminalLayout: React.FC = () => {
             )}
             
             <div className={cn(
-              "border-r border-[#333] bg-sidebar shrink-0 z-50",
+              "border-r border-[#333] bg-sidebar shrink-0 z-50 flex flex-col",
               "sm:relative sm:z-auto",
-              mobileMenuOpen 
-                ? "fixed left-0 top-0 h-full w-64 sm:w-16 md:w-48" 
+              mobileMenuOpen
+                ? "fixed left-0 top-0 h-full w-64 sm:w-16 md:w-48"
                 : "w-12 sm:w-16 md:w-48"
             )}>
-              <nav className="p-1 sm:p-2">
+              <nav className="p-1 sm:p-2 flex flex-col flex-1">
                 <div className="mb-4 text-center sm:text-left text-xs opacity-70 hidden md:block cyberpunk-header">
                   -- Navigation --
                 </div>
               
+                {/* Enabled Navigation Items */}
                 <ul className="space-y-1 sm:space-y-2">
-                  {navItems.map((item) => {
+                  {enabledNavItems.map((item) => {
                     const isActive =
                       location.pathname === item.path ||
                       (item.path !== "/" && location.pathname.startsWith(item.path));
@@ -336,6 +459,64 @@ const TerminalLayout: React.FC = () => {
                     );
                   })}
                 </ul>
+
+                {/* Disabled Navigation Items - Hidden State */}
+                {disabledNavItems.length > 0 && (
+                  <div className="mt-6">
+                    <div className="mb-2 text-center sm:text-left text-xs opacity-50 hidden md:block cyberpunk-header">
+                      -- Hidden Modules --
+                    </div>
+                    <ul className="space-y-1 sm:space-y-2">
+                      {disabledNavItems.map((item) => (
+                        <li key={item.path}>
+                          <div
+                            className={cn(
+                              "flex items-center justify-center md:justify-start p-3 text-xs min-h-[44px] rounded-sm opacity-40 cursor-not-allowed",
+                              "border border-dashed border-[#333] text-[#555] hover:border-[#444] hover:text-[#666]",
+                              mobileMenuOpen ? "justify-start pl-4" : ""
+                            )}
+                            title={`${item.label} - Module disabled in preferences`}
+                          >
+                            <item.icon className="h-5 w-5 md:h-4 md:w-4 md:mr-2 shrink-0" />
+                            <span className={cn(
+                              "hidden md:inline ml-2",
+                              mobileMenuOpen && "inline"
+                            )}>
+                              {item.label}
+                            </span>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Signout button at bottom of sidebar */}
+                <div className="mt-auto pt-4">
+                  <button
+                    onClick={async () => {
+                      try {
+                        await signOut();
+                        setMobileMenuOpen(false);
+                      } catch (error) {
+                        console.error('Error signing out:', error);
+                      }
+                    }}
+                    className={cn(
+                      "flex items-center justify-center md:justify-start w-full p-3 cyberpunk-nav-link hover:bg-accent-pink hover:text-black transition-colors text-xs min-h-[44px] rounded-sm",
+                      "text-accent-pink/80 hover:text-black",
+                      mobileMenuOpen ? "justify-start pl-4" : ""
+                    )}
+                  >
+                    <LogOut className="h-5 w-5 md:h-4 md:w-4 md:mr-2 shrink-0" />
+                    <span className={cn(
+                      "hidden md:inline ml-2",
+                      mobileMenuOpen && "inline"
+                    )}>
+                      Sign Out
+                    </span>
+                  </button>
+                </div>
               </nav>
             </div>
 

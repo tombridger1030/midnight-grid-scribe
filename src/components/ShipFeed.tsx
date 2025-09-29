@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Ship, ExternalLink, Github, Twitter, Youtube, Instagram, Plus, Clock, RefreshCw, Wifi, WifiOff } from 'lucide-react';
+import { Ship, ExternalLink, Github, Twitter, Youtube, Instagram, Plus, Clock, RefreshCw, Wifi, WifiOff, Video } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   loadNoctisiumData,
   logShip,
   ShipRecord,
-  getTimeSinceLastShip
+  getTimeSinceLastShip,
+  loadRecentContent,
+  ContentListItem
 } from '@/lib/storage';
 import {
   syncGitHubShips,
@@ -14,6 +16,7 @@ import {
   isGitHubConfigured,
   testGitHubIntegration
 } from '@/lib/github';
+import { githubIntegration, GitHubCommit } from '@/lib/githubIntegration';
 
 interface ShipFeedProps {
   className?: string;
@@ -22,6 +25,8 @@ interface ShipFeedProps {
 
 export const ShipFeed: React.FC<ShipFeedProps> = ({ className, maxItems = 10 }) => {
   const [ships, setShips] = useState<ShipRecord[]>([]);
+  const [githubCommits, setGithubCommits] = useState<GitHubCommit[]>([]);
+  const [recentContent, setRecentContent] = useState<ContentListItem[]>([]);
   const [newShipDescription, setNewShipDescription] = useState('');
   const [newShipUrl, setNewShipUrl] = useState('');
   const [isAddingShip, setIsAddingShip] = useState(false);
@@ -41,6 +46,27 @@ export const ShipFeed: React.FC<ShipFeedProps> = ({ className, maxItems = 10 }) 
 
       const timeSince = getTimeSinceLastShip();
       setTimeSinceLastShip(timeSince);
+
+      // Load GitHub commits (past 5 days)
+      try {
+        githubIntegration.loadSettings();
+        if (githubIntegration.isConfigured()) {
+          const commits = await githubIntegration.getRecentCommits(5);
+          setGithubCommits(commits.slice(0, 10)); // Max 10 commits
+        }
+      } catch (error) {
+        console.error('Failed to load GitHub commits:', error);
+      }
+
+      // Load recent content (past 7 days) - this queries the database
+      // so deleted content will automatically not appear
+      try {
+        const content = await loadRecentContent(10);
+        console.log('🔄 ShipFeed: Loaded', content.length, 'recent content items');
+        setRecentContent(content);
+      } catch (error) {
+        console.error('Failed to load recent content:', error);
+      }
 
       // Update GitHub sync status
       const status = getGitHubSyncStatus();
@@ -77,7 +103,19 @@ export const ShipFeed: React.FC<ShipFeedProps> = ({ className, maxItems = 10 }) 
 
     // Refresh every minute (GitHub sync has its own 30-min interval)
     const interval = setInterval(loadShips, 60000);
-    return () => clearInterval(interval);
+
+    // Listen for content updates (when content is deleted/edited)
+    const handleContentUpdate = () => {
+      console.log('🔄 ShipFeed: Content updated, reloading...');
+      loadShips();
+    };
+
+    window.addEventListener('contentUpdated', handleContentUpdate);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('contentUpdated', handleContentUpdate);
+    };
   }, [maxItems, isGithubSyncing]);
 
   const handleAddShip = (e: React.FormEvent) => {
@@ -337,69 +375,157 @@ export const ShipFeed: React.FC<ShipFeedProps> = ({ className, maxItems = 10 }) 
         </div>
       )}
 
-      {/* Ships list */}
+      {/* Combined feed: Ships, GitHub Commits, and Content */}
       <div className="space-y-3">
-        {ships.length === 0 ? (
+        {ships.length === 0 && githubCommits.length === 0 && recentContent.length === 0 ? (
           <div className="text-center py-8 text-terminal-accent/70">
             <Ship size={32} className="mx-auto mb-2 opacity-50" />
             <p>No ships logged yet</p>
             <p className="text-sm mt-1">Start shipping user-visible value!</p>
           </div>
         ) : (
-          ships.map((ship) => (
-            <div
-              key={ship.id}
-              className="border border-terminal-accent/20 p-3 bg-terminal-bg/10 hover:bg-terminal-bg/20 transition-colors"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    {getSourceIcon(ship.source)}
-                    <span className="text-xs text-terminal-accent/70 uppercase">
-                      {getSourceLabel(ship.source)}
-                    </span>
-                    <span className="text-xs text-terminal-accent/50">
-                      {formatTimestamp(ship.timestamp)}
-                    </span>
+          <>
+            {/* Manual Ships */}
+            {ships.map((ship) => (
+              <div
+                key={`ship-${ship.id}`}
+                className="border border-terminal-accent/20 p-3 bg-terminal-bg/10 hover:bg-terminal-bg/20 transition-colors"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      {getSourceIcon(ship.source)}
+                      <span className="text-xs text-terminal-accent/70 uppercase">
+                        {getSourceLabel(ship.source)}
+                      </span>
+                      <span className="text-xs text-terminal-accent/50">
+                        {formatTimestamp(ship.timestamp)}
+                      </span>
+                    </div>
+
+                    <p className="text-terminal-accent text-sm mb-2 break-words">
+                      {ship.description}
+                    </p>
+
+                    <div className="flex items-center gap-4 text-xs">
+                      {ship.cycleTimeMinutes && (
+                        <div className="flex items-center gap-1">
+                          <Clock size={12} className={getCycleTimeColor(ship.cycleTimeMinutes)} />
+                          <span className={getCycleTimeColor(ship.cycleTimeMinutes)}>
+                            {formatCycleTime(ship.cycleTimeMinutes)}
+                          </span>
+                          <span className="text-terminal-accent/50">cycle</span>
+                        </div>
+                      )}
+
+                      {ship.proofUrl && (
+                        <a
+                          href={ship.proofUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1 text-[#5FE3B3] hover:text-[#5FE3B3]/80 transition-colors"
+                        >
+                          <ExternalLink size={12} />
+                          <span>proof</span>
+                        </a>
+                      )}
+                    </div>
                   </div>
+                </div>
+              </div>
+            ))}
 
-                  <p className="text-terminal-accent text-sm mb-2 break-words">
-                    {ship.description}
-                  </p>
+            {/* GitHub Commits */}
+            {githubCommits.map((commit) => (
+              <div
+                key={`github-${commit.sha}`}
+                className="border border-[#333]/40 p-3 bg-terminal-bg/10 hover:bg-terminal-bg/20 transition-colors"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Github size={14} className="text-[#333]" />
+                      <span className="text-xs text-terminal-accent/70 uppercase">GitHub Commit</span>
+                      <span className="text-xs text-terminal-accent/50">
+                        {formatTimestamp(commit.date)}
+                      </span>
+                    </div>
 
-                  <div className="flex items-center gap-4 text-xs">
-                    {ship.cycleTimeMinutes && (
-                      <div className="flex items-center gap-1">
-                        <Clock size={12} className={getCycleTimeColor(ship.cycleTimeMinutes)} />
-                        <span className={getCycleTimeColor(ship.cycleTimeMinutes)}>
-                          {formatCycleTime(ship.cycleTimeMinutes)}
-                        </span>
-                        <span className="text-terminal-accent/50">cycle</span>
-                      </div>
-                    )}
+                    <p className="text-terminal-accent text-sm mb-2 break-words">
+                      {commit.message.split('\n')[0]}
+                    </p>
 
-                    {ship.proofUrl && (
+                    <div className="flex items-center gap-4 text-xs">
+                      <span className="text-terminal-accent/70 font-mono">
+                        {commit.repo.split('/').pop()}
+                      </span>
                       <a
-                        href={ship.proofUrl}
+                        href={commit.url}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="flex items-center gap-1 text-[#5FE3B3] hover:text-[#5FE3B3]/80 transition-colors"
                       >
                         <ExternalLink size={12} />
-                        <span>proof</span>
+                        <span>view</span>
                       </a>
-                    )}
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          ))
+            ))}
+
+            {/* Recent Content */}
+            {recentContent.map((content) => (
+              <div
+                key={`content-${content.id}`}
+                className="border border-[#FF0000]/40 p-3 bg-terminal-bg/10 hover:bg-terminal-bg/20 transition-colors"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Video size={14} className="text-[#FF0000]" />
+                      <span className="text-xs text-terminal-accent/70 uppercase">
+                        {content.platform} {content.format}
+                      </span>
+                      <span className="text-xs text-terminal-accent/50">
+                        {formatTimestamp(content.published_at)}
+                      </span>
+                    </div>
+
+                    <p className="text-terminal-accent text-sm mb-2 break-words">
+                      {content.title}
+                    </p>
+
+                    <div className="flex items-center gap-4 text-xs text-terminal-accent/70">
+                      {content.views !== undefined && content.views !== null && (
+                        <span>{content.views.toLocaleString()} views</span>
+                      )}
+                      {content.follows !== undefined && content.follows !== null && content.follows > 0 && (
+                        <span className="text-[#5FE3B3]">+{content.follows} follows</span>
+                      )}
+                      {content.url && (
+                        <a
+                          href={content.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1 text-[#5FE3B3] hover:text-[#5FE3B3]/80 transition-colors"
+                        >
+                          <ExternalLink size={12} />
+                          <span>watch</span>
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </>
         )}
       </div>
 
-      {ships.length === maxItems && (
+      {(ships.length + githubCommits.length + recentContent.length > 0) && (
         <div className="text-center text-xs text-terminal-accent/50">
-          Showing {maxItems} most recent ships
+          Showing {ships.length} ships • {githubCommits.length} commits • {recentContent.length} content
         </div>
       )}
     </div>

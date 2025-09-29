@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import TypewriterText from '@/components/TypewriterText';
-import { loadData, FIXED_USER_ID } from '@/lib/storage';
+import { loadData } from '@/lib/storage';
+import { userStorage } from '@/lib/userStorage';
 import { supabase } from '@/lib/supabase';
 import { Plus, Calendar, Edit3, Trash2, X, Settings } from 'lucide-react';
 import { formatLocalDate, getCurrentLocalDate } from '@/lib/dateUtils';
@@ -174,7 +175,7 @@ const Schedule = () => {
             .from('sprints')
             .update({ status: sprint.status })
             .eq('sprint_id', sprint.sprint_id)
-            .eq('user_id', FIXED_USER_ID);
+            .eq('user_id', userStorage.getCurrentUserId());
         }
       }
       
@@ -273,7 +274,7 @@ const Schedule = () => {
             off_days: newSprintData.off_days
           })
           .eq('sprint_id', editingSprint.sprint_id)
-          .eq('user_id', FIXED_USER_ID)
+          .eq('user_id', userStorage.getCurrentUserId())
           .select();
 
         if (error) {
@@ -311,7 +312,7 @@ const Schedule = () => {
         const { error } = await supabase
           .from('sprints')
           .insert([{
-            user_id: FIXED_USER_ID,
+            user_id: userStorage.getCurrentUserId(),
             start_date: newSprintData.start_date,
             end_date: endDate || null,
             status: newSprintData.status,
@@ -381,7 +382,7 @@ const Schedule = () => {
         .from('sprints')
         .delete()
         .eq('sprint_id', sprintId)
-        .eq('user_id', FIXED_USER_ID);
+        .eq('user_id', userStorage.getCurrentUserId());
 
       if (error) {
         console.error('Error deleting sprint:', error);
@@ -404,7 +405,7 @@ const Schedule = () => {
       const { data, error } = await supabase
         .from('sprints')
         .select('*')
-        .eq('user_id', FIXED_USER_ID)
+        .eq('user_id', userStorage.getCurrentUserId())
         .order('start_date', { ascending: true });
       
       if (error) {

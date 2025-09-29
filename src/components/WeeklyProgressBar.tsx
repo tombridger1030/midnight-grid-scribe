@@ -1,13 +1,13 @@
 import React from 'react';
 import { Progress } from "@/components/ui/progress";
-import { 
-  WeeklyKPIDefinition, 
-  calculateKPIProgress, 
-  getKPIStatus 
+import {
+  calculateKPIProgress,
+  getKPIStatus
 } from '@/lib/weeklyKpi';
+import { ConfigurableKPI } from '@/lib/configurableKpis';
 
 interface WeeklyProgressBarProps {
-  kpi: WeeklyKPIDefinition;
+  kpi: ConfigurableKPI;
   actualValue: number;
   compact?: boolean;
 }
@@ -17,9 +17,9 @@ const WeeklyProgressBar: React.FC<WeeklyProgressBarProps> = ({
   actualValue, 
   compact = false 
 }) => {
-  const progress = calculateKPIProgress(kpi.id, actualValue);
-  const status = getKPIStatus(kpi.id, actualValue);
-  const isRange = kpi.minTarget !== undefined;
+  const progress = calculateKPIProgress(kpi.kpi_id, actualValue);
+  const status = getKPIStatus(kpi.kpi_id, actualValue);
+  const isRange = kpi.min_target !== undefined;
   
   // Get status color
   const getStatusColor = () => {
@@ -79,7 +79,7 @@ const WeeklyProgressBar: React.FC<WeeklyProgressBarProps> = ({
           <div>
             <div className="text-sm font-medium">{kpi.name}</div>
             <div className="text-xs text-terminal-accent/70">
-              Target: {isRange ? `${kpi.minTarget}-${kpi.target}` : kpi.target} {kpi.unit}
+              Target: {isRange ? `${kpi.min_target}-${kpi.target}` : kpi.target} {kpi.unit}
             </div>
           </div>
         </div>
@@ -102,7 +102,7 @@ const WeeklyProgressBar: React.FC<WeeklyProgressBarProps> = ({
           <span className="text-terminal-accent/50">0</span>
           {isRange && (
             <span className="text-terminal-accent/70">
-              Min: {kpi.minTarget}
+              Min: {kpi.min_target}
             </span>
           )}
           <span className="text-terminal-accent/50">Target: {kpi.target}</span>

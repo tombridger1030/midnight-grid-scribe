@@ -6,19 +6,30 @@ import { ResponsiveContainer, PieChart, Pie, Cell, LineChart as ReLineChart, XAx
 import { loadCashConsoleData, saveCashConsoleData, defaultCashConsoleData, CashConsoleData, CashHolding, updateNetWorthFromInvestments } from '@/lib/storage';
 import { fetchQuoteUSD, fetchQuoteAndPrevCloseUSD, fetchUsdToCad } from '@/lib/utils';
 import { RunwayManager } from '@/components/RunwayManager';
+import { preferencesManager, UserPreferences } from '@/lib/userPreferences';
 
 const Cash: React.FC = () => {
   const [data, setData] = useState<CashConsoleData>(defaultCashConsoleData());
   const [investmentsView, setInvestmentsView] = useState<'add' | 'pie' | 'line'>('add');
+  const [preferences, setPreferences] = useState<UserPreferences | null>(null);
 
   useEffect(() => {
-    const d = loadCashConsoleData();
-    console.log('[Cash] loadCashConsoleData:', d);
-    setData(d);
-    // Auto-refresh prices on page load
-    const today = new Date().toISOString().slice(0, 10);
-    if (d.investments.holdings.some(h => h.type === 'equity')) {
-      (async () => {
+    const loadData = async () => {
+      // Load preferences
+      const userPrefs = await preferencesManager.getUserPreferences();
+      setPreferences(userPrefs);
+
+      // Load cash data
+      const d = loadCashConsoleData();
+      console.log('[Cash] loadCashConsoleData:', d);
+      setData(d);
+    };
+
+    // Auto-refresh prices on page load after loading data
+    const autoRefresh = async () => {
+      const d = loadCashConsoleData();
+      const today = new Date().toISOString().slice(0, 10);
+      if (d.investments.holdings.some(h => h.type === 'equity')) {
         const next = { ...d };
         console.log('[Cash] auto-refresh start. holdings:', next.investments.holdings);
         for (const h of next.investments.holdings) {
@@ -42,8 +53,10 @@ const Cash: React.FC = () => {
         } catch {}
         console.log('[Cash] auto-refresh updated data:', next);
         handleSave(next);
-      })();
-    }
+      }
+    };
+
+    loadData().then(autoRefresh);
   }, []);
 
   const usdToCad = data.fx?.usdToCad || 1;
@@ -389,11 +402,12 @@ const Cash: React.FC = () => {
         </div>
 
         {/* Burn Rate */}
-        <div className="border border-terminal-accent/30 p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <Flame size={16} className="text-[#FFD700]" />
-            <h3 className="text-terminal-accent">Burn Rate (Cortal)</h3>
-          </div>
+        {preferences?.cash_layout.show_burn_rate && (
+          <div className="border border-terminal-accent/30 p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Flame size={16} className="text-[#FFD700]" />
+              <h3 className="text-terminal-accent">Burn Rate (Cortal)</h3>
+            </div>
           <BurnInputRow
             categories={data.cortal.categories || []}
             baseCurrency={baseCurrency}
@@ -423,14 +437,16 @@ const Cash: React.FC = () => {
               </div>
             ))}
           </div>
-        </div>
+          </div>
+        )}
 
         {/* Runway */}
-        <div className="border border-terminal-accent/30 p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <CalendarClock size={16} className="text-[#53B4FF]" />
-            <h3 className="text-terminal-accent">Runway</h3>
-          </div>
+        {preferences?.cash_layout.show_runway && (
+          <div className="border border-terminal-accent/30 p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <CalendarClock size={16} className="text-[#53B4FF]" />
+              <h3 className="text-terminal-accent">Runway</h3>
+            </div>
           <div className="flex items-center justify-between">
             <div className="text-terminal-accent">Cash Reserves</div>
             <div>${(data.cortal.cashReservesUsd || 0).toLocaleString()}</div>
@@ -439,7 +455,8 @@ const Cash: React.FC = () => {
             <div className="text-terminal-accent">Runway</div>
             <div className="text-2xl font-bold text-[#53B4FF]">{Number.isFinite(runwayMonths) ? runwayMonths.toFixed(1) : '∞'} months</div>
           </div>
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );

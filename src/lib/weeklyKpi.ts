@@ -1,6 +1,36 @@
 import { supabase } from './supabase';
+import { userStorage } from './userStorage';
 
-export const FIXED_USER_ID = 'echo';
+// Cache for KPI configurations to avoid repeated lookups
+let kpiConfigCache: Map<string, { isAverage: boolean }> | null = null;
+
+// Helper to check if a KPI is an average type
+async function isAverageKPI(kpiId: string): Promise<boolean> {
+  // Hard-coded check for known average KPIs
+  if (kpiId === 'sleepAverage') return true;
+
+  // Try to load from user's KPI configuration
+  try {
+    if (!kpiConfigCache) {
+      kpiConfigCache = new Map();
+      const { kpiManager } = await import('./configurableKpis');
+      const userKPIs = await kpiManager.getUserKPIs();
+      userKPIs.forEach(kpi => {
+        kpiConfigCache!.set(kpi.kpi_id, { isAverage: kpi.is_average || false });
+      });
+    }
+    const config = kpiConfigCache.get(kpiId);
+    return config?.isAverage || false;
+  } catch (error) {
+    console.warn('Failed to check KPI configuration:', error);
+    return false;
+  }
+}
+
+// Clear the cache when KPIs are updated
+export function clearKPIConfigCache() {
+  kpiConfigCache = null;
+}
 
 // Weekly KPI targets and definitions
 export interface WeeklyKPIDefinition {
@@ -220,9 +250,12 @@ export const saveWeeklyKPIs = async (data: WeeklyKPIData): Promise<void> => {
   try {
     // Save to localStorage immediately
     localStorage.setItem('noctisium-weekly-kpis', JSON.stringify(data));
-    
-    // Also save to Supabase
-    await saveWeeklyKPIsToSupabase(data);
+
+    // Also save to Supabase if user is logged in
+    const userId = userStorage.getCurrentUserId();
+    if (userId) {
+      await saveWeeklyKPIsToSupabase(data, userId);
+    }
   } catch (error) {
     console.error('Failed to save weekly KPIs:', error);
   }
@@ -299,7 +332,7 @@ async function migrateSupabaseWeeklyEntriesWeekKeys(): Promise<void> {
     const { data, error } = await supabase
       .from('weekly_kpi_entries')
       .select('id, date, week_key, kpi_id, value')
-      .eq('user_id', FIXED_USER_ID)
+      .eq('user_id', userId)
       .limit(2000);
     if (error || !data) return;
 
@@ -428,9 +461,12 @@ export const updateWeeklyDailyValue = async (
 
   // Compute weekly aggregate with KPI-specific rules
   const sum = arr.reduce((s, n) => s + (Number.isFinite(n) ? Number(n) : 0), 0);
-  if (kpiId === 'sleepAverage') {
-    // Store weekly sum of sleep hours; UI will average for progress
-    record.values[kpiId] = sum;
+  const isAvgKPI = await isAverageKPI(kpiId);
+
+  if (isAvgKPI) {
+    // Store the average per day (only for days with data)
+    const daysWithData = arr.filter(v => v > 0).length;
+    record.values[kpiId] = daysWithData > 0 ? sum / daysWithData : 0;
   } else if (kpiId === 'noCompromises') {
     // Store longest streak within this week (consecutive 1s)
     let best = 0, cur = 0;
@@ -448,18 +484,21 @@ export const updateWeeklyDailyValue = async (
 
   // Persist a per-date entry row for analytics/reporting
   try {
-    const { error } = await supabase
-      .from('weekly_kpi_entries')
-      .upsert({
-        user_id: FIXED_USER_ID,
-        date: dateKey,
-        week_key: weekKey,
-        kpi_id: kpiId,
-        value: Math.max(0, Number(value) || 0)
-      }, {
-        onConflict: 'user_id,date,kpi_id'
-      });
-    if (error) console.error('Failed to upsert weekly_kpi_entries:', error);
+    const userId = userStorage.getCurrentUserId();
+    if (userId) {
+      const { error } = await supabase
+        .from('weekly_kpi_entries')
+        .upsert({
+          user_id: userId,
+          date: dateKey,
+          week_key: weekKey,
+          kpi_id: kpiId,
+          value: Math.max(0, Number(value) || 0)
+        }, {
+          onConflict: 'user_id,date,kpi_id'
+        });
+      if (error) console.error('Failed to upsert weekly_kpi_entries:', error);
+    }
   } catch (e) {
     console.error('Failed to save weekly_kpi_entries:', e);
   }
@@ -510,9 +549,10 @@ export const setWeeklyDailyValues = async (
 // Load weekly KPIs with Supabase sync
 export const loadWeeklyKPIsWithSync = async (): Promise<WeeklyKPIData> => {
   try {
-    // Try to load from Supabase first
-    const supabaseData = await loadWeeklyKPIsFromSupabase();
-    
+    // Try to load from Supabase first if user is logged in
+    const userId = userStorage.getCurrentUserId();
+    const supabaseData = userId ? await loadWeeklyKPIsFromSupabase(userId) : null;
+
     if (supabaseData) {
       // Save to localStorage for offline access
       localStorage.setItem('noctisium-weekly-kpis', JSON.stringify(supabaseData));
@@ -520,17 +560,26 @@ export const loadWeeklyKPIsWithSync = async (): Promise<WeeklyKPIData> => {
       const migrated = await migrateWeeklyKPIsToFiscalWeeks(supabaseData);
       // Persist after migration
       await saveWeeklyKPIs(migrated);
-      // Also attempt a background Supabase entries migration (non-blocking)
-      // Temporarily disabled due to 400 errors
-      // void migrateSupabaseWeeklyEntriesWeekKeys();
+
+      // IMPORTANT: Also load daily entries from weekly_kpi_entries table
+      // This populates the dailyByDate field with per-date values
+      console.log('🔄 Loading daily entries from weekly_kpi_entries...');
+      const currentWeek = getCurrentWeek();
+      await loadWeeklyEntriesForWeek(currentWeek);
+
+      // Also load previous and next week for context
+      const [year, week] = currentWeek.split('-W').map(Number);
+      const prevWeek = `${week === 1 ? year - 1 : year}-W${String(week === 1 ? 52 : week - 1).padStart(2, '0')}`;
+      const nextWeek = `${week === 52 ? year + 1 : year}-W${String(week === 52 ? 1 : week + 1).padStart(2, '0')}`;
+      await loadWeeklyEntriesForWeek(prevWeek);
+      await loadWeeklyEntriesForWeek(nextWeek);
+
       return migrated;
     } else {
       // Fall back to localStorage
       const local = loadWeeklyKPIs();
       const migrated = await migrateWeeklyKPIsToFiscalWeeks(local);
       await saveWeeklyKPIs(migrated);
-      // Temporarily disabled due to 400 errors
-      // void migrateSupabaseWeeklyEntriesWeekKeys();
       return migrated;
     }
   } catch (error) {
@@ -538,21 +587,22 @@ export const loadWeeklyKPIsWithSync = async (): Promise<WeeklyKPIData> => {
     const local = loadWeeklyKPIs();
     const migrated = await migrateWeeklyKPIsToFiscalWeeks(local);
     await saveWeeklyKPIs(migrated);
-    // Temporarily disabled due to 400 errors
-    // void migrateSupabaseWeeklyEntriesWeekKeys();
     return migrated;
   }
 };
 
 // Calculate KPI progress percentage
-export const calculateKPIProgress = (kpiId: string, actualValue: number): number => {
+export const calculateKPIProgress = async (kpiId: string, actualValue: number): Promise<number> => {
   const definition = WEEKLY_KPI_DEFINITIONS.find(kpi => kpi.id === kpiId);
   if (!definition) return 0;
 
-  // Special handling per KPI
-  if (kpiId === 'sleepAverage') {
-    // actualValue is the weekly sum of hours; compute average per night
-    const avg = (Number(actualValue) || 0) / 7;
+  // Check if this is an average-based KPI
+  const isAvgKPI = await isAverageKPI(kpiId);
+
+  // Special handling for average KPIs (like sleep average)
+  if (isAvgKPI && kpiId === 'sleepAverage') {
+    // actualValue is already the average hours per night
+    const avg = Number(actualValue) || 0;
     // Optimal band is 6.5–7.0 hours (inclusive). Within band -> 100.
     if (avg >= 6.5 && avg <= 7) return 100;
     // Degrade outside the band proportionally. 0.25h outside still near 100; ~3.5h outside -> 0
@@ -610,19 +660,23 @@ export const calculateWeekCompletion = (values: WeeklyKPIValues): number => {
 };
 
 // Supabase integration functions
-export const loadWeeklyKPIsFromSupabase = async (userId: string = FIXED_USER_ID): Promise<WeeklyKPIData | null> => {
+export const loadWeeklyKPIsFromSupabase = async (userId: string): Promise<WeeklyKPIData | null> => {
+  console.log('📥 loadWeeklyKPIsFromSupabase called for userId:', userId);
+
   try {
     const { data, error } = await supabase
       .from('weekly_kpis')
       .select('*')
       .eq('user_id', userId)
       .order('week_key', { ascending: true });
-    
+
     if (error) {
-      console.error('Error loading weekly KPIs from Supabase:', error);
+      console.error('❌ Error loading weekly KPIs from Supabase:', error);
       return null;
     }
-    
+
+    console.log('✅ Loaded weekly_kpis records:', data?.length || 0, 'records');
+
     const records: WeeklyKPIRecord[] = (data || []).map(row => ({
       weekKey: row.week_key,
       values: (row.data && typeof row.data === 'object' && !Array.isArray(row.data) && row.data.values) ? row.data.values : (row.data || {}),
@@ -631,15 +685,15 @@ export const loadWeeklyKPIsFromSupabase = async (userId: string = FIXED_USER_ID)
       daily: (row.data && row.data.__daily) ? row.data.__daily : undefined,
       dailyByDate: (row.data && row.data.__dailyByDate) ? row.data.__dailyByDate : undefined
     }));
-    
+
     return { records };
   } catch (error) {
-    console.error('Failed to load weekly KPIs from Supabase:', error);
+    console.error('❌ Failed to load weekly KPIs from Supabase:', error);
     return null;
   }
 };
 
-export const saveWeeklyKPIsToSupabase = async (data: WeeklyKPIData, userId: string = FIXED_USER_ID): Promise<void> => {
+export const saveWeeklyKPIsToSupabase = async (data: WeeklyKPIData, userId: string): Promise<void> => {
   try {
     // Prepare records for upsert
     const upsertData = data.records.map(record => ({
@@ -684,8 +738,16 @@ export const getRecentWeeks = (count: number = 6): string[] => {
 // Types are already exported above 
 
 // Load per-date entries for a week and merge into local weekly record
-export const loadWeeklyEntriesForWeek = async (weekKey: string, userId: string = FIXED_USER_ID): Promise<void> => {
+export const loadWeeklyEntriesForWeek = async (weekKey: string): Promise<void> => {
   try {
+    const userId = userStorage.getCurrentUserId();
+    console.log(`📅 loadWeeklyEntriesForWeek for week ${weekKey}, userId:`, userId);
+
+    if (!userId) {
+      console.warn('⚠️ No user ID available for loadWeeklyEntriesForWeek');
+      return;
+    }
+
     const { data, error } = await supabase
       .from('weekly_kpi_entries')
       .select('date,kpi_id,value')
@@ -693,9 +755,11 @@ export const loadWeeklyEntriesForWeek = async (weekKey: string, userId: string =
       .eq('week_key', weekKey);
 
     if (error) {
-      console.error('Failed to load weekly_kpi_entries:', error);
+      console.error('❌ Failed to load weekly_kpi_entries:', error);
       return;
     }
+
+    console.log(`✅ Loaded ${data?.length || 0} entries for week ${weekKey}`);
 
     const store = loadWeeklyKPIs();
     const now = new Date().toISOString();

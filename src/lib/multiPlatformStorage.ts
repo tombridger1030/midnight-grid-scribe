@@ -394,6 +394,10 @@ export async function deleteMultiPlatformContent(
   }
 
   console.log(`Successfully deleted multi-platform content: ${contentTitle} (${contentIds.length} records)`);
+
+  // Notify ShipFeed and other components that content was deleted
+  window.dispatchEvent(new Event('contentUpdated'));
+  console.log('📢 Multi-platform content deleted, notified listeners');
 }
 
 /**

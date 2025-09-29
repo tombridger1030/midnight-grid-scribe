@@ -1,0 +1,538 @@
+import React, { useState, useEffect } from 'react';
+import { Plus, Edit, Trash2, Save, X, Target, Hash, Type, Palette, ArrowUp, ArrowDown } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { kpiManager, ConfigurableKPI } from '@/lib/configurableKpis';
+import { useToast } from '@/components/ui/use-toast';
+
+interface KPIManagementProps {
+  onClose?: () => void;
+}
+
+const DEFAULT_CATEGORY_OPTIONS = [
+  { value: 'discipline', label: 'Discipline', color: '#06B6D4' },
+  { value: 'engineering', label: 'Engineering', color: '#EC4899' },
+  { value: 'learning', label: 'Learning', color: '#8B5CF6' },
+  { value: 'fitness', label: 'Fitness', color: '#FF073A' },
+  { value: 'health', label: 'Health', color: '#4ADE80' },
+  { value: 'productivity', label: 'Productivity', color: '#5FE3B3' },
+  { value: 'social', label: 'Social', color: '#F59E0B' }
+];
+
+const COLOR_PRESETS = [
+  '#FF073A', '#53B4FF', '#5FE3B3', '#FFD700', '#FF6B35',
+  '#4ADE80', '#8B5CF6', '#F59E0B', '#EC4899', '#06B6D4',
+  '#64748B', '#DC2626', '#059669', '#7C2D12', '#1E293B'
+];
+
+const KPIManagement: React.FC<KPIManagementProps> = ({ onClose }) => {
+  const [kpis, setKpis] = useState<ConfigurableKPI[]>([]);
+  const [editingKPI, setEditingKPI] = useState<ConfigurableKPI | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [customCategories, setCustomCategories] = useState<string[]>([]);
+  const [newCategory, setNewCategory] = useState('');
+  const [showNewCategory, setShowNewCategory] = useState(false);
+  const { toast } = useToast();
+
+  const [formData, setFormData] = useState({
+    name: '',
+    target: 1,
+    min_target: undefined as number | undefined,
+    unit: '',
+    category: 'fitness' as ConfigurableKPI['category'],
+    color: '#5FE3B3'
+  });
+
+  useEffect(() => {
+    loadKPIs();
+  }, []);
+
+  const loadKPIs = async () => {
+    try {
+      setIsLoading(true);
+      const userKPIs = await kpiManager.getUserKPIs();
+      setKpis(userKPIs);
+
+      // Extract custom categories from KPIs
+      const categories = new Set<string>();
+      userKPIs.forEach(kpi => {
+        const isDefaultCategory = DEFAULT_CATEGORY_OPTIONS.some(opt => opt.value === kpi.category);
+        if (!isDefaultCategory) {
+          categories.add(kpi.category);
+        }
+      });
+      setCustomCategories(Array.from(categories));
+    } catch (error) {
+      console.error('Failed to load KPIs:', error);
+      toast({
+        title: "Error loading KPIs",
+        description: "Failed to load your KPIs. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Get all available categories (default + custom)
+  const getAllCategories = () => {
+    const defaultCats = DEFAULT_CATEGORY_OPTIONS.map(opt => opt.value);
+    return [...defaultCats, ...customCategories];
+  };
+
+  // Add new custom category
+  const addCustomCategory = () => {
+    if (newCategory.trim() && !getAllCategories().includes(newCategory.trim().toLowerCase())) {
+      const category = newCategory.trim().toLowerCase();
+      setCustomCategories(prev => [...prev, category]);
+      setFormData(prev => ({ ...prev, category: category as any }));
+      setNewCategory('');
+      setShowNewCategory(false);
+    }
+  };
+
+  const startCreating = () => {
+    setFormData({
+      name: '',
+      target: 1,
+      min_target: undefined,
+      unit: '',
+      category: 'fitness',
+      color: '#5FE3B3'
+    });
+    setIsCreating(true);
+    setEditingKPI(null);
+  };
+
+  const startEditing = (kpi: ConfigurableKPI) => {
+    setFormData({
+      name: kpi.name,
+      target: kpi.target,
+      min_target: kpi.min_target,
+      unit: kpi.unit,
+      category: kpi.category,
+      color: kpi.color
+    });
+    setEditingKPI(kpi);
+    setIsCreating(false);
+  };
+
+  const cancelEditing = () => {
+    setEditingKPI(null);
+    setIsCreating(false);
+    setFormData({
+      name: '',
+      target: 1,
+      min_target: undefined,
+      unit: '',
+      category: 'fitness',
+      color: '#5FE3B3'
+    });
+  };
+
+  const saveKPI = async () => {
+    if (!formData.name.trim() || !formData.unit.trim()) {
+      toast({
+        title: "Validation Error",
+        description: "Name and unit are required.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      if (isCreating) {
+        // Create new KPI
+        await kpiManager.createKPI({
+          kpi_id: formData.name.toLowerCase().replace(/\s+/g, ''),
+          name: formData.name,
+          target: formData.target,
+          min_target: formData.min_target,
+          unit: formData.unit,
+          category: formData.category,
+          color: formData.color,
+          is_active: true,
+          sort_order: kpis.length + 1
+        });
+
+        toast({
+          title: "KPI Created",
+          description: `${formData.name} has been created successfully.`,
+        });
+      } else if (editingKPI) {
+        // Update existing KPI
+        await kpiManager.updateKPI(editingKPI.id, {
+          name: formData.name,
+          target: formData.target,
+          min_target: formData.min_target,
+          unit: formData.unit,
+          category: formData.category,
+          color: formData.color
+        });
+
+        toast({
+          title: "KPI Updated",
+          description: `${formData.name} has been updated successfully.`,
+        });
+      }
+
+      await loadKPIs();
+      cancelEditing();
+    } catch (error) {
+      console.error('Failed to save KPI:', error);
+      toast({
+        title: "Error saving KPI",
+        description: "Failed to save KPI. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const deleteKPI = async (kpi: ConfigurableKPI) => {
+    if (!confirm(`Are you sure you want to delete "${kpi.name}"? This will remove all historical data for this KPI.`)) {
+      return;
+    }
+
+    try {
+      await kpiManager.permanentlyDeleteKPI(kpi.id);
+      await loadKPIs();
+
+      toast({
+        title: "KPI Deleted",
+        description: `${kpi.name} has been deleted successfully.`,
+      });
+    } catch (error) {
+      console.error('Failed to delete KPI:', error);
+      toast({
+        title: "Error deleting KPI",
+        description: "Failed to delete KPI. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const toggleKPIActive = async (kpi: ConfigurableKPI) => {
+    try {
+      await kpiManager.updateKPI(kpi.id, {
+        is_active: !kpi.is_active
+      });
+      await loadKPIs();
+
+      toast({
+        title: kpi.is_active ? "KPI Disabled" : "KPI Enabled",
+        description: `${kpi.name} has been ${kpi.is_active ? 'disabled' : 'enabled'}.`,
+      });
+    } catch (error) {
+      console.error('Failed to toggle KPI:', error);
+      toast({
+        title: "Error updating KPI",
+        description: "Failed to update KPI status. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const moveKPI = async (kpi: ConfigurableKPI, direction: 'up' | 'down') => {
+    const currentIndex = kpis.findIndex(k => k.id === kpi.id);
+    const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+
+    if (targetIndex < 0 || targetIndex >= kpis.length) return;
+
+    try {
+      await kpiManager.updateKPI(kpi.id, {
+        sort_order: kpis[targetIndex].sort_order
+      });
+      await kpiManager.updateKPI(kpis[targetIndex].id, {
+        sort_order: kpi.sort_order
+      });
+      await loadKPIs();
+
+      toast({
+        title: "KPI Reordered",
+        description: `${kpi.name} has been moved ${direction}.`,
+      });
+    } catch (error) {
+      console.error('Failed to reorder KPI:', error);
+      toast({
+        title: "Error reordering KPI",
+        description: "Failed to reorder KPI. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="bg-panel border border-accent-cyan p-6 rounded-sm">
+        <div className="text-center py-8">
+          <div className="text-accent-cyan mb-2">Loading KPIs...</div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-panel border border-accent-cyan rounded-sm">
+      <div className="p-4 border-b border-accent-cyan/20 flex items-center justify-between">
+        <h2 className="text-accent-cyan font-mono text-lg flex items-center">
+          <Target className="mr-2" size={20} />
+          KPI Management
+        </h2>
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="text-accent-pink hover:text-white transition-colors"
+          >
+            <X size={20} />
+          </button>
+        )}
+      </div>
+
+      <div className="p-4 space-y-4">
+        {/* Create/Edit Form */}
+        {(isCreating || editingKPI) && (
+          <div className="bg-sidebar border border-accent-cyan/30 p-4 rounded-sm space-y-4">
+            <h3 className="text-accent-cyan font-mono text-sm">
+              {isCreating ? 'Create New KPI' : 'Edit KPI'}
+            </h3>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Name</label>
+                <input
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                  className="w-full bg-panel border border-gray-600 rounded px-3 py-2 text-sm"
+                  placeholder="e.g., Gym Sessions"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Unit</label>
+                <input
+                  type="text"
+                  value={formData.unit}
+                  onChange={(e) => setFormData(prev => ({ ...prev, unit: e.target.value }))}
+                  className="w-full bg-panel border border-gray-600 rounded px-3 py-2 text-sm"
+                  placeholder="e.g., sessions, hours, points"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Target</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.1"
+                  value={formData.target}
+                  onChange={(e) => setFormData(prev => ({ ...prev, target: parseFloat(e.target.value) || 0 }))}
+                  className="w-full bg-panel border border-gray-600 rounded px-3 py-2 text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Min Target (optional)</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.1"
+                  value={formData.min_target || ''}
+                  onChange={(e) => setFormData(prev => ({
+                    ...prev,
+                    min_target: e.target.value ? parseFloat(e.target.value) : undefined
+                  }))}
+                  className="w-full bg-panel border border-gray-600 rounded px-3 py-2 text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Category</label>
+                <div className="space-y-2">
+                  <select
+                    value={formData.category}
+                    onChange={(e) => setFormData(prev => ({
+                      ...prev,
+                      category: e.target.value
+                    }))}
+                    className="w-full bg-panel border border-gray-600 rounded px-3 py-2 text-sm"
+                  >
+                    {DEFAULT_CATEGORY_OPTIONS.map(cat => (
+                      <option key={cat.value} value={cat.value}>{cat.label}</option>
+                    ))}
+                    {customCategories.map(cat => (
+                      <option key={cat} value={cat}>{cat.charAt(0).toUpperCase() + cat.slice(1)}</option>
+                    ))}
+                  </select>
+
+                  {showNewCategory ? (
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={newCategory}
+                        onChange={(e) => setNewCategory(e.target.value)}
+                        placeholder="New category name"
+                        className="flex-1 bg-panel border border-gray-600 rounded px-3 py-2 text-xs"
+                        onKeyPress={(e) => e.key === 'Enter' && addCustomCategory()}
+                      />
+                      <button
+                        onClick={addCustomCategory}
+                        className="px-3 py-2 bg-accent-cyan text-black rounded text-xs hover:bg-accent-cyan/80 transition-colors"
+                      >
+                        Add
+                      </button>
+                      <button
+                        onClick={() => { setShowNewCategory(false); setNewCategory(''); }}
+                        className="px-3 py-2 bg-gray-600 text-white rounded text-xs hover:bg-gray-500 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setShowNewCategory(true)}
+                      className="text-xs text-accent-cyan hover:text-white transition-colors"
+                    >
+                      + Add Custom Category
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Color</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={formData.color}
+                    onChange={(e) => setFormData(prev => ({ ...prev, color: e.target.value }))}
+                    className="w-10 h-8 bg-panel border border-gray-600 rounded"
+                  />
+                  <div className="flex gap-1 flex-wrap">
+                    {COLOR_PRESETS.slice(0, 6).map(color => (
+                      <button
+                        key={color}
+                        onClick={() => setFormData(prev => ({ ...prev, color }))}
+                        className="w-6 h-6 rounded border border-gray-600 hover:scale-110 transition-transform"
+                        style={{ backgroundColor: color }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={saveKPI}
+                className="flex items-center gap-2 px-4 py-2 bg-accent-cyan text-black rounded text-sm hover:bg-accent-cyan/80 transition-colors"
+              >
+                <Save size={16} />
+                Save KPI
+              </button>
+              <button
+                onClick={cancelEditing}
+                className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded text-sm hover:bg-gray-500 transition-colors"
+              >
+                <X size={16} />
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Add New Button */}
+        {!isCreating && !editingKPI && (
+          <button
+            onClick={startCreating}
+            className="flex items-center gap-2 px-4 py-2 bg-accent-cyan text-black rounded text-sm hover:bg-accent-cyan/80 transition-colors"
+          >
+            <Plus size={16} />
+            Add New KPI
+          </button>
+        )}
+
+        {/* KPI List */}
+        <div className="space-y-2">
+          {kpis.map((kpi, index) => (
+            <div
+              key={kpi.id}
+              className={cn(
+                "bg-sidebar border rounded-sm p-4 transition-all",
+                kpi.is_active ? "border-gray-600" : "border-gray-700 opacity-60"
+              )}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div
+                    className="w-4 h-4 rounded-full border-2"
+                    style={{ backgroundColor: kpi.color, borderColor: kpi.color }}
+                  />
+                  <div>
+                    <h4 className="font-medium text-sm">{kpi.name}</h4>
+                    <div className="text-xs text-gray-400">
+                      Target: {kpi.target} {kpi.unit}
+                      {kpi.min_target && ` (min: ${kpi.min_target})`}
+                      {' • '} {DEFAULT_CATEGORY_OPTIONS.find(c => c.value === kpi.category)?.label || kpi.category.charAt(0).toUpperCase() + kpi.category.slice(1)}
+                      {!kpi.is_active && ' • DISABLED'}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => moveKPI(kpi, 'up')}
+                    disabled={index === 0}
+                    className="p-1 text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
+                  >
+                    <ArrowUp size={16} />
+                  </button>
+                  <button
+                    onClick={() => moveKPI(kpi, 'down')}
+                    disabled={index === kpis.length - 1}
+                    className="p-1 text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
+                  >
+                    <ArrowDown size={16} />
+                  </button>
+                  <button
+                    onClick={() => toggleKPIActive(kpi)}
+                    className={cn(
+                      "px-2 py-1 text-xs rounded transition-colors",
+                      kpi.is_active
+                        ? "bg-yellow-600 text-white hover:bg-yellow-700"
+                        : "bg-green-600 text-white hover:bg-green-700"
+                    )}
+                  >
+                    {kpi.is_active ? 'Disable' : 'Enable'}
+                  </button>
+                  <button
+                    onClick={() => startEditing(kpi)}
+                    className="p-1 text-gray-400 hover:text-accent-cyan"
+                  >
+                    <Edit size={16} />
+                  </button>
+                  <button
+                    onClick={() => deleteKPI(kpi)}
+                    className="p-1 text-gray-400 hover:text-accent-pink"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+
+          {kpis.length === 0 && (
+            <div className="text-center py-8 text-gray-400">
+              <Target className="mx-auto mb-2 opacity-50" size={48} />
+              <p>No KPIs configured yet.</p>
+              <p className="text-sm">Click "Add New KPI" to get started.</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default KPIManagement;

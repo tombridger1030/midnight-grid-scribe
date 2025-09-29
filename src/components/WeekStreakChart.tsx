@@ -1,11 +1,12 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'recharts';
-import { 
-  loadWeeklyKPIs, 
-  getRecentWeeks, 
+import {
+  loadWeeklyKPIs,
+  getRecentWeeks,
   calculateWeekCompletion,
   formatWeekKey
 } from '@/lib/weeklyKpi';
+import { kpiManager, ConfigurableKPI } from '@/lib/configurableKpis';
 
 interface WeekStreakChartProps {
   weekCount?: number;
@@ -13,20 +14,31 @@ interface WeekStreakChartProps {
   height?: number;
 }
 
-const WeekStreakChart: React.FC<WeekStreakChartProps> = ({ 
-  weekCount = 6, 
+const WeekStreakChart: React.FC<WeekStreakChartProps> = ({
+  weekCount = 6,
   showTitle = true,
   height = 120
 }) => {
+  const [userKPIs, setUserKPIs] = useState<ConfigurableKPI[]>([]);
+
+  // Load KPIs on mount
+  useEffect(() => {
+    const loadKPIs = async () => {
+      const kpis = await kpiManager.getActiveKPIs();
+      setUserKPIs(kpis);
+    };
+    loadKPIs();
+  }, []);
+
   // Get recent weeks data
   const getWeeklyTrendData = () => {
     const data = loadWeeklyKPIs();
     const recentWeeks = getRecentWeeks(weekCount);
-    
+
     return recentWeeks.map(weekKey => {
       const record = data.records.find(r => r.weekKey === weekKey);
-      const completion = record ? calculateWeekCompletion(record.values) : 0;
-      
+      const completion = record ? Math.round(kpiManager.calculateWeekCompletion(record.values, userKPIs)) : 0;
+
       return {
         week: weekKey,
         completion,

@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import TypewriterText from '@/components/TypewriterText';
 import { Progress } from "@/components/ui/progress";
-import { Target, Calendar, TrendingUp, Edit3 } from 'lucide-react';
+import { Target, Calendar, TrendingUp, Edit3, Plus, Trash2, Save, X } from 'lucide-react';
 import {
   Goal,
   Month,
@@ -10,12 +10,16 @@ import {
   saveGoalsData,
   updateGoalMonthly,
   getCurrentMonth,
-  monthNumberToName
+  monthNumberToName,
+  calculateGoalProgress
 } from '@/lib/storage';
 import {
   loadWeeklyKPIs,
-  getCurrentWeek,
-  WeeklyKPIData
+  loadWeeklyKPIsWithSync,
+  getWeekDates,
+  WeeklyKPIData,
+  WEEKLY_KPI_DEFINITIONS,
+  WeeklyKPIDefinition
 } from '@/lib/weeklyKpi';
 
 const Roadmap = () => {
@@ -23,6 +27,18 @@ const Roadmap = () => {
   const [editMode, setEditMode] = useState(false);
   const [viewMode, setViewMode] = useState<'yearly' | 'monthly'>('yearly');
   const [weeklyKPIData, setWeeklyKPIData] = useState<WeeklyKPIData>({ records: [] });
+  const [showNewGoalForm, setShowNewGoalForm] = useState(false);
+  const [editingGoal, setEditingGoal] = useState<string | null>(null);
+  const [editData, setEditData] = useState<Partial<Goal>>({});
+  const [newGoal, setNewGoal] = useState<Partial<Goal>>({
+    name: '',
+    yearlyTarget: 0,
+    unit: '',
+    category: 'personal',
+    isNumeric: true,
+    connectedKpi: undefined,
+    monthlyTargets: {}
+  });
   const currentMonth = getCurrentMonth();
 
   // Load goals data and weekly KPI data on mount
@@ -30,20 +46,38 @@ const Roadmap = () => {
     const loadData = () => {
       const data = loadGoalsData();
       setGoalsData(data);
-      console.log('Roadmap loaded goals data:', data.goals.map(g => ({ id: g.id, name: g.name, currentTotal: g.currentTotal, monthly: g.monthly })));
+      console.log('Roadmap loaded goals data:', data.goals.length, 'goals found');
+      console.log('Goals details:', data.goals.map(g => ({ id: g.id, name: g.name, currentTotal: g.currentTotal, monthly: g.monthly })));
     };
 
     loadData();
 
-    // Load weekly KPI data
-    const kpiData = loadWeeklyKPIs();
-    setWeeklyKPIData(kpiData);
+    // Load weekly KPI data from Supabase (with migration) then persist locally
+    (async () => {
+      try {
+        const kpiData = await loadWeeklyKPIsWithSync();
+        setWeeklyKPIData(kpiData);
+      } catch (e) {
+        // Fallback to local-only
+        const local = loadWeeklyKPIs();
+        setWeeklyKPIData(local);
+      }
+    })();
 
     // Listen for storage changes (when other components update goals)
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === 'noctisium-goals-data') {
         console.log('Goals data changed in localStorage, reloading...');
+        console.log('Storage change event:', e.newValue ? JSON.parse(e.newValue) : 'deleted');
         loadData();
+      }
+      if (e.key === 'noctisium-weekly-kpis') {
+        try {
+          const kpiData = loadWeeklyKPIs();
+          setWeeklyKPIData(kpiData);
+        } catch (error) {
+          console.error('Failed to load weekly KPIs from storage:', error);
+        }
       }
     };
 
@@ -64,69 +98,51 @@ const Roadmap = () => {
   }, []);
 
   // Calculate monthly totals from weekly KPI data for current month
-  const calculateCurrentMonthTotals = () => {
+  const calculateCurrentMonthTotals = useCallback(() => {
     const currentDate = new Date();
-    const currentYear = currentDate.getFullYear();
     const currentMonthNum = currentDate.getMonth() + 1; // 1-based month
 
-    let monthlyDeepWorkHours = 0;
-    let monthlyBjjSessions = 0;
+    // Calculate totals for all KPIs
+    const kpiTotals: Record<string, number> = {};
+
+    // Initialize totals for all KPIs
+    WEEKLY_KPI_DEFINITIONS.forEach(kpi => {
+      kpiTotals[kpi.id] = 0;
+    });
 
     // Filter weekly records to current month and sum the values
     weeklyKPIData.records.forEach(record => {
-      // Parse week key to check if it's in current month
-      const [year, weekStr] = record.weekKey.split('-W');
-      if (parseInt(year) !== currentYear) return;
-
-      // Get the week start date to determine which month this week belongs to
-      const weekNum = parseInt(weekStr);
-      const startOfYear = new Date(currentYear, 0, 1);
-      const daysToAdd = (weekNum - 1) * 7 - startOfYear.getDay() + 1;
-      const weekStart = new Date(startOfYear);
-      weekStart.setDate(startOfYear.getDate() + daysToAdd);
-
-      // Check if week overlaps with current month (use week start date)
-      if (weekStart.getMonth() + 1 === currentMonthNum) {
+      // Use fiscal-week start date to map week to a month
+      const { start } = getWeekDates(record.weekKey);
+      if (start.getMonth() + 1 === currentMonthNum) {
         // Add KPI values from this week
-        monthlyDeepWorkHours += record.values.deepWorkHours || 0;
-        monthlyBjjSessions += record.values.bjjSessions || 0;
+        Object.keys(record.values).forEach(kpiId => {
+          if (kpiId in kpiTotals) {
+            kpiTotals[kpiId] += record.values[kpiId] || 0;
+          }
+        });
       }
     });
 
-    return { monthlyDeepWorkHours, monthlyBjjSessions };
-  };
+    return kpiTotals;
+  }, [weeklyKPIData.records]);
 
   // Auto-update goals with calculated monthly values when weekly KPI data changes
   useEffect(() => {
     if (weeklyKPIData.records.length > 0) {
-      const { monthlyDeepWorkHours, monthlyBjjSessions } = calculateCurrentMonthTotals();
+      const kpiTotals = calculateCurrentMonthTotals();
 
       setGoalsData(prevData => {
         const updatedGoals = prevData.goals.map(goal => {
           let updatedGoal = { ...goal };
 
-          // Update Deep Work goal with monthly total
-          if (goal.id === 'deep-work') {
+          // Update goals that have connected KPIs
+          if (goal.connectedKpi && goal.connectedKpi in kpiTotals) {
             updatedGoal = {
               ...goal,
               monthly: {
                 ...goal.monthly,
-                [currentMonth]: monthlyDeepWorkHours
-              }
-            };
-            // Recalculate derived values
-            const monthlyValues = Object.values(updatedGoal.monthly).filter(val => val !== undefined && val !== null);
-            updatedGoal.currentTotal = monthlyValues.reduce((sum, val) => sum + (val || 0), 0);
-            updatedGoal.progressPct = updatedGoal.yearlyTarget > 0 ? Math.min(1, updatedGoal.currentTotal / updatedGoal.yearlyTarget) : 0;
-          }
-
-          // Update BJJ goal with monthly total
-          if (goal.id === 'bjj-sessions') {
-            updatedGoal = {
-              ...goal,
-              monthly: {
-                ...goal.monthly,
-                [currentMonth]: monthlyBjjSessions
+                [currentMonth]: kpiTotals[goal.connectedKpi]
               }
             };
             // Recalculate derived values
@@ -143,7 +159,7 @@ const Roadmap = () => {
         return newData;
       });
     }
-  }, [weeklyKPIData, currentMonth]);
+  }, [weeklyKPIData, currentMonth, calculateCurrentMonthTotals]);
 
   // Update monthly value for a goal
   const handleUpdateMonthly = (goalId: string, month: Month, value: number) => {
@@ -153,6 +169,86 @@ const Roadmap = () => {
     } catch (error) {
       console.error('Failed to update monthly value:', error);
     }
+  };
+
+  // Add a new goal
+  const handleAddGoal = () => {
+    console.log('Creating goal with data:', newGoal);
+    
+    if (!newGoal.name || !newGoal.unit || !newGoal.yearlyTarget || newGoal.yearlyTarget <= 0) {
+      alert('Please fill in all required fields (Name, Target, Unit). Target must be greater than 0.');
+      return;
+    }
+
+    const goalId = newGoal.name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+    
+    const goalToAdd: Goal = {
+      id: goalId,
+      name: newGoal.name!,
+      yearlyTarget: newGoal.yearlyTarget!,
+      unit: newGoal.unit!,
+      category: newGoal.category!,
+      isNumeric: newGoal.isNumeric!,
+      connectedKpi: newGoal.connectedKpi,
+      monthly: {},
+      monthlyTargets: newGoal.monthlyTargets || {},
+      currentTotal: 0,
+      progressPct: 0
+    };
+
+    const updatedData = {
+      goals: [...goalsData.goals, goalToAdd]
+    };
+
+    console.log('Adding goal to data:', goalToAdd);
+    console.log('Updated goals data:', updatedData);
+    
+    setGoalsData(updatedData);
+    saveGoalsData(updatedData);
+    setShowNewGoalForm(false);
+    
+    console.log('Goal added successfully, form closed');
+    setNewGoal({
+      name: '',
+      yearlyTarget: 0,
+      unit: '',
+      category: 'personal',
+      isNumeric: true,
+      connectedKpi: undefined,
+      monthlyTargets: {}
+    });
+  };
+
+  // Delete a goal
+  const handleDeleteGoal = (goalId: string) => {
+    if (confirm('Are you sure you want to delete this goal? This action cannot be undone.')) {
+      const updatedData = {
+        goals: goalsData.goals.filter(goal => goal.id !== goalId)
+      };
+      setGoalsData(updatedData);
+      saveGoalsData(updatedData);
+    }
+  };
+
+  // Update an existing goal
+  const handleUpdateGoal = (goalId: string, updates: Partial<Goal>) => {
+    const updatedData = {
+      goals: goalsData.goals.map(goal => 
+        goal.id === goalId 
+          ? { 
+              ...goal, 
+              ...updates,
+              // Recalculate progress if target changed
+              ...(updates.yearlyTarget && {
+                progressPct: goal.yearlyTarget > 0 ? Math.min(1, goal.currentTotal / updates.yearlyTarget) : 0
+              })
+            }
+          : goal
+      )
+    };
+    setGoalsData(updatedData);
+    saveGoalsData(updatedData);
+    setEditingGoal(null);
   };
 
   // Get category color
@@ -171,20 +267,390 @@ const Roadmap = () => {
     return ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   };
 
+  // Render new goal form
+  const renderNewGoalForm = () => (
+    <div className="border border-terminal-accent/30 p-4 mb-6 bg-terminal-accent/5">
+      <div className="flex justify-between items-center mb-4">
+        <h3 className="text-sm text-terminal-accent flex items-center">
+          <Plus size={16} className="mr-2" />
+          Create New Goal
+        </h3>
+        <button
+          onClick={() => setShowNewGoalForm(false)}
+          className="text-terminal-accent/70 hover:text-terminal-accent"
+        >
+          <X size={16} />
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-xs text-terminal-accent/70 mb-1">Goal Name *</label>
+          <input
+            type="text"
+            className="terminal-input w-full"
+            value={newGoal.name || ''}
+            onChange={(e) => setNewGoal({ ...newGoal, name: e.target.value })}
+            placeholder="e.g., Launch SaaS Product"
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs text-terminal-accent/70 mb-1">Category *</label>
+          <select
+            className="terminal-input w-full"
+            value={newGoal.category || 'personal'}
+            onChange={(e) => setNewGoal({ ...newGoal, category: e.target.value as Goal['category'] })}
+          >
+            <option value="personal">Personal</option>
+            <option value="professional">Professional</option>
+            <option value="financial">Financial</option>
+            <option value="fitness">Fitness</option>
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-xs text-terminal-accent/70 mb-1">Yearly Target *</label>
+          <input
+            type="number"
+            min="0.01"
+            step="0.01"
+            className="terminal-input w-full"
+            value={newGoal.yearlyTarget || ''}
+            onChange={(e) => {
+              const value = parseFloat(e.target.value);
+              console.log('Yearly target input changed:', e.target.value, '-> parsed:', value);
+              setNewGoal({ ...newGoal, yearlyTarget: isNaN(value) ? undefined : value });
+            }}
+            placeholder="1000"
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs text-terminal-accent/70 mb-1">Unit *</label>
+          <input
+            type="text"
+            className="terminal-input w-full"
+            value={newGoal.unit || ''}
+            onChange={(e) => setNewGoal({ ...newGoal, unit: e.target.value })}
+            placeholder="e.g., hours, sessions, $"
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs text-terminal-accent/70 mb-1">Connected KPI (Auto-tracking)</label>
+          <select
+            className="terminal-input w-full"
+            value={newGoal.connectedKpi || ''}
+            onChange={(e) => setNewGoal({ ...newGoal, connectedKpi: e.target.value || undefined })}
+          >
+            <option value="">No auto-tracking</option>
+            {WEEKLY_KPI_DEFINITIONS.map(kpi => (
+              <option key={kpi.id} value={kpi.id}>
+                {kpi.name} ({kpi.unit})
+              </option>
+            ))}
+          </select>
+          <div className="text-xs text-terminal-accent/50 mt-1">
+            Connect to a KPI for automatic monthly value updates
+          </div>
+        </div>
+
+        <div>
+          <label className="flex items-center text-xs text-terminal-accent/70">
+            <input
+              type="checkbox"
+              className="mr-2"
+              checked={newGoal.isNumeric || false}
+              onChange={(e) => setNewGoal({ ...newGoal, isNumeric: e.target.checked })}
+            />
+            Numeric goal (supports monthly tracking)
+          </label>
+        </div>
+      </div>
+
+      {/* Monthly Targets Section */}
+      {newGoal.isNumeric && (
+        <div className="mt-6">
+          <h4 className="text-sm text-terminal-accent mb-3 flex items-center">
+            <Calendar size={16} className="mr-2" />
+            Monthly Targets (Optional)
+          </h4>
+          <div className="text-xs text-terminal-accent/60 mb-3">
+            Set specific monthly targets to break down your yearly goal. Leave empty to use auto-calculated targets.
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {getAllMonths().map(month => (
+              <div key={month} className="flex items-center gap-2 p-2 border border-terminal-accent/20">
+                <div className="w-8 text-xs font-mono">{month}</div>
+                <input
+                  type="number"
+                  className="terminal-input flex-1 text-xs"
+                  value={newGoal.monthlyTargets?.[month]?.target || ''}
+                  onChange={(e) => {
+                    const value = parseFloat(e.target.value) || 0;
+                    setNewGoal({
+                      ...newGoal,
+                      monthlyTargets: {
+                        ...newGoal.monthlyTargets,
+                        [month]: value > 0 ? { target: value, description: '' } : undefined
+                      }
+                    });
+                  }}
+                  placeholder="0"
+                />
+              </div>
+            ))}
+          </div>
+          
+          <div className="mt-2 text-xs text-terminal-accent/50">
+            Total of monthly targets: {
+              Object.values(newGoal.monthlyTargets || {}).reduce((sum, target) => 
+                sum + (target?.target || 0), 0
+              ).toLocaleString()
+            } {newGoal.unit || 'units'}
+          </div>
+        </div>
+      )}
+
+      <div className="flex gap-2 mt-4">
+        <button
+          onClick={handleAddGoal}
+          className="terminal-button bg-[#5FE3B3] text-black hover:bg-[#5FE3B3]/80 flex items-center"
+        >
+          <Save size={16} className="mr-2" />
+          Create Goal
+        </button>
+        <button
+          onClick={() => setShowNewGoalForm(false)}
+          className="terminal-button"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+
+  // Initialize edit data when editing a goal
+  useEffect(() => {
+    if (editingGoal) {
+      const goal = goalsData.goals.find(g => g.id === editingGoal);
+      if (goal) {
+        setEditData({
+          name: goal.name,
+          yearlyTarget: goal.yearlyTarget,
+          unit: goal.unit,
+          category: goal.category,
+          connectedKpi: goal.connectedKpi
+        });
+      }
+    }
+  }, [editingGoal, goalsData.goals]);
+
+  // Render goal editor
+  const renderGoalEditor = (goal: Goal) => (
+    <div className="border border-terminal-accent/50 p-3 mb-4 bg-terminal-accent/10">
+      <div className="flex justify-between items-center mb-3">
+        <h4 className="text-xs text-terminal-accent flex items-center">
+          <Edit3 size={14} className="mr-2" />
+          Editing: {goal.name}
+        </h4>
+        <button
+          onClick={() => setEditingGoal(null)}
+          className="text-terminal-accent/70 hover:text-terminal-accent"
+        >
+          <X size={14} />
+        </button>
+      </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div>
+            <label className="block text-xs text-terminal-accent/70 mb-1">Name</label>
+            <input
+              type="text"
+              className="terminal-input w-full text-xs"
+              value={editData.name || ''}
+              onChange={(e) => setEditData({ ...editData, name: e.target.value })}
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs text-terminal-accent/70 mb-1">Target</label>
+            <input
+              type="number"
+              className="terminal-input w-full text-xs"
+              value={editData.yearlyTarget || ''}
+              onChange={(e) => setEditData({ ...editData, yearlyTarget: parseFloat(e.target.value) || 0 })}
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs text-terminal-accent/70 mb-1">Unit</label>
+            <input
+              type="text"
+              className="terminal-input w-full text-xs"
+              value={editData.unit || ''}
+              onChange={(e) => setEditData({ ...editData, unit: e.target.value })}
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs text-terminal-accent/70 mb-1">Category</label>
+            <select
+              className="terminal-input w-full text-xs"
+              value={editData.category || 'personal'}
+              onChange={(e) => setEditData({ ...editData, category: e.target.value as Goal['category'] })}
+            >
+              <option value="personal">Personal</option>
+              <option value="professional">Professional</option>
+              <option value="financial">Financial</option>
+              <option value="fitness">Fitness</option>
+            </select>
+          </div>
+
+          <div className="md:col-span-2 lg:col-span-2">
+            <label className="block text-xs text-terminal-accent/70 mb-1">Connected KPI</label>
+            <select
+              className="terminal-input w-full text-xs"
+              value={editData.connectedKpi || ''}
+              onChange={(e) => setEditData({ ...editData, connectedKpi: e.target.value || undefined })}
+            >
+              <option value="">No auto-tracking</option>
+              {WEEKLY_KPI_DEFINITIONS.map(kpi => (
+                <option key={kpi.id} value={kpi.id}>
+                  {kpi.name} ({kpi.unit})
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Monthly Targets Section for Goal Editor */}
+        {goal.isNumeric && (
+          <div className="mt-4">
+            <h5 className="text-xs text-terminal-accent/70 mb-3 flex items-center">
+              <Calendar size={12} className="mr-1" />
+              Edit Monthly Targets
+            </h5>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+              {getAllMonths().map(month => (
+                <div key={month} className="flex items-center gap-1 p-1 border border-terminal-accent/10">
+                  <div className="w-6 text-xs font-mono">{month.slice(0,3)}</div>
+                  <input
+                    type="number"
+                    className="terminal-input flex-1 text-xs py-1"
+                    value={goal.monthlyTargets[month]?.target || ''}
+                    onChange={(e) => {
+                      const targetValue = parseFloat(e.target.value) || 0;
+                      const updatedData = {
+                        goals: goalsData.goals.map(g => 
+                          g.id === goal.id
+                            ? {
+                                ...g,
+                                monthlyTargets: {
+                                  ...g.monthlyTargets,
+                                  [month]: targetValue > 0 ? {
+                                    target: targetValue,
+                                    description: g.monthlyTargets[month]?.description || ''
+                                  } : undefined
+                                }
+                              }
+                            : g
+                        )
+                      };
+                      setGoalsData(updatedData);
+                      saveGoalsData(updatedData);
+                    }}
+                    placeholder="0"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+      <div className="flex gap-2 mt-3">
+        <button
+          onClick={() => handleUpdateGoal(goal.id, editData)}
+          className="terminal-button bg-[#5FE3B3] text-black hover:bg-[#5FE3B3]/80 flex items-center text-xs px-3 py-1"
+        >
+          <Save size={12} className="mr-1" />
+          Save
+        </button>
+        <button
+          onClick={() => setEditingGoal(null)}
+          className="terminal-button text-xs px-3 py-1"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+
   // Render yearly goals view
   const renderYearlyGoals = () => (
-    <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-      {goalsData.goals.map(goal => (
-        <div key={goal.id} className="border border-terminal-accent/30 p-4">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center">
-              <Target size={16} className={`mr-2 ${getCategoryColor(goal.category)}`} />
-              <h3 className="text-sm text-terminal-accent">{goal.name}</h3>
-            </div>
-            <span className="text-xs px-2 py-1 bg-terminal-accent/20 text-terminal-accent uppercase">
-              {goal.category}
-            </span>
+    <div className="space-y-6">
+      {/* New Goal Form */}
+      {editMode && showNewGoalForm && renderNewGoalForm()}
+
+      {/* Add New Goal Button */}
+      {editMode && !showNewGoalForm && (
+        <div className="flex justify-center">
+          <button
+            onClick={() => setShowNewGoalForm(true)}
+            className="terminal-button bg-[#5FE3B3] text-black hover:bg-[#5FE3B3]/80 flex items-center"
+          >
+            <Plus size={16} className="mr-2" />
+            Add New Goal
+          </button>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        {goalsData.goals.length === 0 && (
+          <div className="col-span-full text-center py-8 text-terminal-accent/50">
+            No goals found. {editMode ? 'Add your first goal above!' : 'Enable edit mode to add goals.'}
           </div>
+        )}
+        {goalsData.goals.map(goal => {
+          console.log('Rendering goal:', goal.id, goal.name);
+          return (
+          <div key={goal.id} className="border border-terminal-accent/30 p-4">
+            {/* Goal Editor - shown when editing this specific goal */}
+            {editMode && editingGoal === goal.id && renderGoalEditor(goal)}
+
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center">
+                <Target size={16} className={`mr-2 ${getCategoryColor(goal.category)}`} />
+                <h3 className="text-sm text-terminal-accent">{goal.name}</h3>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs px-2 py-1 bg-terminal-accent/20 text-terminal-accent uppercase">
+                  {goal.category}
+                </span>
+                
+                {/* Edit Mode Controls */}
+                {editMode && (
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => setEditingGoal(editingGoal === goal.id ? null : goal.id)}
+                      className="p-1 text-terminal-accent/70 hover:text-[#5FE3B3] transition-colors"
+                      title="Edit goal"
+                    >
+                      <Edit3 size={14} />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteGoal(goal.id)}
+                      className="p-1 text-terminal-accent/70 hover:text-[#FF6B6B] transition-colors"
+                      title="Delete goal"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
           
           {/* Yearly Target Display */}
           <div className="mb-3 p-2 bg-terminal-accent/5 border border-terminal-accent/20">
@@ -224,8 +690,8 @@ const Roadmap = () => {
             <div className="mb-4 p-2 border border-terminal-accent/20">
               <div className="flex justify-between items-center mb-2">
                 <span className="text-xs text-terminal-accent/70">Current Month ({currentMonth})</span>
-                {(goal.id === 'deep-work' || goal.id === 'bjj-sessions') ? (
-                  <span className="text-xs text-[#FF6B00]">Auto-calculated</span>
+                {goal.connectedKpi ? (
+                  <span className="text-xs text-[#FF6B00]">Auto-tracked from {WEEKLY_KPI_DEFINITIONS.find(kpi => kpi.id === goal.connectedKpi)?.name || goal.connectedKpi}</span>
                 ) : editMode ? (
                   <span className="text-xs text-terminal-accent/50">Edit Mode</span>
                 ) : null}
@@ -245,21 +711,21 @@ const Roadmap = () => {
                 <input
                   type="number"
                   className={`terminal-input w-24 text-sm ${
-                    (goal.id === 'deep-work' || goal.id === 'bjj-sessions') ? 'bg-terminal-accent/10' : ''
+                    goal.connectedKpi ? 'bg-terminal-accent/10' : ''
                   }`}
                   value={goal.monthly[currentMonth] || ''}
                   onChange={(e) => handleUpdateMonthly(goal.id, currentMonth, parseFloat(e.target.value) || 0)}
                   placeholder="0"
-                  disabled={!editMode || goal.id === 'deep-work' || goal.id === 'bjj-sessions'}
+                  disabled={!editMode || !!goal.connectedKpi}
                   title={
-                    (goal.id === 'deep-work' || goal.id === 'bjj-sessions') 
-                      ? 'Auto-calculated from daily metrics' 
+                    goal.connectedKpi 
+                      ? `Auto-tracked from ${WEEKLY_KPI_DEFINITIONS.find(kpi => kpi.id === goal.connectedKpi)?.name || goal.connectedKpi}` 
                       : undefined
                   }
                 />
                 <span className="text-xs">{goal.unit}</span>
-                {(goal.id === 'deep-work' || goal.id === 'bjj-sessions') && (
-                  <span className="text-xs text-terminal-accent/50">from metrics</span>
+                {goal.connectedKpi && (
+                  <span className="text-xs text-terminal-accent/50">auto-tracked</span>
                 )}
                 
                 {/* Show progress toward monthly target */}
@@ -275,85 +741,165 @@ const Roadmap = () => {
           {/* Monthly Breakdown */}
           <div className="space-y-2">
             <h4 className="text-xs text-terminal-accent/70 uppercase">Monthly Targets & Progress</h4>
-            <div className="grid grid-cols-6 gap-1">
-              {getAllMonths().map(month => {
-                const actualValue = goal.monthly[month];
-                const monthlyTarget = goal.monthlyTargets[month];
-                const hasActual = actualValue !== undefined && actualValue !== null;
-                const hasTarget = monthlyTarget !== undefined;
-                const isCurrent = month === currentMonth;
-                
-                // Calculate progress toward monthly target
-                let monthlyProgress = 0;
-                if (hasTarget && hasActual && monthlyTarget.target > 0) {
-                  monthlyProgress = Math.min(100, (actualValue / monthlyTarget.target) * 100);
-                }
-                
-                return (
-                  <div
-                    key={month}
-                    className={`text-xs p-1 text-center border relative ${
-                      hasActual && hasTarget
-                        ? monthlyProgress >= 100 
-                          ? 'border-[#5FE3B3] bg-[#5FE3B3]/20' 
-                          : monthlyProgress >= 50
-                          ? 'border-[#FFD700] bg-[#FFD700]/20'
-                          : 'border-[#FF6B6B] bg-[#FF6B6B]/20'
-                        : hasTarget 
-                        ? 'border-terminal-accent/50 bg-terminal-accent/5' 
-                        : hasActual
-                        ? 'border-terminal-accent bg-terminal-accent/10'
-                        : isCurrent
-                        ? 'border-terminal-accent/50 bg-terminal-accent/5'
-                        : 'border-terminal-accent/20'
-                    }`}
-                    title={
-                      hasTarget 
-                        ? `${month} Target: ${monthlyTarget.target} ${goal.unit}\n${monthlyTarget.description || ''}\nActual: ${actualValue || 0}`
-                        : hasActual 
-                        ? `${month}: ${actualValue} ${goal.unit}` 
-                        : month
-                    }
-                  >
-                    <div>{month}</div>
-                    
-                    {/* Show target value */}
-                    {hasTarget && (
-                      <div className="text-terminal-accent/70 font-mono text-xs">
-                        {monthlyTarget.target < 1000 ? monthlyTarget.target : `${Math.round(monthlyTarget.target/1000)}k`}
-                      </div>
-                    )}
-                    
-                    {/* Show actual value */}
-                    {hasActual && (
-                      <div className="text-terminal-accent font-mono font-bold">
-                        {actualValue < 1000 ? actualValue : `${Math.round(actualValue/1000)}k`}
-                      </div>
-                    )}
-                    
-                    {/* Show progress indicator */}
-                    {hasActual && hasTarget && (
-                      <div className="absolute bottom-0 left-0 right-0 h-1 bg-terminal-accent/20">
-                        <div 
-                          className={`h-full ${
-                            monthlyProgress >= 100 ? 'bg-[#5FE3B3]' :
-                            monthlyProgress >= 50 ? 'bg-[#FFD700]' : 'bg-[#FF6B6B]'
-                          }`}
-                          style={{ width: `${Math.min(100, monthlyProgress)}%` }}
+            {editMode ? (
+              // Edit mode - show editable inputs
+              <div className="space-y-3">
+                {getAllMonths().map(month => {
+                  const actualValue = goal.monthly[month];
+                  const monthlyTarget = goal.monthlyTargets[month];
+                  const hasActual = actualValue !== undefined && actualValue !== null;
+                  const hasTarget = monthlyTarget !== undefined;
+                  const isCurrent = month === currentMonth;
+                  const isConnectedKpi = !!goal.connectedKpi;
+                  
+                  return (
+                    <div key={month} className="flex items-center gap-3 p-2 border border-terminal-accent/20 bg-terminal-accent/5">
+                      <div className="w-8 text-xs font-mono">{month}</div>
+                      
+                      {/* Target input */}
+                      <div className="flex-1">
+                        <label className="block text-xs text-terminal-accent/70 mb-1">Target</label>
+                        <input
+                          type="number"
+                          className="terminal-input w-full text-xs"
+                          value={monthlyTarget?.target || ''}
+                          onChange={(e) => {
+                            const targetValue = parseFloat(e.target.value) || 0;
+                            const updatedData = {
+                              goals: goalsData.goals.map(g => 
+                                g.id === goal.id
+                                  ? {
+                                      ...g,
+                                      monthlyTargets: {
+                                        ...g.monthlyTargets,
+                                        [month]: {
+                                          target: targetValue,
+                                          description: monthlyTarget?.description || ''
+                                        }
+                                      }
+                                    }
+                                  : g
+                              )
+                            };
+                            setGoalsData(updatedData);
+                            saveGoalsData(updatedData);
+                          }}
+                          placeholder="0"
                         />
                       </div>
-                    )}
-                    
-                    {isCurrent && !hasActual && (
-                      <div className="text-terminal-accent/50">•</div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+                      
+                      {/* Actual value input */}
+                      <div className="flex-1">
+                        <label className="block text-xs text-terminal-accent/70 mb-1">
+                          Actual {isConnectedKpi && <span className="text-[#FF6B00]">(auto)</span>}
+                        </label>
+                        <input
+                          type="number"
+                          className={`terminal-input w-full text-xs ${
+                            isConnectedKpi ? 'bg-terminal-accent/10' : ''
+                          }`}
+                          value={actualValue || ''}
+                          onChange={(e) => handleUpdateMonthly(goal.id, month, parseFloat(e.target.value) || 0)}
+                          placeholder="0"
+                          disabled={isConnectedKpi}
+                          title={isConnectedKpi ? 'Auto-tracked from connected KPI' : undefined}
+                        />
+                      </div>
+                      
+                      {/* Progress indicator */}
+                      {hasActual && hasTarget && monthlyTarget.target > 0 && (
+                        <div className="w-12 text-xs text-right">
+                          {Math.round((actualValue / monthlyTarget.target) * 100)}%
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              // View mode - show compact grid
+              <div className="grid grid-cols-6 gap-1">
+                {getAllMonths().map(month => {
+                  const actualValue = goal.monthly[month];
+                  const monthlyTarget = goal.monthlyTargets[month];
+                  const hasActual = actualValue !== undefined && actualValue !== null;
+                  const hasTarget = monthlyTarget !== undefined;
+                  const isCurrent = month === currentMonth;
+                  
+                  // Calculate progress toward monthly target
+                  let monthlyProgress = 0;
+                  if (hasTarget && hasActual && monthlyTarget.target > 0) {
+                    monthlyProgress = Math.min(100, (actualValue / monthlyTarget.target) * 100);
+                  }
+                  
+                  return (
+                    <div
+                      key={month}
+                      className={`text-xs p-1 text-center border relative ${
+                        hasActual && hasTarget
+                          ? monthlyProgress >= 100 
+                            ? 'border-[#5FE3B3] bg-[#5FE3B3]/20' 
+                            : monthlyProgress >= 50
+                            ? 'border-[#FFD700] bg-[#FFD700]/20'
+                            : 'border-[#FF6B6B] bg-[#FF6B6B]/20'
+                          : hasTarget 
+                          ? 'border-terminal-accent/50 bg-terminal-accent/5' 
+                          : hasActual
+                          ? 'border-terminal-accent bg-terminal-accent/10'
+                          : isCurrent
+                          ? 'border-terminal-accent/50 bg-terminal-accent/5'
+                          : 'border-terminal-accent/20'
+                      }`}
+                      title={
+                        hasTarget 
+                          ? `${month} Target: ${monthlyTarget.target} ${goal.unit}\n${monthlyTarget.description || ''}\nActual: ${actualValue || 0}`
+                          : hasActual 
+                          ? `${month}: ${actualValue} ${goal.unit}` 
+                          : month
+                      }
+                    >
+                      <div>{month}</div>
+                      
+                      {/* Show target value */}
+                      {hasTarget && (
+                        <div className="text-terminal-accent/70 font-mono text-xs">
+                          {monthlyTarget.target < 1000 ? monthlyTarget.target : `${Math.round(monthlyTarget.target/1000)}k`}
+                        </div>
+                      )}
+                      
+                      {/* Show actual value */}
+                      {hasActual && (
+                        <div className="text-terminal-accent font-mono font-bold">
+                          {actualValue < 1000 ? actualValue : `${Math.round(actualValue/1000)}k`}
+                        </div>
+                      )}
+                      
+                      {/* Show progress indicator */}
+                      {hasActual && hasTarget && (
+                        <div className="absolute bottom-0 left-0 right-0 h-1 bg-terminal-accent/20">
+                          <div 
+                            className={`h-full ${
+                              monthlyProgress >= 100 ? 'bg-[#5FE3B3]' :
+                              monthlyProgress >= 50 ? 'bg-[#FFD700]' : 'bg-[#FF6B6B]'
+                            }`}
+                            style={{ width: `${Math.min(100, monthlyProgress)}%` }}
+                          />
+                        </div>
+                      )}
+                      
+                      {isCurrent && !hasActual && (
+                        <div className="text-terminal-accent/50">•</div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
-      ))}
+          );
+        })}
+      </div>
     </div>
   );
 
@@ -374,8 +920,8 @@ const Roadmap = () => {
                   <span className={`w-2 h-2 rounded-full mr-2 ${getCategoryColor(goal.category).replace('text-', 'bg-')}`}></span>
                   {goal.name}
                 </div>
-                {(goal.id === 'deep-work' || goal.id === 'bjj-sessions') && (
-                  <span className="text-xs text-[#FF6B00]">Auto</span>
+                {goal.connectedKpi && (
+                  <span className="text-xs text-[#FF6B00]">Auto-tracked</span>
                 )}
               </h4>
               
@@ -384,15 +930,15 @@ const Roadmap = () => {
                   <input
                     type="number"
                     className={`terminal-input w-20 text-sm ${
-                      (goal.id === 'deep-work' || goal.id === 'bjj-sessions') ? 'bg-terminal-accent/10' : ''
+                      goal.connectedKpi ? 'bg-terminal-accent/10' : ''
                     }`}
                     value={goal.monthly[currentMonth] || ''}
                     onChange={(e) => handleUpdateMonthly(goal.id, currentMonth, parseFloat(e.target.value) || 0)}
                     placeholder="0"
-                    disabled={goal.id === 'deep-work' || goal.id === 'bjj-sessions'}
+                    disabled={!!goal.connectedKpi}
                     title={
-                      (goal.id === 'deep-work' || goal.id === 'bjj-sessions') 
-                        ? 'Auto-calculated from daily metrics' 
+                      goal.connectedKpi 
+                        ? `Auto-tracked from ${WEEKLY_KPI_DEFINITIONS.find(kpi => kpi.id === goal.connectedKpi)?.name || goal.connectedKpi}` 
                         : undefined
                     }
                   />
@@ -454,14 +1000,34 @@ const Roadmap = () => {
         <div className="flex justify-between items-start mb-4">
           <div>
             <TypewriterText text="Goals & Roadmap" className="text-xl mb-2" />
-            <p className="text-terminal-accent/70 text-sm">Track monthly progress toward yearly goals.</p>
+            <p className="text-terminal-accent/70 text-sm">
+              {editMode 
+                ? 'Create, edit, and manage your yearly goals and deadlines.' 
+                : 'Track monthly progress toward yearly goals.'
+              }
+            </p>
+            {editMode && (
+              <div className="mt-2 text-xs text-[#FF6B00] flex items-center">
+                <Edit3 size={12} className="mr-1" />
+                EDIT MODE: Add new goals, modify existing ones, set targets
+              </div>
+            )}
           </div>
           <button
-            className="terminal-button flex items-center min-h-[44px] px-4"
-            onClick={() => setEditMode(!editMode)}
+            className={`terminal-button flex items-center min-h-[44px] px-4 ${
+              editMode ? 'bg-[#FF6B00] text-black' : ''
+            }`}
+            onClick={() => {
+              setEditMode(!editMode);
+              // Clear edit states when exiting edit mode
+              if (editMode) {
+                setShowNewGoalForm(false);
+                setEditingGoal(null);
+              }
+            }}
           >
             <Edit3 size={16} className="mr-2" />
-            {editMode ? 'View Mode' : 'Edit Mode'}
+            {editMode ? 'Exit Edit Mode' : 'Edit Mode'}
           </button>
         </div>
         

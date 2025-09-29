@@ -6,6 +6,7 @@
  */
 
 import { supabase } from './supabase';
+import { userStorage } from './userStorage';
 
 export interface MetricData {
   id: string;
@@ -76,6 +77,7 @@ export interface Goal {
   monthlyTargets: Partial<Record<Month, MonthlyGoalTarget>>; // planned targets
   currentTotal: number; // derived from monthly values
   progressPct: number; // derived percentage (0-1)
+  connectedKpi?: string; // KPI ID for auto-tracking (e.g., 'deepWorkHours', 'bjjSessions')
 }
 
 export interface GoalsData {
@@ -388,8 +390,15 @@ export const importDataCSV = (fileContent: string): boolean => {
 // Supabase-syncing storage functions
 type SupabaseMetricRow = { date: string; data: Record<string, string | number | boolean> };
 
-// Use a fixed Supabase user ID for all sync operations
-export const FIXED_USER_ID = '0b3c6a14-8d1e-4ca4-b44f-8b89980bc61b';
+// Helper function to get current user ID
+const getCurrentUserId = () => {
+  const userId = userStorage.getCurrentUserId();
+  if (!userId) {
+    console.warn('No authenticated user ID found');
+    return null;
+  }
+  return userId;
+};
 
 /**
  * Load all metrics from Supabase (falls back to localStorage)
@@ -399,7 +408,7 @@ export async function loadMetrics(): Promise<TrackerData> {
     const { data, error } = await supabase
       .from('metrics')
       .select('date, data')
-      .eq('user_id', FIXED_USER_ID)
+      .eq('user_id', getCurrentUserId())
       .order('date', { ascending: true });
     if (error || !data || data.length === 0) {
       return loadData();
@@ -452,7 +461,7 @@ export async function saveMetrics(trackerData: TrackerData): Promise<void> {
     const { data: existingData, error: readError } = await supabase
       .from('metrics')
       .select('*')
-      .eq('user_id', FIXED_USER_ID)
+      .eq('user_id', getCurrentUserId())
       .limit(1);
     
     if (readError) {
@@ -472,7 +481,7 @@ export async function saveMetrics(trackerData: TrackerData): Promise<void> {
       
       // Only include the three fields that exist in the metrics table
       return { 
-        user_id: FIXED_USER_ID, 
+        user_id: getCurrentUserId(), 
         date: date, 
         data: payload
       };
@@ -513,14 +522,14 @@ export async function loadRoadmapData(): Promise<RoadmapData | null> {
     const { data: goalsData, error: goalsError } = await supabase
       .from('yearly_goals')
       .select('*')
-      .eq('user_id', FIXED_USER_ID)
+      .eq('user_id', getCurrentUserId())
       .order('created_at', { ascending: true });
 
     // Load monthly targets
     const { data: targetsData, error: targetsError } = await supabase
       .from('monthly_targets')
       .select('*')
-      .eq('user_id', FIXED_USER_ID)
+      .eq('user_id', getCurrentUserId())
       .order('month', { ascending: true });
 
     if (goalsError || targetsError) {
@@ -565,7 +574,7 @@ export async function saveRoadmapData(roadmapData: RoadmapData): Promise<void> {
   try {
     // Save yearly goals
     const goalsPayload = roadmapData.yearlyGoals.map(goal => ({
-      user_id: FIXED_USER_ID,
+      user_id: getCurrentUserId(),
       goal_id: goal.id,
       name: goal.name,
       category: goal.category,
@@ -583,7 +592,7 @@ export async function saveRoadmapData(roadmapData: RoadmapData): Promise<void> {
 
     // Save monthly targets
     const targetsPayload = roadmapData.monthlyTargets.map(target => ({
-      user_id: FIXED_USER_ID,
+      user_id: getCurrentUserId(),
       id: target.id,
       month: target.month,
       goals: target.goals
@@ -918,7 +927,7 @@ export async function loadGoalsFromSupabase(): Promise<GoalsData> {
     const { data, error } = await supabase
       .from('goals')
       .select('*')
-      .eq('user_id', FIXED_USER_ID)
+      .eq('user_id', getCurrentUserId())
       .order('created_at', { ascending: true });
 
     if (error) {
@@ -965,7 +974,7 @@ export async function saveGoalsToSupabase(data: GoalsData): Promise<void> {
     const { data: existingData, error: readError } = await supabase
       .from('goals')
       .select('*')
-      .eq('user_id', FIXED_USER_ID)
+      .eq('user_id', getCurrentUserId())
       .limit(1);
     
     if (readError) {
@@ -975,7 +984,7 @@ export async function saveGoalsToSupabase(data: GoalsData): Promise<void> {
     
     // Let database defaults handle timestamps - do not include them
     const payload = data.goals.map(goal => ({
-      user_id: FIXED_USER_ID,
+      user_id: getCurrentUserId(),
       goal_id: goal.id,
       name: goal.name,
       yearly_target: goal.yearlyTarget,
@@ -1015,7 +1024,7 @@ export async function updateGoalMonthlySupabase(goalId: string, month: Month, va
     const { data: currentData, error: fetchError } = await supabase
       .from('goals')
       .select('monthly')
-      .eq('user_id', FIXED_USER_ID)
+      .eq('user_id', getCurrentUserId())
       .eq('goal_id', goalId)
       .single();
 
@@ -1035,7 +1044,7 @@ export async function updateGoalMonthlySupabase(goalId: string, month: Month, va
     const { error: updateError } = await supabase
       .from('goals')
       .update({ monthly: updatedMonthly })
-      .eq('user_id', FIXED_USER_ID)
+      .eq('user_id', getCurrentUserId())
       .eq('goal_id', goalId);
 
     if (updateError) {
@@ -1080,7 +1089,7 @@ export async function syncFinancialData(): Promise<void> {
     const { data: existingData, error: readError } = await supabase
       .from('financial_metrics')
       .select('*')
-      .eq('user_id', FIXED_USER_ID)
+      .eq('user_id', getCurrentUserId())
       .limit(1);
     
     if (readError) {
@@ -1092,7 +1101,7 @@ export async function syncFinancialData(): Promise<void> {
     const { data, error } = await supabase
       .from('financial_metrics')
       .upsert([{
-        user_id: FIXED_USER_ID,
+        user_id: getCurrentUserId(),
         mrr: financial.mrr || 0,
         net_worth: financial.netWorth || 0
       }], { onConflict: 'user_id' });
@@ -1300,7 +1309,7 @@ export async function loadFinancialMetrics(): Promise<{ mrr: number; netWorth: n
     const { data, error } = await supabase
       .from('financial_metrics')
       .select('mrr, net_worth')
-      .eq('user_id', FIXED_USER_ID)
+      .eq('user_id', getCurrentUserId())
       .maybeSingle(); // Use maybeSingle instead of single to avoid errors when no data
     
     if (error) {
@@ -1326,7 +1335,7 @@ export async function saveFinancialMetrics(mrr: number, netWorth: number): Promi
     const { error } = await supabase
       .from('financial_metrics')
       .upsert([{
-        user_id: FIXED_USER_ID,
+        user_id: getCurrentUserId(),
         mrr: mrr,
         net_worth: netWorth
       }], { 
@@ -1355,7 +1364,7 @@ export async function saveRoadmapDataToSupabase(roadmapData: RoadmapData): Promi
     const { data: existingData, error: readError } = await supabase
       .from('roadmaps')
       .select('*')
-      .eq('user_id', FIXED_USER_ID)
+      .eq('user_id', getCurrentUserId())
       .limit(1);
     
     if (readError) {
@@ -1367,7 +1376,7 @@ export async function saveRoadmapDataToSupabase(roadmapData: RoadmapData): Promi
     const { data, error } = await supabase
       .from('roadmaps')
       .upsert([{
-        user_id: FIXED_USER_ID,
+        user_id: getCurrentUserId(),
         roadmap_id: 'main',
         data: roadmapData
       }], { onConflict: 'user_id,roadmap_id' });
@@ -1408,7 +1417,7 @@ export async function testSupabaseConnection(): Promise<{ success: boolean; mess
         const { data, error, count } = await supabase
           .from(table)
           .select('*', { count: 'exact', head: true })
-          .eq('user_id', FIXED_USER_ID)
+          .eq('user_id', getCurrentUserId())
           .limit(1);
 
   if (error) {
@@ -1585,7 +1594,7 @@ export async function saveContentItemWithMetrics(
     .from('content_items')
     .insert([
       {
-        user_id: FIXED_USER_ID,
+        user_id: getCurrentUserId(),
         ...item
       }
     ])
@@ -1625,7 +1634,7 @@ export async function saveContentItemWithMetrics(
       .from('content_metrics')
       .insert([
         {
-          user_id: FIXED_USER_ID,
+          user_id: getCurrentUserId(),
           content_id: contentId,
           ...m
         }
@@ -1659,7 +1668,7 @@ export async function updateContentItemWithMetrics(
         updated_at: new Date().toISOString()
       })
       .eq('id', contentId)
-      .eq('user_id', FIXED_USER_ID);
+      .eq('user_id', getCurrentUserId());
 
     if (itemError) {
       throw new Error(`Failed to update content item: ${itemError.message}`);
@@ -1675,7 +1684,7 @@ export async function updateContentItemWithMetrics(
       .from('content_metrics')
       .select('id')
       .eq('content_id', contentId)
-      .eq('user_id', FIXED_USER_ID)
+      .eq('user_id', getCurrentUserId())
       .eq('snapshot_date', today)
       .single();
 
@@ -1694,7 +1703,7 @@ export async function updateContentItemWithMetrics(
       const { error: insertError } = await supabase
         .from('content_metrics')
         .insert({
-          user_id: FIXED_USER_ID,
+          user_id: getCurrentUserId(),
           content_id: contentId,
           snapshot_date: today,
           ...metrics
@@ -1718,11 +1727,15 @@ export async function deleteContentItem(contentId: string): Promise<void> {
     .from('content_items')
     .delete()
     .eq('id', contentId)
-    .eq('user_id', FIXED_USER_ID);
+    .eq('user_id', getCurrentUserId());
 
   if (error) {
     throw new Error(`Failed to delete content item: ${error.message}`);
   }
+
+  // Notify other components that content was updated
+  window.dispatchEvent(new Event('contentUpdated'));
+  console.log('📢 Content deleted, notified listeners');
 }
 
 export async function loadContentItemDetail(contentId: string): Promise<{
@@ -1737,7 +1750,7 @@ export async function loadContentItemDetail(contentId: string): Promise<{
     .from('content_items')
     .select('*')
     .eq('id', contentId)
-    .eq('user_id', FIXED_USER_ID)
+    .eq('user_id', getCurrentUserId())
     .single();
 
   if (itemError || !itemData) return null;
@@ -1775,59 +1788,89 @@ export async function loadRecentContent(limit: number = 20): Promise<ContentList
   // Short-circuit if tables are missing
   try {
     const ready = await areContentTablesReady();
-    if (!ready) return [];
-  } catch {}
-
-  const { data, error } = await supabase
-    .from('content_items')
-    .select('id, platform, format, account_handle, title, published_at, tags, url')
-    .eq('user_id', FIXED_USER_ID)
-    .order('published_at', { ascending: false })
-    .limit(limit);
-
-  if (error) {
-    const msg = (error as any)?.message?.toLowerCase?.() || '';
-    if (msg.includes('does not exist') || msg.includes('not found')) return [];
-    throw new Error(`Failed to load content: ${error.message}`);
-  }
-  const items = data || [];
-
-  // Attach latest metrics per item
-  const ids = items.map((r: any) => r.id);
-  if (ids.length === 0) return [];
-
-  const { data: metricsData, error: metricsErr } = await supabase
-    .from('content_metrics')
-    .select('content_id, views, follows, retention_ratio, snapshot_date')
-    .in('content_id', ids)
-    .order('snapshot_date', { ascending: false });
-
-  if (metricsErr) {
-    const msg = (metricsErr as any)?.message?.toLowerCase?.() || '';
-    if (msg.includes('does not exist') || msg.includes('not found')) return items;
-    throw new Error(`Failed to load content metrics: ${metricsErr.message}`);
+    if (!ready) {
+      console.log('⚠️ Content tables not ready');
+      return [];
+    }
+  } catch (e) {
+    console.log('⚠️ Error checking content tables:', e);
+    return [];
   }
 
-  const latestById = new Map<string, any>();
-  (metricsData || []).forEach((m: any) => {
-    if (!latestById.has(m.content_id)) latestById.set(m.content_id, m);
-  });
+  const userId = getCurrentUserId();
+  console.log('🔍 Loading recent content for user ID:', userId);
 
-  return items.map((r: any) => {
-    const m = latestById.get(r.id);
-    return {
-      id: r.id,
-      platform: r.platform,
-      format: r.format,
-      account_handle: r.account_handle,
-      title: r.title,
-      published_at: r.published_at,
-      tags: r.tags,
-      views: m?.views,
-      follows: m?.follows,
-      retention_ratio: m?.retention_ratio
-    } as ContentListItem;
-  });
+  if (!userId) {
+    console.warn('⚠️ No user ID available for loading content');
+    return [];
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('content_items')
+      .select('id, platform, format, account_handle, title, published_at, tags, url')
+      .eq('user_id', userId)
+      .order('published_at', { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      const msg = (error as any)?.message?.toLowerCase?.() || '';
+      if (msg.includes('does not exist') || msg.includes('not found')) {
+        console.log('⚠️ Content tables do not exist');
+        return [];
+      }
+      console.error('❌ Failed to load content:', error);
+      throw new Error(`Failed to load content: ${error.message}`);
+    }
+
+    const items = data || [];
+    console.log('✅ Loaded content items:', items.length, 'items');
+
+    if (items.length === 0) {
+      console.log('💡 No content found. Make sure content_items have user_id = ' + userId);
+    }
+
+    // Attach latest metrics per item
+    const ids = items.map((r: any) => r.id);
+    if (ids.length === 0) return [];
+
+    const { data: metricsData, error: metricsErr } = await supabase
+      .from('content_metrics')
+      .select('content_id, views, follows, retention_ratio, snapshot_date')
+      .in('content_id', ids)
+      .order('snapshot_date', { ascending: false });
+
+    if (metricsErr) {
+      const msg = (metricsErr as any)?.message?.toLowerCase?.() || '';
+      if (msg.includes('does not exist') || msg.includes('not found')) return items;
+      throw new Error(`Failed to load content metrics: ${metricsErr.message}`);
+    }
+
+    const latestById = new Map<string, any>();
+    (metricsData || []).forEach((m: any) => {
+      if (!latestById.has(m.content_id)) latestById.set(m.content_id, m);
+    });
+
+    return items.map((r: any) => {
+      const m = latestById.get(r.id);
+      return {
+        id: r.id,
+        platform: r.platform,
+        format: r.format,
+        account_handle: r.account_handle,
+        title: r.title,
+        published_at: r.published_at,
+        tags: r.tags,
+        url: r.url,
+        views: m?.views,
+        follows: m?.follows,
+        retention_ratio: m?.retention_ratio
+      } as ContentListItem;
+    });
+  } catch (error) {
+    console.error('❌ Unexpected error loading content:', error);
+    return [];
+  }
 }
 
 export interface WeeklyContentSummary {
@@ -1857,7 +1900,7 @@ export async function loadWeeklyContentDetail(weekKey: string): Promise<WeeklyCo
   const { data: items, error: itemsErr } = await supabase
     .from('content_items')
     .select('id, platform, format, account_handle, title, published_at, url')
-    .eq('user_id', FIXED_USER_ID)
+    .eq('user_id', getCurrentUserId())
     .gte('published_at', startStr)
     .lte('published_at', endStr)
     .order('published_at', { ascending: false });
@@ -1929,7 +1972,7 @@ export async function loadWeeklyContentSummary(weeks: string[]): Promise<WeeklyC
   const { data: items, error: itemsErr } = await supabase
     .from('content_items')
     .select('id, published_at')
-    .eq('user_id', FIXED_USER_ID)
+    .eq('user_id', getCurrentUserId())
     .order('published_at', { ascending: false })
     .limit(1000);
   if (itemsErr) throw new Error(itemsErr.message);
@@ -1995,7 +2038,7 @@ export async function loadKanbanFromSupabase(boardId: string = 'echo'): Promise<
     const { data: columnsData, error: columnsError } = await supabase
       .from('kanban_columns')
       .select('*')
-      .eq('user_id', FIXED_USER_ID)
+      .eq('user_id', getCurrentUserId())
       .eq('board_id', boardId)
       .order('position', { ascending: true });
     
@@ -2008,7 +2051,7 @@ export async function loadKanbanFromSupabase(boardId: string = 'echo'): Promise<
     const { data: tasksData, error: tasksError } = await supabase
       .from('kanban_tasks')
       .select('*')
-      .eq('user_id', FIXED_USER_ID)
+      .eq('user_id', getCurrentUserId())
       .eq('board_id', boardId)
       .order('position', { ascending: true });
     
@@ -2101,7 +2144,7 @@ export async function saveKanbanToSupabase(kanbanData: KanbanData, boardId: stri
     const { error: boardError } = await supabase
       .from('kanban_boards')
       .upsert({
-        user_id: FIXED_USER_ID,
+        user_id: getCurrentUserId(),
         board_id: boardId,
         name: 'Echo Kanban Board',
         description: 'Track Echo development tasks and progress'
@@ -2119,7 +2162,7 @@ export async function saveKanbanToSupabase(kanbanData: KanbanData, boardId: stri
     const columnsPayload = kanbanData.columnOrder.map((columnId, index) => {
       const column = kanbanData.columns[columnId];
       return {
-        user_id: FIXED_USER_ID,
+        user_id: getCurrentUserId(),
         board_id: boardId,
         column_id: columnId,
         title: column.title,
@@ -2154,7 +2197,7 @@ export async function saveKanbanToSupabase(kanbanData: KanbanData, boardId: stri
       }
       
       const basePayload = {
-        user_id: FIXED_USER_ID,
+        user_id: getCurrentUserId(),
         board_id: boardId,
         task_id: task.id,
         column_id: columnId,
@@ -2202,7 +2245,7 @@ export async function saveKanbanToSupabase(kanbanData: KanbanData, boardId: stri
       const { data: existingTasks, error: fetchError } = await supabase
         .from('kanban_tasks')
         .select('task_id')
-        .eq('user_id', FIXED_USER_ID)
+        .eq('user_id', getCurrentUserId())
         .eq('board_id', boardId);
       
       if (fetchError) {
@@ -2225,7 +2268,7 @@ export async function saveKanbanToSupabase(kanbanData: KanbanData, boardId: stri
                   is_deleted: true, 
                   deleted_at: new Date().toISOString() 
                 })
-                .eq('user_id', FIXED_USER_ID)
+                .eq('user_id', getCurrentUserId())
                 .eq('board_id', boardId)
                 .eq('task_id', taskId);
               
@@ -2235,7 +2278,7 @@ export async function saveKanbanToSupabase(kanbanData: KanbanData, boardId: stri
                 const { error: hardDeleteError } = await supabase
                   .from('kanban_tasks')
                   .delete()
-                  .eq('user_id', FIXED_USER_ID)
+                  .eq('user_id', getCurrentUserId())
                   .eq('board_id', boardId)
                   .eq('task_id', taskId);
                 
@@ -2276,7 +2319,7 @@ export async function deleteKanbanTaskFromSupabase(taskId: string, boardId: stri
         is_deleted: true, 
         deleted_at: new Date().toISOString() 
       })
-      .eq('user_id', FIXED_USER_ID)
+      .eq('user_id', getCurrentUserId())
       .eq('board_id', boardId)
       .eq('task_id', taskId);
     
@@ -2287,7 +2330,7 @@ export async function deleteKanbanTaskFromSupabase(taskId: string, boardId: stri
       const { error: hardDeleteError } = await supabase
         .from('kanban_tasks')
         .delete()
-        .eq('user_id', FIXED_USER_ID)
+        .eq('user_id', getCurrentUserId())
         .eq('board_id', boardId)
         .eq('task_id', taskId);
       
@@ -2313,7 +2356,7 @@ export async function moveKanbanTaskInSupabase(taskId: string, newColumnId: stri
     const { error } = await supabase
       .from('kanban_tasks')
       .update({ column_id: newColumnId })
-      .eq('user_id', FIXED_USER_ID)
+      .eq('user_id', getCurrentUserId())
       .eq('board_id', boardId)
       .eq('task_id', taskId);
     
@@ -2337,7 +2380,7 @@ export async function restoreKanbanTaskFromSupabase(taskId: string, boardId: str
         is_deleted: false, 
         deleted_at: null 
       })
-      .eq('user_id', FIXED_USER_ID)
+      .eq('user_id', getCurrentUserId())
       .eq('board_id', boardId)
       .eq('task_id', taskId);
     
@@ -2360,7 +2403,7 @@ export async function getDeletedKanbanTasks(boardId: string = 'echo'): Promise<K
     const { data: tasksData, error: tasksError } = await supabase
       .from('kanban_tasks')
       .select('*')
-      .eq('user_id', FIXED_USER_ID)
+      .eq('user_id', getCurrentUserId())
       .eq('board_id', boardId)
       .eq('is_deleted', true)
       .order('deleted_at', { ascending: false });
