@@ -30,7 +30,7 @@ const WeeklyKPIInput: React.FC<WeeklyKPIInputProps> = ({ onWeekChange }) => {
   const [dailyRefresh, setDailyRefresh] = useState(0); // Force re-render of daily values
   const [editingKPI, setEditingKPI] = useState<string | null>(null);
   const [editingDaily, setEditingDaily] = useState<{kpiId: string, dayIndex: number} | null>(null);
-  const [isCreatingKPI, setIsCreatingKPI] = useState(false);
+  const [isCreatingKPI, setIsCreatingKPI] = useState<string | null>(null); // Track which category is creating
   const [editForm, setEditForm] = useState({
     name: '',
     target: 0,
@@ -240,7 +240,7 @@ const WeeklyKPIInput: React.FC<WeeklyKPIInputProps> = ({ onWeekChange }) => {
           color: '#5FE3B3',
           isAverage: false
         });
-        setIsCreatingKPI(false);
+        setIsCreatingKPI(null);
       }
     } catch (error) {
       console.error('Failed to create KPI:', error);
@@ -899,7 +899,7 @@ const WeeklyKPIInput: React.FC<WeeklyKPIInputProps> = ({ onWeekChange }) => {
 
             {/* Add New KPI Button */}
             <div className="border-2 border-dashed p-4" style={{ borderColor: getCategoryColor(category) + '40' }}>
-              {isCreatingKPI ? (
+              {isCreatingKPI === category ? (
                 <div className="space-y-3">
                   <div className="grid grid-cols-2 gap-2">
                     <input
@@ -974,14 +974,15 @@ const WeeklyKPIInput: React.FC<WeeklyKPIInputProps> = ({ onWeekChange }) => {
                     </button>
                     <button
                       onClick={() => {
-                        setIsCreatingKPI(false);
+                        setIsCreatingKPI(null);
                         setNewKPIForm({
                           name: '',
                           target: 0,
                           minTarget: 0,
                           unit: '',
                           category: '',
-                          color: '#5FE3B3'
+                          color: '#5FE3B3',
+                          isAverage: false
                         });
                       }}
                       className="terminal-button px-3 py-2 text-sm text-terminal-accent/60"
@@ -994,7 +995,7 @@ const WeeklyKPIInput: React.FC<WeeklyKPIInputProps> = ({ onWeekChange }) => {
               ) : (
                 <button
                   onClick={() => {
-                    setIsCreatingKPI(true);
+                    setIsCreatingKPI(category);
                     setNewKPIForm(prev => ({ ...prev, category }));
                   }}
                   className="w-full flex items-center justify-center gap-2 py-3 text-sm opacity-70 hover:opacity-100 transition-opacity"
