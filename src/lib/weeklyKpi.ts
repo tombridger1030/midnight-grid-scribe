@@ -186,6 +186,12 @@ export const getCurrentWeek = (): string => {
   return getWeekKey(new Date());
 };
 
+export const getPreviousWeek = (): string => {
+  const oneWeekAgo = new Date();
+  oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+  return getWeekKey(oneWeekAgo);
+};
+
 export const getWeekKey = (date: Date): string => {
   const midnight = toMidnight(date);
   const fiscalStart = getFiscalYearStart(midnight);

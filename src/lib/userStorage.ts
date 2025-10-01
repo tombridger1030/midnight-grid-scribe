@@ -478,6 +478,251 @@ export class UserStorage {
       await this.setUserConfig(key, value);
     }
   }
+
+  // User ranking system methods
+  async getUserRank() {
+    if (!this.userId) {
+      console.warn('No user ID set for getUserRank');
+      return null;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('user_ranks')
+        .select('*')
+        .eq('user_id', this.userId)
+        .single();
+
+      if (error) {
+        console.log('No user rank found, user may need initialization:', error);
+        return null;
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Error getting user rank:', error);
+      return null;
+    }
+  }
+
+  async setUserRank(rankData: any) {
+    if (!this.userId) {
+      console.warn('No user ID set for setUserRank');
+      return null;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('user_ranks')
+        .upsert({
+          user_id: this.userId,
+          ...rankData,
+          updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'user_id'
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error setting user rank:', error);
+        return null;
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Error setting user rank:', error);
+      return null;
+    }
+  }
+
+  async saveRankChange(rankChange: any) {
+    if (!this.userId) {
+      console.warn('No user ID set for saveRankChange');
+      return null;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('rank_history')
+        .insert({
+          user_id: this.userId,
+          ...rankChange
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error saving rank change:', error);
+        return null;
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Error saving rank change:', error);
+      return null;
+    }
+  }
+
+  async getRankHistory() {
+    if (!this.userId) {
+      console.warn('No user ID set for getRankHistory');
+      return [];
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('rank_history')
+        .select('*')
+        .eq('user_id', this.userId)
+        .order('timestamp', { ascending: false })
+        .limit(50); // Get last 50 rank changes
+
+      if (error) {
+        console.error('Error getting rank history:', error);
+        return [];
+      }
+
+      return data || [];
+    } catch (error) {
+      console.error('Error getting rank history:', error);
+      return [];
+    }
+  }
+
+  async getWeeklyAssessments(limit: number = 10) {
+    if (!this.userId) {
+      console.warn('No user ID set for getWeeklyAssessments');
+      return [];
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('weekly_assessments')
+        .select('*')
+        .eq('user_id', this.userId)
+        .order('week_key', { ascending: false })
+        .limit(limit);
+
+      if (error) {
+        console.error('Error getting weekly assessments:', error);
+        return [];
+      }
+
+      return data || [];
+    } catch (error) {
+      console.error('Error getting weekly assessments:', error);
+      return [];
+    }
+  }
+
+  async saveWeeklyAssessment(assessment: any) {
+    if (!this.userId) {
+      console.warn('No user ID set for saveWeeklyAssessment');
+      return null;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('weekly_assessments')
+        .upsert({
+          user_id: this.userId,
+          ...assessment
+        }, {
+          onConflict: 'user_id,week_key'
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error saving weekly assessment:', error);
+        return null;
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Error saving weekly assessment:', error);
+      return null;
+    }
+  }
+
+  // GitHub Integration Settings
+  async getGithubSettings(): Promise<{ api_token: string; username: string } | null> {
+    try {
+      const settings = await this.getUserConfig('github_settings', null);
+      if (settings) {
+        return settings;
+      }
+
+      // Fallback to localStorage for backward compatibility
+      const api_token = localStorage.getItem('github_api_token') || '';
+      const username = localStorage.getItem('github_username') || '';
+
+      return { api_token, username };
+    } catch (error) {
+      console.error('Error getting GitHub settings:', error);
+      // Fallback to localStorage
+      const api_token = localStorage.getItem('github_api_token') || '';
+      const username = localStorage.getItem('github_username') || '';
+      return { api_token, username };
+    }
+  }
+
+  async saveGithubSettings(api_token: string, username: string): Promise<boolean> {
+    try {
+      const settings = { api_token, username };
+
+      // Save to Supabase user_configs
+      await this.setUserConfig('github_settings', settings);
+
+      // Also save to localStorage for immediate access and backward compatibility
+      localStorage.setItem('github_api_token', api_token);
+      localStorage.setItem('github_username', username);
+
+      console.log('✅ GitHub settings saved to both Supabase and localStorage');
+      return true;
+    } catch (error) {
+      console.error('Error saving GitHub settings:', error);
+
+      // Fallback: at least save to localStorage
+      try {
+        localStorage.setItem('github_api_token', api_token);
+        localStorage.setItem('github_username', username);
+        console.log('⚠️ GitHub settings saved to localStorage only (Supabase failed)');
+        return true;
+      } catch (localError) {
+        console.error('Failed to save GitHub settings anywhere:', localError);
+        return false;
+      }
+    }
+  }
+
+  async clearGithubSettings(): Promise<boolean> {
+    try {
+      // Clear from Supabase
+      await this.setUserConfig('github_settings', { api_token: '', username: '' });
+
+      // Clear from localStorage
+      localStorage.removeItem('github_api_token');
+      localStorage.removeItem('github_username');
+
+      console.log('✅ GitHub settings cleared from both Supabase and localStorage');
+      return true;
+    } catch (error) {
+      console.error('Error clearing GitHub settings:', error);
+
+      // Fallback: at least clear localStorage
+      try {
+        localStorage.removeItem('github_api_token');
+        localStorage.removeItem('github_username');
+        console.log('⚠️ GitHub settings cleared from localStorage only (Supabase failed)');
+        return true;
+      } catch (localError) {
+        console.error('Failed to clear GitHub settings:', localError);
+        return false;
+      }
+    }
+  }
 }
 
 // Global instance

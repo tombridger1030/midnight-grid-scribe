@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth, UserProfile } from '@/contexts/AuthContext';
 import { preferencesManager, UserPreferences } from '@/lib/userPreferences';
+import { userStorage } from '@/lib/userStorage';
 import TypewriterText from '@/components/TypewriterText';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -54,13 +55,14 @@ const Profile: React.FC = () => {
           confirmPassword: ''
         });
 
-        // Load GitHub settings from localStorage or preferences
-        const storedGithubToken = localStorage.getItem('github_api_token') || '';
-        const storedGithubUsername = localStorage.getItem('github_username') || '';
-        setGithubSettings({
-          apiToken: storedGithubToken,
-          username: storedGithubUsername
-        });
+        // Load GitHub settings from Supabase (with localStorage fallback)
+        const githubSettings = await userStorage.getGithubSettings();
+        if (githubSettings) {
+          setGithubSettings({
+            apiToken: githubSettings.api_token,
+            username: githubSettings.username
+          });
+        }
       } catch (error) {
         console.error('Failed to load user data:', error);
         toast.error('Failed to load user data');
@@ -195,31 +197,18 @@ const Profile: React.FC = () => {
         toast.warning('GitHub token should start with "ghp_" or "github_pat_"');
       }
 
-      // Save to localStorage first (immediate persistence)
-      localStorage.setItem('github_api_token', githubSettings.apiToken);
-      localStorage.setItem('github_username', githubSettings.username);
-      console.log('✅ GitHub settings saved to localStorage');
+      // Save to Supabase using dedicated GitHub settings method
+      const success = await userStorage.saveGithubSettings(githubSettings.apiToken, githubSettings.username);
 
-      // Also save to user preferences in database/localStorage hybrid storage
-      try {
-        await handleUpdatePreferences({
-          integrations: {
-            github: {
-              api_token: githubSettings.apiToken,
-              username: githubSettings.username
-            }
-          }
-        });
-        console.log('✅ GitHub settings saved to user preferences');
-      } catch (prefError) {
-        console.warn('⚠️ Failed to save to user preferences, but localStorage save succeeded:', prefError);
+      if (success) {
+        const message = githubSettings.apiToken
+          ? `GitHub settings saved successfully${githubSettings.username ? ` for user ${githubSettings.username}` : ''}`
+          : 'GitHub settings cleared successfully';
+
+        toast.success(message);
+      } else {
+        throw new Error('Failed to save GitHub settings to database');
       }
-
-      const message = githubSettings.apiToken 
-        ? `GitHub settings saved successfully${githubSettings.username ? ` for user ${githubSettings.username}` : ''}`
-        : 'GitHub settings cleared successfully';
-      
-      toast.success(message);
     } catch (error: unknown) {
       console.error('GitHub settings save error:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to save GitHub settings';

@@ -3,6 +3,7 @@ import TypewriterText from '@/components/TypewriterText';
 import WeeklyProgressBar from '@/components/WeeklyProgressBar';
 import WeekStreakChart from '@/components/WeekStreakChart';
 import RevenueLostCounter from '@/components/RevenueLostCounter';
+import RankingWidget from '@/components/RankingWidget';
 import { Progress } from "@/components/ui/progress";
 import { useSkillProgressionStore } from '@/stores/skillProgressionStore';
 import { ShipFeed } from '@/components/ShipFeed';
@@ -157,6 +158,11 @@ const Dashboard = () => {
       </div>
 
       <div className="flex-1 overflow-y-auto">
+        {/* Ranking Widget - First thing users see */}
+        <div className="mb-6">
+          <RankingWidget />
+        </div>
+
         {/* Alert System */}
         <div className="mb-6">
           <AlertSystem />
