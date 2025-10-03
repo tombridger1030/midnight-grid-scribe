@@ -1577,6 +1577,22 @@ export interface ContentMetricsInput {
   reach?: number;
   likes?: number;
   comments?: number;
+  
+  // Platform-specific metrics (from migration 014_platform_specific_metrics.sql)
+  engagement_total?: number;
+  non_follower_percent?: number;
+  skip_rate?: number;
+  swipe_rate?: number;
+  ctr?: number;
+  retention_10s?: number;
+  retention_30s?: number;
+  total_retention_percent?: number;
+  new_viewers_percent?: number;
+  returning_viewers_percent?: number;
+  total_watch_time_minutes?: number;
+  subscribers?: number;
+  thumbnails?: string;
+  
   extra?: any;
 }
 
@@ -1654,6 +1670,11 @@ export async function updateContentItemWithMetrics(
   item: Partial<ContentItemInput>,
   metrics?: Partial<ContentMetricsInput>
 ): Promise<void> {
+  console.log('=== updateContentItemWithMetrics called ===');
+  console.log('Content ID:', contentId);
+  console.log('Item update data:', item);
+  console.log('Metrics update data:', metrics);
+
   const ready = await areContentTablesReady();
   if (!ready) {
     throw new Error('Content tables are not ready. Run migration 013_content_tables.sql.');
@@ -1661,6 +1682,7 @@ export async function updateContentItemWithMetrics(
 
   // Update content item if provided
   if (item && Object.keys(item).length > 0) {
+    console.log('Updating content item...');
     const { error: itemError } = await supabase
       .from('content_items')
       .update({
@@ -1671,16 +1693,21 @@ export async function updateContentItemWithMetrics(
       .eq('user_id', getCurrentUserId());
 
     if (itemError) {
+      console.error('Content item update error:', itemError);
       throw new Error(`Failed to update content item: ${itemError.message}`);
     }
+    console.log('Content item updated successfully');
   }
 
   // Update metrics if provided
   if (metrics && Object.keys(metrics).length > 0) {
+    console.log('Updating metrics...');
     const today = new Date().toISOString().slice(0, 10);
+    console.log('Today date:', today);
 
     // Check if metrics exist for today
-    const { data: existingMetrics } = await supabase
+    console.log('Checking for existing metrics...');
+    const { data: existingMetrics, error: selectError } = await supabase
       .from('content_metrics')
       .select('id')
       .eq('content_id', contentId)
@@ -1688,31 +1715,46 @@ export async function updateContentItemWithMetrics(
       .eq('snapshot_date', today)
       .single();
 
+    console.log('Existing metrics query result:', existingMetrics);
+    console.log('Existing metrics query error:', selectError);
+
     if (existingMetrics) {
       // Update existing metrics
+      console.log('Updating existing metrics record:', existingMetrics.id);
+      console.log('Metrics to update:', metrics);
       const { error: updateError } = await supabase
         .from('content_metrics')
         .update(metrics)
         .eq('id', existingMetrics.id);
 
       if (updateError) {
+        console.error('Metrics update error:', updateError);
         throw new Error(`Failed to update content metrics: ${updateError.message}`);
       }
+      console.log('Metrics updated successfully');
     } else {
       // Insert new metrics
+      console.log('Inserting new metrics record');
+      const insertData = {
+        user_id: getCurrentUserId(),
+        content_id: contentId,
+        snapshot_date: today,
+        ...metrics
+      };
+      console.log('Data to insert:', insertData);
+      
       const { error: insertError } = await supabase
         .from('content_metrics')
-        .insert({
-          user_id: getCurrentUserId(),
-          content_id: contentId,
-          snapshot_date: today,
-          ...metrics
-        });
+        .insert(insertData);
 
       if (insertError) {
+        console.error('Metrics insert error:', insertError);
         throw new Error(`Failed to insert new content metrics: ${insertError.message}`);
       }
+      console.log('New metrics inserted successfully');
     }
+  } else {
+    console.log('No metrics to update (empty or undefined)');
   }
 }
 
@@ -1742,10 +1784,17 @@ export async function loadContentItemDetail(contentId: string): Promise<{
   item: ContentItemInput & { id: string };
   metrics: ContentMetricsInput | null;
 } | null> {
+  console.log('=== loadContentItemDetail called ===');
+  console.log('Content ID:', contentId);
+
   const ready = await areContentTablesReady();
-  if (!ready) return null;
+  if (!ready) {
+    console.log('Content tables not ready');
+    return null;
+  }
 
   // Load content item
+  console.log('Loading content item...');
   const { data: itemData, error: itemError } = await supabase
     .from('content_items')
     .select('*')
@@ -1753,10 +1802,17 @@ export async function loadContentItemDetail(contentId: string): Promise<{
     .eq('user_id', getCurrentUserId())
     .single();
 
-  if (itemError || !itemData) return null;
+  console.log('Content item result:', itemData);
+  console.log('Content item error:', itemError);
+
+  if (itemError || !itemData) {
+    console.log('No content item found');
+    return null;
+  }
 
   // Load latest metrics
-  const { data: metricsData } = await supabase
+  console.log('Loading latest metrics...');
+  const { data: metricsData, error: metricsError } = await supabase
     .from('content_metrics')
     .select('*')
     .eq('content_id', contentId)
@@ -1764,10 +1820,16 @@ export async function loadContentItemDetail(contentId: string): Promise<{
     .limit(1)
     .single();
 
-  return {
+  console.log('Metrics result:', metricsData);
+  console.log('Metrics error:', metricsError);
+
+  const result = {
     item: itemData,
     metrics: metricsData || null
   };
+
+  console.log('Final result:', result);
+  return result;
 }
 
 export interface ContentListItem {

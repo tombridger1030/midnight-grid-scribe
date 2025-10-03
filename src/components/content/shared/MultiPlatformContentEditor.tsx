@@ -62,21 +62,31 @@ const MultiPlatformContentEditor: React.FC<MultiPlatformContentEditorProps> = ({
   }, [contentTitle, publishedAt]);
 
   const loadContentData = async () => {
+    console.log('=== MultiPlatformContentEditor loadContentData ===');
+    console.log('Looking for content with title:', contentTitle);
+    console.log('Published at:', publishedAt);
+    
     setIsLoading(true);
     setError(null);
 
     try {
       // Load multi-platform content and find matching item
+      console.log('Loading multi-platform content...');
       const allContent = await loadMultiPlatformContent(50);
+      console.log('All content loaded:', allContent.length, 'items');
+      
       const matchingContent = allContent.find(
         item => item.title === contentTitle && item.published_at === publishedAt
       );
+
+      console.log('Matching content found:', matchingContent);
 
       if (!matchingContent) {
         throw new Error('Content not found');
       }
 
       setContentData(matchingContent);
+      console.log('Content data set:', matchingContent);
 
       // Set form default values
       setValue('title', matchingContent.title);
@@ -92,6 +102,8 @@ const MultiPlatformContentEditor: React.FC<MultiPlatformContentEditorProps> = ({
       for (const platform of ['instagram', 'tiktok', 'youtube'] as const) {
         const platformData = matchingContent.platforms[platform];
         if (platformData) {
+          console.log(`Loading ${platform} data:`, platformData);
+          
           setValue(`${platform}.enabled`, true);
           setValue(`${platform}.account_handle`, platformData.account_handle || '');
           setValue(`${platform}.url`, platformData.url || '');
@@ -109,7 +121,35 @@ const MultiPlatformContentEditor: React.FC<MultiPlatformContentEditorProps> = ({
           setValue(`${platform}.non_follower_reach_ratio`, platformData.non_follower_reach_ratio || undefined);
           setValue(`${platform}.swipe_rate`, platformData.swipe_rate || undefined);
           setValue(`${platform}.new_viewers_percent`, platformData.new_viewers_percent || undefined);
+          
+          // YouTube Long Form specific metrics
+          setValue(`${platform}.total_retention_percent`, (platformData as any).total_retention_percent || undefined);
+          setValue(`${platform}.ctr`, (platformData as any).ctr || undefined);
+          setValue(`${platform}.retention_10s`, (platformData as any).retention_10s || undefined);
+          setValue(`${platform}.retention_30s`, (platformData as any).retention_30s || undefined);
+          setValue(`${platform}.returning_viewers_percent`, (platformData as any).returning_viewers_percent || undefined);
+          setValue(`${platform}.total_watch_time_minutes`, (platformData as any).total_watch_time_minutes || undefined);
+          setValue(`${platform}.subscribers`, (platformData as any).subscribers || undefined);
+          setValue(`${platform}.thumbnails`, (platformData as any).thumbnails || undefined);
+          
+          // Instagram specific metrics
+          setValue(`${platform}.engagement_total`, (platformData as any).engagement_total || undefined);
+          setValue(`${platform}.non_follower_percent`, (platformData as any).non_follower_percent || undefined);
+          setValue(`${platform}.skip_rate`, (platformData as any).skip_rate || undefined);
+          
+          if (platform === 'youtube' && contentData?.format === 'long_form') {
+            console.log('YouTube Long Form specific data loaded:');
+            console.log('- total_retention_percent:', (platformData as any).total_retention_percent);
+            console.log('- ctr:', (platformData as any).ctr);
+            console.log('- retention_10s:', (platformData as any).retention_10s);
+            console.log('- retention_30s:', (platformData as any).retention_30s);
+            console.log('- returning_viewers_percent:', (platformData as any).returning_viewers_percent);
+            console.log('- total_watch_time_minutes:', (platformData as any).total_watch_time_minutes);
+            console.log('- subscribers:', (platformData as any).subscribers);
+            console.log('- thumbnails:', (platformData as any).thumbnails);
+          }
         } else {
+          console.log(`No data found for ${platform}`);
           setValue(`${platform}.enabled`, false);
         }
       }
@@ -129,6 +169,11 @@ const MultiPlatformContentEditor: React.FC<MultiPlatformContentEditorProps> = ({
   const onSubmit = async (data: MultiPlatformEditForm) => {
     if (!contentData) return;
 
+    console.log('=== MultiPlatformContentEditor onSubmit ===');
+    console.log('Content data format:', contentData?.format);
+    console.log('Available platforms:', availablePlatforms);
+    console.log('Form data:', data);
+
     setIsSubmitting(true);
     setError(null);
 
@@ -137,6 +182,10 @@ const MultiPlatformContentEditor: React.FC<MultiPlatformContentEditorProps> = ({
       for (const platform of availablePlatforms) {
         const platformData = data[platform];
         const contentId = contentData.platforms[platform]?.content_id;
+        
+        console.log(`=== Processing ${platform} ===`);
+        console.log('Platform data:', platformData);
+        console.log('Content ID:', contentId);
 
         if (contentId) {
           const metrics: Partial<PlatformMetrics> = {
@@ -155,10 +204,40 @@ const MultiPlatformContentEditor: React.FC<MultiPlatformContentEditorProps> = ({
             followers_per_reach: platformData.followers_per_reach,
             non_follower_reach_ratio: platformData.non_follower_reach_ratio,
             swipe_rate: platformData.swipe_rate,
-            new_viewers_percent: platformData.new_viewers_percent
+            new_viewers_percent: platformData.new_viewers_percent,
+            
+            // YouTube Long Form specific metrics
+            total_retention_percent: (platformData as any).total_retention_percent,
+            ctr: (platformData as any).ctr,
+            retention_10s: (platformData as any).retention_10s,
+            retention_30s: (platformData as any).retention_30s,
+            returning_viewers_percent: (platformData as any).returning_viewers_percent,
+            total_watch_time_minutes: (platformData as any).total_watch_time_minutes,
+            subscribers: (platformData as any).subscribers,
+            thumbnails: (platformData as any).thumbnails,
+            
+            // Instagram specific
+            engagement_total: (platformData as any).engagement_total,
+            non_follower_percent: (platformData as any).non_follower_percent,
+            skip_rate: (platformData as any).skip_rate
           };
 
+          console.log('Metrics to send:', metrics);
+          console.log('YouTube Long Form specific fields:');
+          console.log('- total_retention_percent:', (platformData as any).total_retention_percent);
+          console.log('- ctr:', (platformData as any).ctr);
+          console.log('- retention_10s:', (platformData as any).retention_10s);
+          console.log('- retention_30s:', (platformData as any).retention_30s);
+          console.log('- returning_viewers_percent:', (platformData as any).returning_viewers_percent);
+          console.log('- total_watch_time_minutes:', (platformData as any).total_watch_time_minutes);
+          console.log('- subscribers:', (platformData as any).subscribers);
+          console.log('- thumbnails:', (platformData as any).thumbnails);
+
+          console.log('Calling updatePlatformMetrics...');
           await updatePlatformMetrics(contentId, platform, metrics);
+          console.log('updatePlatformMetrics completed for', platform);
+        } else {
+          console.log('No content ID found for platform:', platform);
         }
       }
 
@@ -388,9 +467,21 @@ const MultiPlatformContentEditor: React.FC<MultiPlatformContentEditorProps> = ({
                           placeholder="65.0"
                         />
                       </div>
+
+                      {/* Subscribers */}
+                      <div>
+                        <label className="block text-sm font-medium text-white mb-2">New Subscribers</label>
+                        <input
+                          {...register(`${platform}.subscribers`, { valueAsNumber: true })}
+                          type="number"
+                          min="0"
+                          className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#8A8D93] focus:border-terminal-accent focus:outline-none"
+                          placeholder="0"
+                        />
+                      </div>
                     </div>
-                  ) : (
-                    /* All other platforms and formats - Full fields */
+                  ) : platform === 'youtube' && contentData?.format === 'long_form' ? (
+                    /* YouTube Long Form - Specific fields matching PlatformMetricsForm */
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                       {/* Account Handle */}
                       <div>
@@ -399,7 +490,7 @@ const MultiPlatformContentEditor: React.FC<MultiPlatformContentEditorProps> = ({
                           {...register(`${platform}.account_handle`)}
                           type="text"
                           className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#8A8D93] focus:border-terminal-accent focus:outline-none"
-                          placeholder={`@your_${platform}_handle`}
+                          placeholder="@your_youtube_handle"
                         />
                       </div>
 
@@ -410,22 +501,11 @@ const MultiPlatformContentEditor: React.FC<MultiPlatformContentEditorProps> = ({
                           {...register(`${platform}.url`)}
                           type="url"
                           className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#8A8D93] focus:border-terminal-accent focus:outline-none"
-                          placeholder={`${platform}.com/...`}
+                          placeholder="youtube.com/..."
                         />
                       </div>
 
-                      {/* Platform Video ID */}
-                      <div>
-                        <label className="block text-sm font-medium text-white mb-2">Video ID</label>
-                        <input
-                          {...register(`${platform}.platform_video_id`)}
-                          type="text"
-                          className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#8A8D93] focus:border-terminal-accent focus:outline-none"
-                          placeholder="Platform video ID"
-                        />
-                      </div>
-
-                      {/* Core Metrics */}
+                      {/* Views */}
                       <div>
                         <label className="block text-sm font-medium text-white mb-2">Views</label>
                         <input
@@ -437,6 +517,7 @@ const MultiPlatformContentEditor: React.FC<MultiPlatformContentEditorProps> = ({
                         />
                       </div>
 
+                      {/* Likes */}
                       <div>
                         <label className="block text-sm font-medium text-white mb-2">Likes</label>
                         <input
@@ -448,10 +529,11 @@ const MultiPlatformContentEditor: React.FC<MultiPlatformContentEditorProps> = ({
                         />
                       </div>
 
+                      {/* New Subscribers */}
                       <div>
-                        <label className="block text-sm font-medium text-white mb-2">Comments</label>
+                        <label className="block text-sm font-medium text-white mb-2">New Subscribers</label>
                         <input
-                          {...register(`${platform}.comments`, { valueAsNumber: true })}
+                          {...register(`${platform}.subscribers`, { valueAsNumber: true })}
                           type="number"
                           min="0"
                           className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#8A8D93] focus:border-terminal-accent focus:outline-none"
@@ -459,6 +541,190 @@ const MultiPlatformContentEditor: React.FC<MultiPlatformContentEditorProps> = ({
                         />
                       </div>
 
+                      {/* Total Retention Percentage */}
+                      <div>
+                        <label className="block text-sm font-medium text-white mb-2">Total Retention %</label>
+                        <input
+                          {...register(`${platform}.total_retention_percent`, { valueAsNumber: true })}
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.1"
+                          className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#8A8D93] focus:border-terminal-accent focus:outline-none"
+                          placeholder="0.0"
+                        />
+                      </div>
+
+                      {/* CTR (Click-Through Rate) */}
+                      <div>
+                        <label className="block text-sm font-medium text-white mb-2">CTR % (Initial)</label>
+                        <input
+                          {...register(`${platform}.ctr`, { valueAsNumber: true })}
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.01"
+                          className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#8A8D93] focus:border-terminal-accent focus:outline-none"
+                          placeholder="0.00"
+                        />
+                        <div className="text-xs text-[#8A8D93] mt-1">Will be tracked over time (7-day, 30-day)</div>
+                      </div>
+
+                      {/* Retention at 10 seconds */}
+                      <div>
+                        <label className="block text-sm font-medium text-white mb-2">Retention @ 10s %</label>
+                        <input
+                          {...register(`${platform}.retention_10s`, { valueAsNumber: true })}
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.1"
+                          className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#8A8D93] focus:border-terminal-accent focus:outline-none"
+                          placeholder="0.0"
+                        />
+                      </div>
+
+                      {/* Retention at 30 seconds */}
+                      <div>
+                        <label className="block text-sm font-medium text-white mb-2">Retention @ 30s % (Initial)</label>
+                        <input
+                          {...register(`${platform}.retention_30s`, { valueAsNumber: true })}
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.1"
+                          className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#8A8D93] focus:border-terminal-accent focus:outline-none"
+                          placeholder="0.0"
+                        />
+                        <div className="text-xs text-[#8A8D93] mt-1">Will be tracked over time (7-day, 30-day)</div>
+                      </div>
+
+                      {/* New vs Returning Viewers */}
+                      <div>
+                        <label className="block text-sm font-medium text-white mb-2">New Viewers %</label>
+                        <input
+                          {...register(`${platform}.new_viewers_percent`, { valueAsNumber: true })}
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.1"
+                          className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#8A8D93] focus:border-terminal-accent focus:outline-none"
+                          placeholder="0.0"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-white mb-2">Returning Viewers %</label>
+                        <input
+                          {...register(`${platform}.returning_viewers_percent`, { valueAsNumber: true })}
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.1"
+                          className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#8A8D93] focus:border-terminal-accent focus:outline-none"
+                          placeholder="0.0"
+                        />
+                      </div>
+
+                      {/* Total Watch Time */}
+                      <div>
+                        <label className="block text-sm font-medium text-white mb-2">Total Watch Time (minutes)</label>
+                        <input
+                          {...register(`${platform}.total_watch_time_minutes`, { valueAsNumber: true })}
+                          type="number"
+                          min="0"
+                          step="0.1"
+                          className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#8A8D93] focus:border-terminal-accent focus:outline-none"
+                          placeholder="0.0"
+                        />
+                      </div>
+
+                      {/* Subscribers */}
+                      <div>
+                        <label className="block text-sm font-medium text-white mb-2">New Subscribers</label>
+                        <input
+                          {...register(`${platform}.subscribers`, { valueAsNumber: true })}
+                          type="number"
+                          min="0"
+                          className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#8A8D93] focus:border-terminal-accent focus:outline-none"
+                          placeholder="0"
+                        />
+                      </div>
+
+                      {/* Thumbnails */}
+                      <div>
+                        <label className="block text-sm font-medium text-white mb-2">Thumbnail Variants</label>
+                        <input
+                          {...register(`${platform}.thumbnails`)}
+                          type="text"
+                          className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#8A8D93] focus:border-terminal-accent focus:outline-none"
+                          placeholder="e.g. A, B, C or thumbnail descriptions"
+                        />
+                        <div className="text-xs text-[#8A8D93] mt-1">Track which thumbnails you tested</div>
+                      </div>
+                    </div>
+                  ) : platform === 'instagram' ? (
+                    /* Instagram - Specific fields matching PlatformMetricsForm */
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {/* Account Handle */}
+                      <div>
+                        <label className="block text-sm font-medium text-white mb-2">Account Handle</label>
+                        <input
+                          {...register(`${platform}.account_handle`)}
+                          type="text"
+                          className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#8A8D93] focus:border-terminal-accent focus:outline-none"
+                          placeholder="@your_instagram_handle"
+                        />
+                      </div>
+
+                      {/* URL */}
+                      <div>
+                        <label className="block text-sm font-medium text-white mb-2">Content URL</label>
+                        <input
+                          {...register(`${platform}.url`)}
+                          type="url"
+                          className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#8A8D93] focus:border-terminal-accent focus:outline-none"
+                          placeholder="instagram.com/..."
+                        />
+                      </div>
+
+                      {/* Views */}
+                      <div>
+                        <label className="block text-sm font-medium text-white mb-2">Views</label>
+                        <input
+                          {...register(`${platform}.views`, { valueAsNumber: true })}
+                          type="number"
+                          min="0"
+                          className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#8A8D93] focus:border-terminal-accent focus:outline-none"
+                          placeholder="0"
+                        />
+                      </div>
+
+                      {/* Likes */}
+                      <div>
+                        <label className="block text-sm font-medium text-white mb-2">Likes</label>
+                        <input
+                          {...register(`${platform}.likes`, { valueAsNumber: true })}
+                          type="number"
+                          min="0"
+                          className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#8A8D93] focus:border-terminal-accent focus:outline-none"
+                          placeholder="0"
+                        />
+                      </div>
+
+                      {/* New Followers */}
+                      <div>
+                        <label className="block text-sm font-medium text-white mb-2">New Followers</label>
+                        <input
+                          {...register(`${platform}.follows`, { valueAsNumber: true })}
+                          type="number"
+                          min="0"
+                          className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#8A8D93] focus:border-terminal-accent focus:outline-none"
+                          placeholder="0"
+                        />
+                      </div>
+
+                      {/* Shares */}
                       <div>
                         <label className="block text-sm font-medium text-white mb-2">Shares</label>
                         <input
@@ -470,6 +736,19 @@ const MultiPlatformContentEditor: React.FC<MultiPlatformContentEditorProps> = ({
                         />
                       </div>
 
+                      {/* Comments */}
+                      <div>
+                        <label className="block text-sm font-medium text-white mb-2">Comments</label>
+                        <input
+                          {...register(`${platform}.comments`, { valueAsNumber: true })}
+                          type="number"
+                          min="0"
+                          className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#8A8D93] focus:border-terminal-accent focus:outline-none"
+                          placeholder="0"
+                        />
+                      </div>
+
+                      {/* Saves */}
                       <div>
                         <label className="block text-sm font-medium text-white mb-2">Saves</label>
                         <input
@@ -481,20 +760,22 @@ const MultiPlatformContentEditor: React.FC<MultiPlatformContentEditorProps> = ({
                         />
                       </div>
 
+                      {/* Total Engagement */}
                       <div>
-                        <label className="block text-sm font-medium text-white mb-2">New Follows</label>
+                        <label className="block text-sm font-medium text-white mb-2">Total Engagement</label>
                         <input
-                          {...register(`${platform}.follows`, { valueAsNumber: true })}
+                          {...register(`${platform}.engagement_total`, { valueAsNumber: true })}
                           type="number"
                           min="0"
                           className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#8A8D93] focus:border-terminal-accent focus:outline-none"
-                          placeholder="0"
+                          placeholder="shares + comments + saves"
                         />
+                        <div className="text-xs text-[#8A8D93] mt-1">Or enter the total if you don't have individual counts</div>
                       </div>
 
-                      {/* Advanced Metrics */}
+                      {/* Average Watch Time */}
                       <div>
-                        <label className="block text-sm font-medium text-white mb-2">Avg Watch Time (sec)</label>
+                        <label className="block text-sm font-medium text-white mb-2">Avg Watch Time (seconds)</label>
                         <input
                           {...register(`${platform}.average_watch_time_seconds`, { valueAsNumber: true })}
                           type="number"
@@ -505,29 +786,153 @@ const MultiPlatformContentEditor: React.FC<MultiPlatformContentEditorProps> = ({
                         />
                       </div>
 
+                      {/* Non-Follower Percentage */}
                       <div>
-                        <label className="block text-sm font-medium text-white mb-2">Retention Ratio</label>
+                        <label className="block text-sm font-medium text-white mb-2">Non-Follower %</label>
                         <input
-                          {...register(`${platform}.retention_ratio`, { valueAsNumber: true })}
+                          {...register(`${platform}.non_follower_percent`, { valueAsNumber: true })}
                           type="number"
                           min="0"
-                          max="1"
-                          step="0.01"
+                          max="100"
+                          step="0.1"
                           className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#8A8D93] focus:border-terminal-accent focus:outline-none"
-                          placeholder="0.25 (25%)"
+                          placeholder="0.0"
                         />
                       </div>
 
+                      {/* Skip Rate */}
                       <div>
-                        <label className="block text-sm font-medium text-white mb-2">Reach</label>
+                        <label className="block text-sm font-medium text-white mb-2">Skip Rate %</label>
                         <input
-                          {...register(`${platform}.reach`, { valueAsNumber: true })}
+                          {...register(`${platform}.skip_rate`, { valueAsNumber: true })}
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.1"
+                          className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#8A8D93] focus:border-terminal-accent focus:outline-none"
+                          placeholder="0.0"
+                        />
+                      </div>
+                    </div>
+                  ) : platform === 'tiktok' ? (
+                    /* TikTok - Specific fields matching PlatformMetricsForm */
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {/* Account Handle */}
+                      <div>
+                        <label className="block text-sm font-medium text-white mb-2">Account Handle</label>
+                        <input
+                          {...register(`${platform}.account_handle`)}
+                          type="text"
+                          className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#8A8D93] focus:border-terminal-accent focus:outline-none"
+                          placeholder="@your_tiktok_handle"
+                        />
+                      </div>
+
+                      {/* URL */}
+                      <div>
+                        <label className="block text-sm font-medium text-white mb-2">Content URL</label>
+                        <input
+                          {...register(`${platform}.url`)}
+                          type="url"
+                          className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#8A8D93] focus:border-terminal-accent focus:outline-none"
+                          placeholder="tiktok.com/..."
+                        />
+                      </div>
+
+                      {/* Views */}
+                      <div>
+                        <label className="block text-sm font-medium text-white mb-2">Views</label>
+                        <input
+                          {...register(`${platform}.views`, { valueAsNumber: true })}
                           type="number"
                           min="0"
                           className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#8A8D93] focus:border-terminal-accent focus:outline-none"
                           placeholder="0"
                         />
                       </div>
+
+                      {/* Likes */}
+                      <div>
+                        <label className="block text-sm font-medium text-white mb-2">Likes</label>
+                        <input
+                          {...register(`${platform}.likes`, { valueAsNumber: true })}
+                          type="number"
+                          min="0"
+                          className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#8A8D93] focus:border-terminal-accent focus:outline-none"
+                          placeholder="0"
+                        />
+                      </div>
+
+                      {/* New Followers */}
+                      <div>
+                        <label className="block text-sm font-medium text-white mb-2">New Followers</label>
+                        <input
+                          {...register(`${platform}.follows`, { valueAsNumber: true })}
+                          type="number"
+                          min="0"
+                          className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#8A8D93] focus:border-terminal-accent focus:outline-none"
+                          placeholder="0"
+                        />
+                      </div>
+
+                      {/* Total Engagement */}
+                      <div>
+                        <label className="block text-sm font-medium text-white mb-2">Total Engagement</label>
+                        <input
+                          {...register(`${platform}.engagement_total`, { valueAsNumber: true })}
+                          type="number"
+                          min="0"
+                          className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#8A8D93] focus:border-terminal-accent focus:outline-none"
+                          placeholder="likes + shares + comments"
+                        />
+                        <div className="text-xs text-[#8A8D93] mt-1">Total interactions on the video</div>
+                      </div>
+
+                      {/* Average Watch Time */}
+                      <div>
+                        <label className="block text-sm font-medium text-white mb-2">Avg Watch Time (seconds)</label>
+                        <input
+                          {...register(`${platform}.average_watch_time_seconds`, { valueAsNumber: true })}
+                          type="number"
+                          min="0"
+                          step="0.1"
+                          className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#8A8D93] focus:border-terminal-accent focus:outline-none"
+                          placeholder="0.0"
+                        />
+                      </div>
+
+                      {/* Retention */}
+                      <div>
+                        <label className="block text-sm font-medium text-white mb-2">Retention %</label>
+                        <input
+                          {...register(`${platform}.retention_ratio`, { valueAsNumber: true })}
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.1"
+                          className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#8A8D93] focus:border-terminal-accent focus:outline-none"
+                          placeholder="0.0"
+                        />
+                      </div>
+
+                      {/* Non-Follower Percentage */}
+                      <div>
+                        <label className="block text-sm font-medium text-white mb-2">Non-Follower %</label>
+                        <input
+                          {...register(`${platform}.non_follower_percent`, { valueAsNumber: true })}
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.1"
+                          className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#8A8D93] focus:border-terminal-accent focus:outline-none"
+                          placeholder="0.0"
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    /* Fallback for any other platforms */
+                    <div className="text-center text-[#8A8D93] py-8">
+                      No specific metrics form available for {platform}
                     </div>
                   )}
                 </div>

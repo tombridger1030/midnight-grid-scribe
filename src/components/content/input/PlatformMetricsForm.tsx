@@ -317,6 +317,18 @@ const PlatformMetricsForm: React.FC<PlatformMetricsFormProps> = ({ platform, reg
           placeholder="0.0"
         />
       </div>
+
+      {/* Subscribers */}
+      <div>
+        <label className="block text-sm font-medium text-white mb-2">New Subscribers</label>
+        <input
+          {...register(`${platform}.subscribers`, { valueAsNumber: true })}
+          type="number"
+          min="0"
+          className="w-full bg-[#111] border border-[#333] rounded-sm p-3 text-white placeholder-[#8A8D93] focus:border-terminal-accent focus:outline-none"
+          placeholder="0"
+        />
+      </div>
     </>
   );
 

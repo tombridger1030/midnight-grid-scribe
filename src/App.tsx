@@ -47,8 +47,6 @@ const AppContent = () => {
           // Load sound preference
           const soundPref = await preferencesManager.shouldEnableSound();
           setSoundEnabled(soundPref);
-
-          console.log('User initialized successfully');
         } catch (error) {
           console.error('Failed to initialize user:', error);
         } finally {

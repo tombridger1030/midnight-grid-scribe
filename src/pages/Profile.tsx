@@ -10,12 +10,21 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
-  User, Settings, Palette, BarChart3, Layout, Save, DollarSign, Github
+  User, Settings, Palette, BarChart3, Layout, Save, DollarSign, Github, Shield, Users, Play, X
 } from 'lucide-react';
 import { toast } from 'sonner';
 
 const Profile: React.FC = () => {
-  const { user, profile, updateProfile } = useAuth();
+  const { 
+    user, 
+    profile, 
+    updateProfile, 
+    isImpersonating, 
+    originalProfile, 
+    impersonateUser, 
+    stopImpersonation, 
+    getAllUsers 
+  } = useAuth();
   const [preferences, setPreferences] = useState<UserPreferences | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -33,6 +42,13 @@ const Profile: React.FC = () => {
     apiToken: '',
     username: ''
   });
+
+  // Admin state
+  const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
+  const [selectedUserId, setSelectedUserId] = useState<string>('');
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [impersonationLoading, setImpersonationLoading] = useState(false);
+  const [manualUserId, setManualUserId] = useState<string>('');
 
   // Load user data
   useEffect(() => {
@@ -251,6 +267,71 @@ const Profile: React.FC = () => {
     }
   };
 
+  // Admin functions
+  const loadUsers = async () => {
+    if (!profile?.is_admin) return;
+
+    setLoadingUsers(true);
+    try {
+      const { data, error } = await getAllUsers();
+      if (error) {
+        toast.error(error.message || 'Failed to load users');
+        return;
+      }
+      setAllUsers(data || []);
+    } catch (error) {
+      console.error('Failed to load users:', error);
+      toast.error('Failed to load users');
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
+
+  const handleImpersonate = async () => {
+    if (!selectedUserId) {
+      toast.error('Please select a user to impersonate');
+      return;
+    }
+
+    setImpersonationLoading(true);
+    try {
+      const { error } = await impersonateUser(selectedUserId);
+      if (error) {
+        toast.error(error.message || 'Failed to start impersonation');
+        return;
+      }
+      toast.success('Impersonation started successfully');
+    } catch (error) {
+      console.error('Failed to impersonate user:', error);
+      toast.error('Failed to impersonate user');
+    } finally {
+      setImpersonationLoading(false);
+    }
+  };
+
+  const handleStopImpersonation = async () => {
+    setImpersonationLoading(true);
+    try {
+      const { error } = await stopImpersonation();
+      if (error) {
+        toast.error(error.message || 'Failed to stop impersonation');
+        return;
+      }
+      toast.success('Impersonation stopped successfully');
+    } catch (error) {
+      console.error('Failed to stop impersonation:', error);
+      toast.error('Failed to stop impersonation');
+    } finally {
+      setImpersonationLoading(false);
+    }
+  };
+
+  // Load users when admin tab is accessed
+  useEffect(() => {
+    if (profile?.is_admin) {
+      loadUsers();
+    }
+  }, [profile?.is_admin]);
 
   if (loading) {
     return (
@@ -270,10 +351,11 @@ const Profile: React.FC = () => {
       </div>
 
       <Tabs defaultValue="profile" className="flex-1">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className={`grid w-full ${profile?.is_admin ? 'grid-cols-4' : 'grid-cols-3'}`}>
           <TabsTrigger value="profile">Profile</TabsTrigger>
           <TabsTrigger value="preferences">Preferences</TabsTrigger>
           <TabsTrigger value="integrations">Integrations</TabsTrigger>
+          {profile?.is_admin && <TabsTrigger value="admin">Admin</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="profile" className="space-y-6">
@@ -632,6 +714,146 @@ const Profile: React.FC = () => {
             </div>
           </Card>
         </TabsContent>
+
+        {profile?.is_admin && (
+          <TabsContent value="admin" className="space-y-6">
+            {/* Impersonation Status */}
+            {isImpersonating && (
+              <Card className="p-6 border-yellow-500 bg-yellow-500/10">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center">
+                    <Shield className="mr-2 text-yellow-500" size={20} />
+                    <h3 className="text-lg">Currently Impersonating</h3>
+                  </div>
+                  <Button
+                    onClick={handleStopImpersonation}
+                    disabled={impersonationLoading}
+                    variant="outline"
+                    size="sm"
+                    className="border-red-500 text-red-500 hover:bg-red-500/10"
+                  >
+                    <X className="mr-2" size={16} />
+                    {impersonationLoading ? 'Stopping...' : 'Stop Impersonation'}
+                  </Button>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-sm">
+                    <span className="font-medium">Original User:</span> {originalProfile?.display_name || originalProfile?.username}
+                  </p>
+                  <p className="text-sm">
+                    <span className="font-medium">Impersonating:</span> {profile?.display_name || profile?.username}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    You are currently viewing the application as {profile?.username}. Click "Stop Impersonation" to return to your account.
+                  </p>
+                </div>
+              </Card>
+            )}
+
+            {/* User Impersonation */}
+            <Card className="p-6">
+              <div className="flex items-center mb-4">
+                <Users className="mr-2" size={20} />
+                <h3 className="text-lg">User Impersonation</h3>
+              </div>
+              
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="userSelect">Select User to Impersonate</Label>
+                  <select
+                    id="userSelect"
+                    value={selectedUserId}
+                    onChange={(e) => setSelectedUserId(e.target.value)}
+                    className="w-full mt-1 p-2 border rounded-md bg-background"
+                    disabled={loadingUsers || isImpersonating}
+                  >
+                    <option value="">Choose a user...</option>
+                    {allUsers.map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {user.display_name || user.username} ({user.username})
+                        {user.is_admin ? ' - Admin' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex gap-2">
+                  <Button
+                    onClick={handleImpersonate}
+                    disabled={!selectedUserId || impersonationLoading || isImpersonating}
+                    className="flex items-center"
+                  >
+                    <Play className="mr-2" size={16} />
+                    {impersonationLoading ? 'Starting...' : 'Start Impersonation'}
+                  </Button>
+                  
+                  <Button
+                    onClick={loadUsers}
+                    disabled={loadingUsers}
+                    variant="outline"
+                  >
+                    {loadingUsers ? 'Refreshing...' : 'Refresh Users'}
+                  </Button>
+                </div>
+
+                {/* Manual user ID fallback for empty lists */}
+                <div className="mt-4">
+                  <Label htmlFor="manualUserId">Or enter a User ID (UUID)</Label>
+                  <div className="flex gap-2 mt-1">
+                    <Input
+                      id="manualUserId"
+                      value={manualUserId}
+                      onChange={(e) => setManualUserId(e.target.value)}
+                      placeholder="00000000-0000-0000-0000-000000000000"
+                      className="flex-1"
+                      disabled={isImpersonating}
+                    />
+                    <Button
+                      onClick={async () => {
+                        if (!manualUserId.trim()) return;
+                        setSelectedUserId(manualUserId.trim());
+                        await handleImpersonate();
+                      }}
+                      disabled={!manualUserId.trim() || impersonationLoading || isImpersonating}
+                    >
+                      Impersonate ID
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Use this if the user list is empty or the target user isn’t listed.
+                  </p>
+                </div>
+
+                <div className="mt-4 p-4 bg-muted rounded-md">
+                  <h4 className="text-sm font-medium mb-2">How Impersonation Works</h4>
+                  <ul className="text-xs text-muted-foreground space-y-1 list-disc list-inside">
+                    <li>Select a user from the dropdown to impersonate</li>
+                    <li>You'll see their account exactly as they would</li>
+                    <li>All data, KPIs, and preferences will switch to theirs</li>
+                    <li>Click "Stop Impersonation" to return to your account</li>
+                    <li>Use this to debug user-specific issues or provide support</li>
+                  </ul>
+                </div>
+
+                {allUsers.length > 0 && (
+                  <div className="mt-4 p-4 bg-muted rounded-md">
+                    <h4 className="text-sm font-medium mb-2">System Users ({allUsers.length})</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+                      {allUsers.map((user) => (
+                        <div key={user.id} className="flex justify-between p-2 bg-background rounded border">
+                          <span>{user.display_name || user.username}</span>
+                          <span className="text-muted-foreground">
+                            {user.is_admin ? '👑 Admin' : '👤 User'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </Card>
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );

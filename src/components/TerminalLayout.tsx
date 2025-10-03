@@ -17,7 +17,7 @@ interface NavItem {
 }
 
 const TerminalLayout: React.FC = () => {
-  const { user, profile, signOut } = useAuth();
+  const { user, profile, signOut, isImpersonating, originalProfile } = useAuth();
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [systemStats, setSystemStats] = useState({
@@ -287,7 +287,13 @@ const TerminalLayout: React.FC = () => {
               onClick={() => setShowProfileMenu(!showProfileMenu)}
               className="text-[#8A8D93] mr-3 hover:text-[#5FE3B3] transition-colors flex items-center"
             >
-              USER: {userInfo.username}
+              {isImpersonating ? (
+                <span className="text-yellow-500">
+                  🎭 IMPERSONATING: {userInfo.username}
+                </span>
+              ) : (
+                <>USER: {userInfo.username}</>
+              )}
               <User size={12} className="ml-1" />
             </button>
 
