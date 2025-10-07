@@ -723,6 +723,137 @@ export class UserStorage {
       }
     }
   }
+
+  // User Profile Management
+  async getUserProfile(): Promise<{ username: string; display_name: string } | null> {
+    if (!this.userId) {
+      console.warn('No user ID set for getUserProfile');
+      return null;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('username, display_name')
+        .eq('id', this.userId)
+        .single();
+
+      if (error) {
+        console.log('No user profile found in database:', error);
+
+        // Fallback to localStorage
+        const localProfile = localStorage.getItem(`profile_${this.userId}`);
+        if (localProfile) {
+          const parsed = JSON.parse(localProfile);
+          return { username: parsed.username, display_name: parsed.display_name };
+        }
+
+        return null;
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Error getting user profile:', error);
+
+      // Fallback to localStorage
+      const localProfile = localStorage.getItem(`profile_${this.userId}`);
+      if (localProfile) {
+        const parsed = JSON.parse(localProfile);
+        return { username: parsed.username, display_name: parsed.display_name };
+      }
+
+      return null;
+    }
+  }
+
+  async saveUserProfile(username: string, displayName: string): Promise<boolean> {
+    if (!this.userId) {
+      console.warn('No user ID set for saveUserProfile');
+      return false;
+    }
+
+    try {
+      console.log('💾 Saving user profile to Supabase:', { username, displayName });
+
+      // Save to Supabase user_profiles table
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .update({
+          username: username,
+          display_name: displayName,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', this.userId)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error saving profile to Supabase:', error);
+
+        // Try to insert if update failed (profile might not exist)
+        const { data: insertData, error: insertError } = await supabase
+          .from('user_profiles')
+          .insert({
+            id: this.userId,
+            username: username,
+            display_name: displayName,
+            user_preferences: {
+              show_content_tab: true,
+              enabled_modules: ["dashboard", "kpis", "visualizer", "roadmap", "cash", "content"],
+              default_view: "dashboard",
+              theme_settings: {
+                terminal_style: "cyberpunk",
+                animation_enabled: true,
+                sound_enabled: false
+              }
+            }
+          })
+          .select()
+          .single();
+
+        if (insertError) {
+          console.error('Failed to insert profile:', insertError);
+        } else {
+          console.log('✅ Profile created successfully in Supabase:', insertData);
+        }
+      } else {
+        console.log('✅ Profile updated successfully in Supabase:', data);
+      }
+
+      // Also update localStorage for consistency
+      const localProfile = localStorage.getItem(`profile_${this.userId}`);
+      if (localProfile) {
+        const parsed = JSON.parse(localProfile);
+        parsed.username = username;
+        parsed.display_name = displayName;
+        parsed.updated_at = new Date().toISOString();
+        localStorage.setItem(`profile_${this.userId}`, JSON.stringify(parsed));
+        console.log('✅ Profile also updated in localStorage');
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Error saving user profile:', error);
+
+      // Fallback: at least save to localStorage
+      try {
+        const localProfile = localStorage.getItem(`profile_${this.userId}`);
+        if (localProfile) {
+          const parsed = JSON.parse(localProfile);
+          parsed.username = username;
+          parsed.display_name = displayName;
+          parsed.updated_at = new Date().toISOString();
+          localStorage.setItem(`profile_${this.userId}`, JSON.stringify(parsed));
+          console.log('⚠️ Profile saved to localStorage only (Supabase failed)');
+          return true;
+        }
+      } catch (localError) {
+        console.error('Failed to save profile anywhere:', localError);
+      }
+
+      return false;
+    }
+  }
 }
 
 // Global instance

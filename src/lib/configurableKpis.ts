@@ -12,6 +12,8 @@ export interface ConfigurableKPI {
   color: string;
   is_active: boolean;
   is_average?: boolean; // If true, calculates average of days with data instead of sum
+  reverse_scoring?: boolean; // If true, lower values are better (e.g., screen time). If false, higher values are better
+  equal_is_better?: boolean; // If true, being exactly at target is best, scores decrease as you move away in either direction
   sort_order: number;
   created_at?: string;
   updated_at?: string;
@@ -151,6 +153,8 @@ export class ConfigurableKPIManager {
         color: kpi.color,
         is_active: kpi.is_active,
         is_average: kpi.is_average || false,
+        reverse_scoring: kpi.reverse_scoring || false,
+        equal_is_better: kpi.equal_is_better || false,
         sort_order: kpi.sort_order,
         created_at: kpi.created_at,
         updated_at: kpi.updated_at
@@ -186,7 +190,9 @@ export class ConfigurableKPIManager {
     category: string = 'custom',
     color?: string,
     minTarget?: number,
-    isAverage?: boolean
+    isAverage?: boolean,
+    reverseScoring?: boolean,
+    equalIsBetter?: boolean
   ): Promise<ConfigurableKPI | null> {
     const kpiId = name.toLowerCase().replace(/[^a-z0-9]/g, '');
 
@@ -200,6 +206,8 @@ export class ConfigurableKPIManager {
       color: color || KPI_CATEGORIES[category]?.color || '#95A5A6',
       is_active: true,
       is_average: isAverage || false,
+      reverse_scoring: reverseScoring || false,
+      equal_is_better: equalIsBetter || false,
       sort_order: 999 // Custom KPIs go to the end
     };
 
@@ -365,7 +373,33 @@ export class ConfigurableKPIManager {
       const target = kpi.min_target || kpi.target;
 
       if (target > 0) {
-        const progress = Math.min(1, value / target);
+        let progress;
+        
+        if (kpi.equal_is_better) {
+          // For equal is better (being exactly at target is best)
+          const difference = Math.abs(value - target);
+          const tolerance = target * 0.1; // Allow 10% tolerance for perfect score
+          const maxAcceptableDifference = target * 0.5; // 50% difference = 0 score
+          
+          if (difference <= tolerance) {
+            progress = 1; // Perfect score if within tolerance
+          } else {
+            progress = Math.max(0, 1 - ((difference - tolerance) / (maxAcceptableDifference - tolerance)));
+          }
+        } else if (kpi.reverse_scoring) {
+          // For reverse scoring (lower is better)
+          if (value <= target) {
+            progress = 1; // Perfect score if at or below target
+          } else {
+            const excess = value - target;
+            const maxAcceptableExcess = target * 0.5; // Allow 50% above target before hitting 0
+            progress = Math.max(0, 1 - (excess / maxAcceptableExcess));
+          }
+        } else {
+          // Normal scoring (higher is better)
+          progress = Math.min(1, value / target);
+        }
+        
         totalProgress += progress;
         validKPIs++;
       }
@@ -383,7 +417,33 @@ export class ConfigurableKPIManager {
 
     kpis.filter(kpi => kpi.is_active).forEach(kpi => {
       const value = weekValues[kpi.kpi_id] || 0;
-      const progress = Math.min(100, (value / kpi.target) * 100);
+      const target = kpi.target;
+      let progress;
+
+      if (kpi.equal_is_better) {
+        // For equal is better (being exactly at target is best)
+        const difference = Math.abs(value - target);
+        const tolerance = target * 0.1; // Allow 10% tolerance for perfect score
+        const maxAcceptableDifference = target * 0.5; // 50% difference = 0 score
+        
+        if (difference <= tolerance) {
+          progress = 100; // Perfect score if within tolerance
+        } else {
+          progress = Math.max(0, 100 - ((difference - tolerance) / (maxAcceptableDifference - tolerance)) * 100);
+        }
+      } else if (kpi.reverse_scoring) {
+        // For reverse scoring (lower is better)
+        if (value <= target) {
+          progress = 100; // Perfect score if at or below target
+        } else {
+          const excess = value - target;
+          const maxAcceptableExcess = target * 0.5;
+          progress = Math.max(0, 100 - (excess / maxAcceptableExcess) * 100);
+        }
+      } else {
+        // Normal scoring (higher is better)
+        progress = Math.min(100, (value / target) * 100);
+      }
 
       if (progress >= 100) excellent++;
       else if (progress >= 80) good++;

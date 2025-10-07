@@ -77,10 +77,8 @@ const Profile: React.FC = () => {
   // Save profile changes
   const handleSaveProfile = async () => {
     setSaving(true);
-    
-    try {
-      const updates: Partial<UserProfile> = {};
 
+    try {
       // Validate inputs
       if (!profileForm.username?.trim()) {
         throw new Error('Username is required');
@@ -88,15 +86,6 @@ const Profile: React.FC = () => {
 
       if (!profileForm.displayName?.trim()) {
         throw new Error('Display name is required');
-      }
-
-      // Collect changes
-      if (profileForm.username !== profile?.username) {
-        updates.username = profileForm.username.trim();
-      }
-
-      if (profileForm.displayName !== profile?.display_name) {
-        updates.display_name = profileForm.displayName.trim();
       }
 
       // Handle password change validation
@@ -112,15 +101,37 @@ const Profile: React.FC = () => {
         console.log('Password change not yet implemented');
       }
 
-      if (Object.keys(updates).length > 0) {
-        console.log('Saving profile changes:', updates);
-        const { error } = await updateProfile(updates);
-        
-        if (error) {
-          throw new Error(error.message || 'Failed to save profile changes');
+      // Check if there are any changes to save
+      const hasUsernameChange = profileForm.username !== profile?.username;
+      const hasDisplayNameChange = profileForm.displayName !== profile?.display_name;
+
+      if (hasUsernameChange || hasDisplayNameChange) {
+        console.log('Saving profile changes:', {
+          username: profileForm.username.trim(),
+          displayName: profileForm.displayName.trim()
+        });
+
+        // Use dedicated userStorage method for proper Supabase persistence
+        const success = await userStorage.saveUserProfile(
+          profileForm.username.trim(),
+          profileForm.displayName.trim()
+        );
+
+        if (!success) {
+          throw new Error('Failed to save profile changes to database');
         }
 
-        toast.success(`Profile updated successfully! ${updates.username ? 'Username' : ''}${updates.username && updates.display_name ? ' and ' : ''}${updates.display_name ? 'Display name' : ''} saved.`);
+        // Also update AuthContext state for UI consistency
+        const updates: Partial<UserProfile> = {};
+        if (hasUsernameChange) updates.username = profileForm.username.trim();
+        if (hasDisplayNameChange) updates.display_name = profileForm.displayName.trim();
+
+        const { error } = await updateProfile(updates);
+        if (error) {
+          console.warn('AuthContext update failed but database save succeeded:', error);
+        }
+
+        toast.success(`Profile updated successfully! ${hasUsernameChange ? 'Username' : ''}${hasUsernameChange && hasDisplayNameChange ? ' and ' : ''}${hasDisplayNameChange ? 'Display name' : ''} saved.`);
       } else {
         toast.info('No changes to save');
       }

@@ -44,7 +44,9 @@ const WeeklyKPIInput: React.FC<WeeklyKPIInputProps> = ({ onWeekChange }) => {
     unit: '',
     category: '',
     color: '#5FE3B3',
-    isAverage: false
+    isAverage: false,
+    reverseScoring: false,
+    equalIsBetter: false
   });
   const [isCreatingCategory, setIsCreatingCategory] = useState(false);
   const [newCategoryForm, setNewCategoryForm] = useState({
@@ -226,7 +228,9 @@ const WeeklyKPIInput: React.FC<WeeklyKPIInputProps> = ({ onWeekChange }) => {
         category,
         newKPIForm.color,
         newKPIForm.minTarget || undefined,
-        newKPIForm.isAverage
+        newKPIForm.isAverage,
+        newKPIForm.reverseScoring,
+        newKPIForm.equalIsBetter
       );
 
       if (newKPI) {
@@ -238,7 +242,9 @@ const WeeklyKPIInput: React.FC<WeeklyKPIInputProps> = ({ onWeekChange }) => {
           unit: '',
           category: '',
           color: '#5FE3B3',
-          isAverage: false
+          isAverage: false,
+          reverseScoring: false,
+          equalIsBetter: false
         });
         setIsCreatingKPI(null);
       }
@@ -261,7 +267,9 @@ const WeeklyKPIInput: React.FC<WeeklyKPIInputProps> = ({ onWeekChange }) => {
         newCategoryForm.name.toLowerCase(),
         newCategoryForm.color,
         newKPIForm.minTarget || undefined,
-        newKPIForm.isAverage
+        newKPIForm.isAverage,
+        newKPIForm.reverseScoring,
+        newKPIForm.equalIsBetter
       );
 
       if (newKPI) {
@@ -273,7 +281,9 @@ const WeeklyKPIInput: React.FC<WeeklyKPIInputProps> = ({ onWeekChange }) => {
           unit: '',
           category: '',
           color: '#5FE3B3',
-          isAverage: false
+          isAverage: false,
+          reverseScoring: false,
+          equalIsBetter: false
         });
         setNewCategoryForm({
           name: '',
@@ -417,10 +427,44 @@ const WeeklyKPIInput: React.FC<WeeklyKPIInputProps> = ({ onWeekChange }) => {
               } else {
                 // Standard progress calculation for other KPIs
                 const targetValue = kpi.min_target || kpi.target;
-                progress = targetValue > 0 ? Math.min(100, (currentValue / targetValue) * 100) : 0;
-                status = progress >= 100 ? 'excellent' :
-                         progress >= 80 ? 'good' :
-                         progress >= 50 ? 'fair' : 'poor';
+                
+                if (kpi.equal_is_better) {
+                  // For equal is better (being exactly at target is best)
+                  const difference = Math.abs(currentValue - targetValue);
+                  const tolerance = targetValue * 0.1; // Allow 10% tolerance for perfect score
+                  const maxAcceptableDifference = targetValue * 0.5; // 50% difference = 0 score
+                  
+                  if (difference <= tolerance) {
+                    progress = 100; // Perfect score if within tolerance
+                    status = 'excellent';
+                  } else {
+                    progress = Math.max(0, 100 - ((difference - tolerance) / (maxAcceptableDifference - tolerance)) * 100);
+                    status = progress >= 80 ? 'good' :
+                             progress >= 50 ? 'fair' : 'poor';
+                  }
+                } else if (kpi.reverse_scoring) {
+                  // For reverse scoring (lower is better), calculate progress differently
+                  if (currentValue <= targetValue) {
+                    // If we're at or below target, that's excellent (100%)
+                    progress = 100;
+                    status = 'excellent';
+                  } else {
+                    // If we're above target, calculate how far above we are
+                    // The further above, the worse the score
+                    const excess = currentValue - targetValue;
+                    const maxAcceptableExcess = targetValue * 0.5; // Allow 50% above target before hitting 0%
+                    
+                    progress = Math.max(0, 100 - (excess / maxAcceptableExcess) * 100);
+                    status = progress >= 80 ? 'good' :
+                             progress >= 50 ? 'fair' : 'poor';
+                  }
+                } else {
+                  // Normal scoring (higher is better)
+                  progress = targetValue > 0 ? Math.min(100, (currentValue / targetValue) * 100) : 0;
+                  status = progress >= 100 ? 'excellent' :
+                           progress >= 80 ? 'good' :
+                           progress >= 50 ? 'fair' : 'poor';
+                }
               }
 
               const isRange = kpi.min_target !== undefined;
@@ -943,25 +987,75 @@ const WeeklyKPIInput: React.FC<WeeklyKPIInputProps> = ({ onWeekChange }) => {
                       className="terminal-input h-8"
                     />
                   </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setNewKPIForm(prev => ({ ...prev, isAverage: !prev.isAverage }))}
-                      className="flex items-center gap-2 text-sm cursor-pointer hover:opacity-80 transition-opacity"
-                    >
-                      <div
-                        className="w-5 h-5 border-2 rounded flex items-center justify-center transition-all"
-                        style={{
-                          borderColor: getCategoryColor(category),
-                          backgroundColor: newKPIForm.isAverage ? getCategoryColor(category) : 'transparent'
-                        }}
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setNewKPIForm(prev => ({ ...prev, isAverage: !prev.isAverage, reverseScoring: false, equalIsBetter: false }))}
+                        className="flex items-center gap-2 text-sm cursor-pointer hover:opacity-80 transition-opacity"
                       >
-                        {newKPIForm.isAverage && (
-                          <span className="text-black font-bold text-xs">✓</span>
+                        <div
+                          className="w-5 h-5 border-2 rounded flex items-center justify-center transition-all"
+                          style={{
+                            borderColor: getCategoryColor(category),
+                            backgroundColor: newKPIForm.isAverage ? getCategoryColor(category) : 'transparent'
+                          }}
+                        >
+                          {newKPIForm.isAverage && (
+                            <span className="text-black font-bold text-xs">✓</span>
+                          )}
+                        </div>
+                        <span className="text-terminal-accent">Average Type (shows avg of days with data)</span>
+                      </button>
+                    </div>
+                    {newKPIForm.isAverage && (
+                      <div className="space-y-2 ml-7">
+                        <div className="text-xs text-terminal-accent/70 mb-1">Scoring Preference:</div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setNewKPIForm(prev => ({ ...prev, reverseScoring: !prev.reverseScoring, equalIsBetter: prev.reverseScoring ? false : prev.equalIsBetter }))}
+                            className="flex items-center gap-2 text-sm cursor-pointer hover:opacity-80 transition-opacity"
+                          >
+                            <div
+                              className="w-4 h-4 border-2 rounded flex items-center justify-center transition-all"
+                              style={{
+                                borderColor: getCategoryColor(category),
+                                backgroundColor: newKPIForm.reverseScoring ? getCategoryColor(category) : 'transparent'
+                              }}
+                            >
+                              {newKPIForm.reverseScoring && (
+                                <span className="text-black font-bold text-xs">✓</span>
+                              )}
+                            </div>
+                            <span className="text-terminal-accent/90">Lower is Better (e.g., screen time)</span>
+                          </button>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setNewKPIForm(prev => ({ ...prev, equalIsBetter: !prev.equalIsBetter, reverseScoring: prev.equalIsBetter ? false : prev.reverseScoring }))}
+                            className="flex items-center gap-2 text-sm cursor-pointer hover:opacity-80 transition-opacity"
+                          >
+                            <div
+                              className="w-4 h-4 border-2 rounded flex items-center justify-center transition-all"
+                              style={{
+                                borderColor: getCategoryColor(category),
+                                backgroundColor: newKPIForm.equalIsBetter ? getCategoryColor(category) : 'transparent'
+                              }}
+                            >
+                              {newKPIForm.equalIsBetter && (
+                                <span className="text-black font-bold text-xs">✓</span>
+                              )}
+                            </div>
+                            <span className="text-terminal-accent/90">Equal is Better (e.g., sleep hours)</span>
+                          </button>
+                        </div>
+                        {!newKPIForm.reverseScoring && !newKPIForm.equalIsBetter && (
+                          <div className="text-xs text-terminal-accent/60 italic">Default: Higher is Better</div>
                         )}
                       </div>
-                      <span className="text-terminal-accent">Average Type (shows avg of days with data)</span>
-                    </button>
+                    )}
                   </div>
                   <div className="flex gap-2 justify-end">
                     <button
@@ -1075,25 +1169,75 @@ const WeeklyKPIInput: React.FC<WeeklyKPIInputProps> = ({ onWeekChange }) => {
                   step="0.1"
                 />
               </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setNewKPIForm(prev => ({ ...prev, isAverage: !prev.isAverage }))}
-                  className="flex items-center gap-2 text-sm cursor-pointer hover:opacity-80 transition-opacity"
-                >
-                  <div
-                    className="w-5 h-5 border-2 rounded flex items-center justify-center transition-all"
-                    style={{
-                      borderColor: newCategoryForm.color,
-                      backgroundColor: newKPIForm.isAverage ? newCategoryForm.color : 'transparent'
-                    }}
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setNewKPIForm(prev => ({ ...prev, isAverage: !prev.isAverage, reverseScoring: false, equalIsBetter: false }))}
+                    className="flex items-center gap-2 text-sm cursor-pointer hover:opacity-80 transition-opacity"
                   >
-                    {newKPIForm.isAverage && (
-                      <span className="text-black font-bold text-xs">✓</span>
+                    <div
+                      className="w-5 h-5 border-2 rounded flex items-center justify-center transition-all"
+                      style={{
+                        borderColor: newCategoryForm.color,
+                        backgroundColor: newKPIForm.isAverage ? newCategoryForm.color : 'transparent'
+                      }}
+                    >
+                      {newKPIForm.isAverage && (
+                        <span className="text-black font-bold text-xs">✓</span>
+                      )}
+                    </div>
+                    <span className="text-terminal-accent">Average Type (shows avg of days with data)</span>
+                  </button>
+                </div>
+                {newKPIForm.isAverage && (
+                  <div className="space-y-2 ml-7">
+                    <div className="text-xs text-terminal-accent/70 mb-1">Scoring Preference:</div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setNewKPIForm(prev => ({ ...prev, reverseScoring: !prev.reverseScoring, equalIsBetter: prev.reverseScoring ? false : prev.equalIsBetter }))}
+                        className="flex items-center gap-2 text-sm cursor-pointer hover:opacity-80 transition-opacity"
+                      >
+                        <div
+                          className="w-4 h-4 border-2 rounded flex items-center justify-center transition-all"
+                          style={{
+                            borderColor: newCategoryForm.color,
+                            backgroundColor: newKPIForm.reverseScoring ? newCategoryForm.color : 'transparent'
+                          }}
+                        >
+                          {newKPIForm.reverseScoring && (
+                            <span className="text-black font-bold text-xs">✓</span>
+                          )}
+                        </div>
+                        <span className="text-terminal-accent/90">Lower is Better (e.g., screen time)</span>
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setNewKPIForm(prev => ({ ...prev, equalIsBetter: !prev.equalIsBetter, reverseScoring: prev.equalIsBetter ? false : prev.reverseScoring }))}
+                        className="flex items-center gap-2 text-sm cursor-pointer hover:opacity-80 transition-opacity"
+                      >
+                        <div
+                          className="w-4 h-4 border-2 rounded flex items-center justify-center transition-all"
+                          style={{
+                            borderColor: newCategoryForm.color,
+                            backgroundColor: newKPIForm.equalIsBetter ? newCategoryForm.color : 'transparent'
+                          }}
+                        >
+                          {newKPIForm.equalIsBetter && (
+                            <span className="text-black font-bold text-xs">✓</span>
+                          )}
+                        </div>
+                        <span className="text-terminal-accent/90">Equal is Better (e.g., sleep hours)</span>
+                      </button>
+                    </div>
+                    {!newKPIForm.reverseScoring && !newKPIForm.equalIsBetter && (
+                      <div className="text-xs text-terminal-accent/60 italic">Default: Higher is Better</div>
                     )}
                   </div>
-                  <span className="text-terminal-accent">Average Type (shows avg of days with data)</span>
-                </button>
+                )}
               </div>
             </div>
 
