@@ -253,7 +253,7 @@ const Visualizer = () => {
                     dataKey={kpi.kpi_id}
                     stroke={kpi.color}
                     strokeWidth={2}
-                    dot={{ fill: kpi.color, strokeWidth: 2, r: 4 }}
+                    dot={{ fill: kpi.color, stroke: '#ffffff', strokeWidth: 2, r: 4 }}
                     name={kpi.name}
                     connectNulls={false}
                   />
@@ -336,7 +336,7 @@ const Visualizer = () => {
                 dataKey="value"
                 stroke={kpi.color}
                 strokeWidth={3}
-                dot={{ fill: kpi.color, strokeWidth: 2, r: 5 }}
+                dot={{ fill: kpi.color, stroke: '#ffffff', strokeWidth: 2, r: 5 }}
                 name="Actual"
                 connectNulls={false}
               />

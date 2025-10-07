@@ -15,7 +15,7 @@ export class UserStorage {
   // User configurations
   async getUserConfig(key: string, defaultValue: any = null) {
     if (!this.userId) {
-      console.warn('No user ID set for getUserConfig, checking localStorage');
+      
       return this.getLocalStorage(key, defaultValue);
     }
 
@@ -25,16 +25,19 @@ export class UserStorage {
         .select('config_value')
         .eq('user_id', this.userId)
         .eq('config_key', key)
-        .single();
+        .maybeSingle();
 
       if (error) {
-        console.log(`Config key ${key} not found in database, checking localStorage:`, error);
         const localValue = this.getLocalStorage(key, defaultValue);
         if (localValue !== defaultValue) {
-          console.log(`Found ${key} in localStorage:`, localValue);
           return localValue;
         }
         return defaultValue;
+      }
+
+      if (!data || typeof data.config_value === 'undefined' || data.config_value === null) {
+        const localValue = this.getLocalStorage(key, defaultValue);
+        return typeof localValue !== 'undefined' ? localValue : defaultValue;
       }
 
       return data.config_value;
@@ -46,7 +49,7 @@ export class UserStorage {
 
   async setUserConfig(key: string, value: any) {
     if (!this.userId) {
-      console.warn('No user ID set for setUserConfig, saving to localStorage instead');
+      
       this.setLocalStorage(key, value);
       return;
     }
@@ -65,7 +68,6 @@ export class UserStorage {
 
       if (error) {
         console.error('Error setting user config, falling back to localStorage:', error);
-        console.warn('💡 If this is the first time running, you may need to create the user_configs table');
         this.setLocalStorage(key, value);
         return;
       }
@@ -78,7 +80,7 @@ export class UserStorage {
   // User KPIs
   async getUserKPIs() {
     if (!this.userId) {
-      console.warn('No user ID set for getUserKPIs');
+      
       return [];
     }
 
@@ -104,7 +106,7 @@ export class UserStorage {
 
   async setUserKPI(kpiData: any) {
     if (!this.userId) {
-      console.warn('No user ID set for setUserKPI');
+      
       return null;
     }
 
@@ -132,7 +134,7 @@ export class UserStorage {
 
   async updateUserKPI(kpiId: string, kpiData: any) {
     if (!this.userId) {
-      console.warn('No user ID set for updateUserKPI');
+      
       return null;
     }
 
@@ -159,7 +161,7 @@ export class UserStorage {
 
   async deleteUserKPI(kpiId: string) {
     if (!this.userId) {
-      console.warn('No user ID set for deleteUserKPI');
+      
       return false;
     }
 
@@ -185,7 +187,7 @@ export class UserStorage {
   // User goals
   async getUserGoals() {
     if (!this.userId) {
-      console.warn('No user ID set for getUserGoals');
+      
       return [];
     }
 
@@ -210,7 +212,7 @@ export class UserStorage {
 
   async setUserGoal(goalData: any) {
     if (!this.userId) {
-      console.warn('No user ID set for setUserGoal');
+      
       return null;
     }
 
@@ -239,7 +241,7 @@ export class UserStorage {
   // Weekly KPIs with user context
   async getUserWeeklyKPIs() {
     if (!this.userId) {
-      console.warn('No user ID set for getUserWeeklyKPIs');
+      
       return { records: [] };
     }
 
@@ -264,7 +266,7 @@ export class UserStorage {
 
   async setUserWeeklyKPIs(weeklyKPIData: any) {
     if (!this.userId) {
-      console.warn('No user ID set for setUserWeeklyKPIs');
+      
       return;
     }
 
@@ -292,7 +294,7 @@ export class UserStorage {
   // Ships and events with user context
   async getUserShips() {
     if (!this.userId) {
-      console.warn('No user ID set for getUserShips');
+      
       return [];
     }
 
@@ -317,7 +319,7 @@ export class UserStorage {
 
   async addUserShip(shipData: any) {
     if (!this.userId) {
-      console.warn('No user ID set for addUserShip');
+      
       return null;
     }
 
@@ -346,7 +348,7 @@ export class UserStorage {
   // Content data with user context
   async getUserContent() {
     if (!this.userId) {
-      console.warn('No user ID set for getUserContent');
+      
       return [];
     }
 
@@ -371,7 +373,7 @@ export class UserStorage {
 
   async addUserContent(contentData: any) {
     if (!this.userId) {
-      console.warn('No user ID set for addUserContent');
+      
       return null;
     }
 
@@ -400,7 +402,7 @@ export class UserStorage {
   // Metrics with user context
   async getUserMetrics() {
     if (!this.userId) {
-      console.warn('No user ID set for getUserMetrics');
+      
       return { metrics: [], dates: [] };
     }
 
@@ -482,7 +484,7 @@ export class UserStorage {
   // User ranking system methods
   async getUserRank() {
     if (!this.userId) {
-      console.warn('No user ID set for getUserRank');
+      
       return null;
     }
 
@@ -494,7 +496,6 @@ export class UserStorage {
         .single();
 
       if (error) {
-        console.log('No user rank found, user may need initialization:', error);
         return null;
       }
 
@@ -507,7 +508,7 @@ export class UserStorage {
 
   async setUserRank(rankData: any) {
     if (!this.userId) {
-      console.warn('No user ID set for setUserRank');
+      
       return null;
     }
 
@@ -538,7 +539,7 @@ export class UserStorage {
 
   async saveRankChange(rankChange: any) {
     if (!this.userId) {
-      console.warn('No user ID set for saveRankChange');
+      
       return null;
     }
 
@@ -566,7 +567,7 @@ export class UserStorage {
 
   async getRankHistory() {
     if (!this.userId) {
-      console.warn('No user ID set for getRankHistory');
+      
       return [];
     }
 
@@ -592,7 +593,7 @@ export class UserStorage {
 
   async getWeeklyAssessments(limit: number = 10) {
     if (!this.userId) {
-      console.warn('No user ID set for getWeeklyAssessments');
+      
       return [];
     }
 
@@ -618,7 +619,7 @@ export class UserStorage {
 
   async saveWeeklyAssessment(assessment: any) {
     if (!this.userId) {
-      console.warn('No user ID set for saveWeeklyAssessment');
+      
       return null;
     }
 
@@ -679,7 +680,6 @@ export class UserStorage {
       localStorage.setItem('github_api_token', api_token);
       localStorage.setItem('github_username', username);
 
-      console.log('✅ GitHub settings saved to both Supabase and localStorage');
       return true;
     } catch (error) {
       console.error('Error saving GitHub settings:', error);
@@ -688,7 +688,6 @@ export class UserStorage {
       try {
         localStorage.setItem('github_api_token', api_token);
         localStorage.setItem('github_username', username);
-        console.log('⚠️ GitHub settings saved to localStorage only (Supabase failed)');
         return true;
       } catch (localError) {
         console.error('Failed to save GitHub settings anywhere:', localError);
@@ -706,7 +705,6 @@ export class UserStorage {
       localStorage.removeItem('github_api_token');
       localStorage.removeItem('github_username');
 
-      console.log('✅ GitHub settings cleared from both Supabase and localStorage');
       return true;
     } catch (error) {
       console.error('Error clearing GitHub settings:', error);
@@ -715,7 +713,6 @@ export class UserStorage {
       try {
         localStorage.removeItem('github_api_token');
         localStorage.removeItem('github_username');
-        console.log('⚠️ GitHub settings cleared from localStorage only (Supabase failed)');
         return true;
       } catch (localError) {
         console.error('Failed to clear GitHub settings:', localError);

@@ -206,8 +206,10 @@ const LineChart: React.FC<LineChartProps> = ({
                   key={`${lineIndex}-${index}`}
                   cx={point.x}
                   cy={point.y}
-                  r={hoveredPoint === point.data ? "0.8" : "0.4"}
+                  r={hoveredPoint === point.data ? "0.9" : "0.5"}
                   fill={line.color}
+                  stroke="#ffffff"
+                  strokeWidth="0.25"
                   className="transition-all duration-200"
                 />
               ))}
@@ -231,8 +233,10 @@ const LineChart: React.FC<LineChartProps> = ({
               key={index}
               cx={point.x}
               cy={point.y}
-              r={hoveredPoint === point.data ? "0.8" : "0.4"}
+              r={hoveredPoint === point.data ? "0.9" : "0.5"}
               fill={color}
+              stroke="#ffffff"
+              strokeWidth="0.25"
               className="transition-all duration-200"
               style={{
                 filter: hoveredPoint === point.data ? 'drop-shadow(0 0 3px rgba(95, 227, 179, 0.8))' : 'none'

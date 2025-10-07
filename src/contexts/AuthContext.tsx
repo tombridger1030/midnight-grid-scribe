@@ -6,6 +6,7 @@ export interface UserProfile {
   id: string;
   username: string;
   display_name: string | null;
+  is_admin: boolean;
   user_preferences: {
     show_content_tab: boolean;
     enabled_modules: string[];
@@ -25,10 +26,15 @@ interface AuthContextType {
   profile: UserProfile | null;
   session: Session | null;
   loading: boolean;
+  isImpersonating: boolean;
+  originalProfile: UserProfile | null;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signUp: (email: string, password: string, username: string, displayName?: string) => Promise<{ error: any }>;
   signOut: () => Promise<{ error: any }>;
   updateProfile: (updates: Partial<UserProfile>) => Promise<{ error: any }>;
+  impersonateUser: (userId: string) => Promise<{ error: any }>;
+  stopImpersonation: () => Promise<{ error: any }>;
+  getAllUsers: () => Promise<{ data: UserProfile[] | null, error: any }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -50,25 +56,41 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isImpersonating, setIsImpersonating] = useState(false);
+  const [originalProfile, setOriginalProfile] = useState<UserProfile | null>(null);
 
   // Load user profile - prioritize localStorage for user changes
   const loadUserProfile = async (userId: string): Promise<UserProfile | null> => {
-    console.log(`🔍 Loading profile for user: ${userId}`);
 
     // PRIORITY 1: Check if we have saved profile data in localStorage (user changes)
     const savedProfile = localStorage.getItem(`profile_${userId}`);
-    console.log('🔑 Checking localStorage with key:', `profile_${userId}`);
-    console.log('📦 Raw localStorage data:', savedProfile);
     
     if (savedProfile) {
       try {
         const parsedProfile = JSON.parse(savedProfile);
-        console.log('✅ Found saved profile in localStorage (using saved changes):');
-        console.log('👤 Username:', parsedProfile.username);
-        console.log('🏷️ Display name:', parsedProfile.display_name);
-        console.log('📅 Updated at:', parsedProfile.updated_at);
-        console.log('🔍 Full profile:', parsedProfile);
-        // Don't check database if we have localStorage data - user changes take priority
+
+        // Backfill is_admin when missing in localStorage profile
+        if (typeof parsedProfile.is_admin === 'undefined') {
+          try {
+            const { data: adminData } = await supabase
+              .from('user_profiles')
+              .select('is_admin')
+              .eq('id', userId)
+              .maybeSingle();
+
+            const isAdmin = (adminData && adminData.is_admin === true) || userId === '0b3c6a14-8d1e-4ca4-b44f-8b89980bc61b';
+            const patchedProfile = { ...parsedProfile, is_admin: !!isAdmin };
+            localStorage.setItem(`profile_${userId}`, JSON.stringify(patchedProfile));
+            return patchedProfile;
+          } catch (_err) {
+            const isAdmin = userId === '0b3c6a14-8d1e-4ca4-b44f-8b89980bc61b';
+            const patchedProfile = { ...parsedProfile, is_admin: isAdmin };
+            localStorage.setItem(`profile_${userId}`, JSON.stringify(patchedProfile));
+            return patchedProfile;
+          }
+        }
+
+        // Don't check database if we have usable localStorage data
         return parsedProfile;
       } catch (error) {
         console.error('❌ Failed to parse saved profile from localStorage:', error);
@@ -78,7 +100,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
 
     // PRIORITY 2: Only try database if no localStorage data exists
-    console.log('📡 No localStorage data found, checking database...');
     try {
       const { data, error } = await supabase
         .from('user_profiles')
@@ -87,19 +108,22 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         .single();
 
       if (data && !error) {
-        console.log('✅ Profile loaded from database:', data);
+        // Ensure is_admin exists (fallback to known admin id)
+        const enriched = {
+          ...data,
+          is_admin: typeof (data as any).is_admin === 'boolean' ? (data as any).is_admin : userId === '0b3c6a14-8d1e-4ca4-b44f-8b89980bc61b'
+        };
         // Save to localStorage for future use, but don't override existing user changes
-        localStorage.setItem(`profile_${userId}`, JSON.stringify(data));
-        return data;
+        localStorage.setItem(`profile_${userId}`, JSON.stringify(enriched));
+        return enriched as UserProfile;
       } else {
-        console.log('⚠️ Database profile not found or failed:', error);
+        
       }
     } catch (error) {
       console.error('❌ Database query failed:', error);
     }
 
     // PRIORITY 3: Create default profile only if neither localStorage nor database have data
-    console.log('⚡ Creating default profile (no data found anywhere)');
 
     // Special handling for specific known users
     let username, displayName;
@@ -118,6 +142,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       id: userId,
       username,
       display_name: displayName,
+      is_admin: userId === '0b3c6a14-8d1e-4ca4-b44f-8b89980bc61b', // tombridger is admin
       user_preferences: {
         show_content_tab: true,
         enabled_modules: ["dashboard", "kpis", "visualizer", "roadmap", "cash", "content"],
@@ -134,19 +159,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     // Save the default profile to localStorage
     localStorage.setItem(`profile_${userId}`, JSON.stringify(profile));
-    console.log('✅ Created and saved default profile:', profile);
     return profile;
   };
 
   // Create user profile manually if trigger didn't work
   const createUserProfile = async (userId: string, email: string, username: string, displayName: string): Promise<UserProfile | null> => {
-    console.log('🛠️ Creating user profile manually:', { userId, email, username, displayName });
 
     try {
       const profileData = {
         id: userId,
         username,
         display_name: displayName,
+        is_admin: userId === '0b3c6a14-8d1e-4ca4-b44f-8b89980bc61b', // tombridger is admin
         user_preferences: {
           show_content_tab: true,
           enabled_modules: ["dashboard", "kpis", "visualizer", "roadmap", "cash", "content"],
@@ -158,8 +182,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           }
         }
       };
-
-      console.log('📝 Inserting profile data:', profileData);
       const { data, error } = await supabase
         .from('user_profiles')
         .insert([profileData])
@@ -171,10 +193,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         return null;
       }
 
-      console.log('✅ User profile created successfully:', data);
-
       // Also create default KPIs
-      console.log('📊 Creating default KPIs...');
       const defaultKpis = [
         { kpi_id: 'strengthSessions', name: 'Strength Sessions', target: 3, min_target: 2, unit: 'sessions', category: 'fitness', color: '#FF073A', sort_order: 1 },
         { kpi_id: 'bjjSessions', name: 'BJJ Sessions', target: 3, min_target: null, unit: 'sessions', category: 'fitness', color: '#53B4FF', sort_order: 2 },
@@ -196,7 +215,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         console.error('❌ Failed to create default KPIs:', kpiError);
         // Don't fail the whole process if KPIs fail
       } else {
-        console.log('✅ Default KPIs created successfully');
       }
 
       return data as UserProfile;
@@ -208,16 +226,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   // Initialize auth state
   useEffect(() => {
-    console.log('🚀 Initializing AuthContext...');
-
     // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
-      console.log('🔍 Initial session check:', session ? {
-        userId: session.user?.id,
-        email: session.user?.email,
-        emailConfirmed: session.user?.email_confirmed_at
-      } : 'No session found');
-
       setSession(session);
       setUser(session?.user ?? null);
 
@@ -225,7 +235,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         // Set user ID immediately for initial session too
         import('@/lib/userStorage').then(({ userStorage }) => {
           userStorage.setUserId(session.user.id);
-          console.log('🔧 Set initial userStorage userId:', session.user.id);
         });
         
         loadUserProfile(session.user.id).then(setProfile);
@@ -238,42 +247,23 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('🔄 Auth state changed:', { event, userId: session?.user?.id, email: session?.user?.email });
 
       setSession(session);
       setUser(session?.user ?? null);
 
       if (session?.user) {
-        console.log('👤 User session found, loading profile...', session.user.id);
-        
         // IMMEDIATELY set user ID in userStorage to prevent race conditions
         const { userStorage } = await import('@/lib/userStorage');
         userStorage.setUserId(session.user.id);
-        console.log('🔧 Set userStorage userId:', session.user.id);
-        
-        console.log('📱 About to call loadUserProfile for:', session.user.id);
         let userProfile = await loadUserProfile(session.user.id);
-        console.log('📱 loadUserProfile returned:', userProfile);
-
-        // Profile should always be created now with localStorage fallback
-        if (!userProfile) {
-          console.log('⚠️ Profile still null after loadUserProfile - this should not happen with localStorage fallback');
-        }
-
-        console.log('📄 Setting profile state:', userProfile ? 'Profile loaded' : 'No profile');
         setProfile(userProfile);
       } else {
-        console.log('👤 No user session, clearing profile');
-        
         // Clear user ID when signing out
         const { userStorage } = await import('@/lib/userStorage');
         userStorage.setUserId(null);
-        console.log('🔧 Cleared userStorage userId');
         
         setProfile(null);
       }
-
-      console.log('⏱️ Setting loading to false');
       setLoading(false);
     });
 
@@ -445,15 +435,99 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     return { error };
   };
 
+  // Get all users (admin only)
+  const getAllUsers = async () => {
+    if (!profile?.is_admin) {
+      return { data: null, error: { message: 'Not authorized: Admin access required' } };
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .order('username');
+
+      return { data, error };
+    } catch (err) {
+      console.error('❌ Error fetching users:', err);
+      return { data: null, error: { message: 'Failed to fetch users' } };
+    }
+  };
+
+  // Impersonate another user (admin only)
+  const impersonateUser = async (targetUserId: string) => {
+    if (!profile?.is_admin) {
+      return { error: { message: 'Not authorized: Admin access required' } };
+    }
+
+    if (isImpersonating) {
+      return { error: { message: 'Already impersonating another user' } };
+    }
+
+    try {
+      console.log('🎭 Starting impersonation of user:', targetUserId);
+      
+      // Load the target user's profile
+      const targetProfile = await loadUserProfile(targetUserId);
+      if (!targetProfile) {
+        return { error: { message: 'Target user profile not found' } };
+      }
+
+      // Store original profile for restoration
+      setOriginalProfile(profile);
+      setIsImpersonating(true);
+      
+      // Switch to target user's profile
+      setProfile(targetProfile);
+
+      console.log('✅ Impersonation started:', {
+        original: profile.username,
+        target: targetProfile.username
+      });
+
+      return { error: null };
+    } catch (err) {
+      console.error('❌ Error during impersonation:', err);
+      return { error: { message: 'Failed to impersonate user' } };
+    }
+  };
+
+  // Stop impersonation and return to original user
+  const stopImpersonation = async () => {
+    if (!isImpersonating || !originalProfile) {
+      return { error: { message: 'Not currently impersonating' } };
+    }
+
+    try {
+      console.log('🔄 Stopping impersonation, returning to:', originalProfile.username);
+      
+      // Restore original profile
+      setProfile(originalProfile);
+      setOriginalProfile(null);
+      setIsImpersonating(false);
+
+      console.log('✅ Impersonation stopped');
+      return { error: null };
+    } catch (err) {
+      console.error('❌ Error stopping impersonation:', err);
+      return { error: { message: 'Failed to stop impersonation' } };
+    }
+  };
+
   const value: AuthContextType = {
     user,
     profile,
     session,
     loading,
+    isImpersonating,
+    originalProfile,
     signIn,
     signUp,
     signOut,
     updateProfile,
+    impersonateUser,
+    stopImpersonation,
+    getAllUsers,
   };
 
   return (

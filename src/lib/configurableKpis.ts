@@ -310,7 +310,6 @@ export class ConfigurableKPIManager {
             await this.saveKPI(template);
           } catch (error) {
             // Skip if already exists (race condition)
-            console.log(`KPI ${template.kpi_id} already exists, skipping`);
           }
         }
       }
@@ -472,7 +471,6 @@ export class ConfigurableKPIManager {
       if (error) {
         console.error('Failed to migrate average KPIs:', error);
       } else {
-        console.log('Successfully migrated Sleep Average KPI to use is_average flag');
       }
     } catch (error) {
       console.error('Error during KPI migration:', error);

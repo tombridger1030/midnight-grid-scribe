@@ -4,6 +4,8 @@ import { cn } from '@/lib/utils';
 import { loadContentItemDetail, updateContentItemWithMetrics, deleteContentItem } from '@/lib/storage';
 import PlatformIcon from './PlatformIcon';
 
+// Platform-specific content editor with proper metrics support
+
 type ContentEditForm = {
   platform: 'youtube' | 'tiktok' | 'instagram';
   format: 'long_form' | 'short';
@@ -15,12 +17,39 @@ type ContentEditForm = {
   primary_hook?: string;
   caption?: string;
   script?: string;
+  
+  // Common metrics (all platforms)
   views?: number;
+  likes?: number;
+  follows?: number;
+  
+  // Instagram specific
   shares?: number;
   saves?: number;
-  follows?: number;
+  comments?: number;
+  engagement_total?: number;
   average_watch_time_seconds?: number;
+  non_follower_percent?: number;
+  skip_rate?: number;
+  
+  // TikTok specific (some overlap with Instagram)
   retention_ratio?: number;
+  
+  // YouTube Short specific
+  swipe_rate?: number;
+  new_viewers_percent?: number;
+  
+  // YouTube Long Form specific
+  total_retention_percent?: number;
+  ctr?: number;
+  retention_10s?: number;
+  retention_30s?: number;
+  returning_viewers_percent?: number;
+  total_watch_time_minutes?: number;
+  subscribers?: number;
+  thumbnails?: string;
+  
+  // Legacy fields (for backward compatibility)
   followers_per_reach?: number;
   non_follower_reach_ratio?: number;
 };
@@ -47,9 +76,6 @@ const ContentEditor: React.FC<ContentEditorProps> = ({
   const { register, handleSubmit, watch, setValue, formState: { errors, isDirty } } = useForm<ContentEditForm>();
 
   const selectedPlatform = watch('platform');
-  const lengthSec = Number(watch('video_length_seconds') || 0);
-  const awtSec = Number(watch('average_watch_time_seconds') || 0);
-  const retention = lengthSec > 0 ? Math.min(1, Math.max(0, awtSec / lengthSec)) : undefined;
 
   // Load existing content data
   useEffect(() => {
@@ -58,10 +84,18 @@ const ContentEditor: React.FC<ContentEditorProps> = ({
       setError(null);
 
       try {
+        console.log('=== Loading content data ===');
+        console.log('Content ID:', contentId);
+        
         const data = await loadContentItemDetail(contentId);
+        console.log('Loaded content data:', data);
+        
         if (!data) {
           throw new Error('Content not found');
         }
+
+        console.log('Content item:', data.item);
+        console.log('Content metrics:', data.metrics);
 
         // Populate form with existing data
         setValue('platform', data.item.platform as any);
@@ -76,12 +110,50 @@ const ContentEditor: React.FC<ContentEditorProps> = ({
         setValue('script', data.item.script || '');
 
         if (data.metrics) {
+          // Common metrics (all platforms)
           setValue('views', data.metrics.views || undefined);
+          setValue('likes', (data.metrics as any).likes || undefined);
+          setValue('follows', data.metrics.follows || undefined);
+          
+          // Instagram specific
           setValue('shares', data.metrics.shares || undefined);
           setValue('saves', data.metrics.saves || undefined);
-          setValue('follows', data.metrics.follows || undefined);
+          setValue('comments', (data.metrics as any).comments || undefined);
+          setValue('engagement_total', (data.metrics as any).engagement_total || undefined);
           setValue('average_watch_time_seconds', data.metrics.average_watch_time_seconds || undefined);
+          setValue('non_follower_percent', (data.metrics as any).non_follower_percent || undefined);
+          setValue('skip_rate', (data.metrics as any).skip_rate || undefined);
+          
+          // TikTok specific
           setValue('retention_ratio', data.metrics.retention_ratio || undefined);
+          
+          // YouTube Short specific
+          setValue('swipe_rate', (data.metrics as any).swipe_rate || undefined);
+          setValue('new_viewers_percent', (data.metrics as any).new_viewers_percent || undefined);
+          
+          // YouTube Long Form specific
+          console.log('Setting YouTube Long Form metrics:');
+          console.log('total_retention_percent:', (data.metrics as any).total_retention_percent);
+          console.log('ctr:', (data.metrics as any).ctr);
+          console.log('retention_10s:', (data.metrics as any).retention_10s);
+          console.log('retention_30s:', (data.metrics as any).retention_30s);
+          console.log('returning_viewers_percent:', (data.metrics as any).returning_viewers_percent);
+          console.log('total_watch_time_minutes:', (data.metrics as any).total_watch_time_minutes);
+          console.log('thumbnails:', (data.metrics as any).thumbnails);
+          console.log('subscribers:', (data.metrics as any).subscribers);
+
+          setValue('total_retention_percent', (data.metrics as any).total_retention_percent || undefined);
+          setValue('ctr', (data.metrics as any).ctr || undefined);
+          setValue('retention_10s', (data.metrics as any).retention_10s || undefined);
+          setValue('retention_30s', (data.metrics as any).retention_30s || undefined);
+          setValue('returning_viewers_percent', (data.metrics as any).returning_viewers_percent || undefined);
+          setValue('total_watch_time_minutes', (data.metrics as any).total_watch_time_minutes || undefined);
+          setValue('thumbnails', (data.metrics as any).thumbnails || undefined);
+          
+          // YouTube subscribers field (for both short and long form)
+          setValue('subscribers', (data.metrics as any).subscribers || undefined);
+          
+          // Legacy fields
           setValue('followers_per_reach', data.metrics.followers_per_reach || undefined);
           setValue('non_follower_reach_ratio', data.metrics.non_follower_reach_ratio || undefined);
         }
@@ -107,10 +179,12 @@ const ContentEditor: React.FC<ContentEditorProps> = ({
     setSaving(true);
     setError(null);
 
-    try {
-      await updateContentItemWithMetrics(
-        contentId,
-        {
+    console.log('=== ContentEditor onSubmit ===');
+    console.log('Platform:', data.platform);
+    console.log('Format:', data.format);
+    console.log('Raw form data:', data);
+
+    const itemData = {
           platform: data.platform,
           format: data.format,
           account_handle: data.account_handle,
@@ -121,19 +195,60 @@ const ContentEditor: React.FC<ContentEditorProps> = ({
           published_at: data.published_at,
           video_length_seconds: data.video_length_seconds,
           url: data.url
-        },
-        {
+    };
+
+    const metricsData = {
+      // Common metrics (all platforms)
           views: data.views,
+      likes: data.likes,
+      follows: data.platform === 'youtube' ? data.subscribers || data.follows : data.follows,
+      
+      // Instagram specific
           shares: data.shares,
           saves: data.saves,
-          follows: data.follows,
+      comments: data.comments,
+      engagement_total: data.engagement_total,
           average_watch_time_seconds: data.average_watch_time_seconds,
-          retention_ratio: data.retention_ratio || retention,
+      non_follower_percent: data.non_follower_percent,
+      skip_rate: data.skip_rate,
+      
+      // TikTok specific
+      retention_ratio: data.retention_ratio,
+      
+      // YouTube Short specific
+      swipe_rate: data.swipe_rate,
+      new_viewers_percent: data.new_viewers_percent,
+      
+      // YouTube Long Form specific
+      total_retention_percent: data.total_retention_percent,
+      ctr: data.ctr,
+      retention_10s: data.retention_10s,
+      retention_30s: data.retention_30s,
+      returning_viewers_percent: data.returning_viewers_percent,
+      total_watch_time_minutes: data.total_watch_time_minutes,
+      subscribers: data.subscribers,
+      thumbnails: data.thumbnails,
+      
+      // Legacy fields
           followers_per_reach: data.followers_per_reach,
           non_follower_reach_ratio: data.non_follower_reach_ratio
-        }
-      );
+    };
 
+    console.log('Item data to update:', itemData);
+    console.log('Metrics data to update:', metricsData);
+
+    // Filter out undefined values from metrics
+    const filteredMetrics = Object.fromEntries(
+      Object.entries(metricsData).filter(([key, value]) => value !== undefined && value !== null && value !== '')
+    );
+
+    console.log('Filtered metrics (removing undefined/null/empty):', filteredMetrics);
+
+    try {
+      console.log('Calling updateContentItemWithMetrics...');
+      await updateContentItemWithMetrics(contentId, itemData, filteredMetrics);
+
+      console.log('Update completed successfully!');
       onSave?.();
     } catch (error) {
       console.error('Failed to update content:', error);
@@ -370,103 +485,436 @@ const ContentEditor: React.FC<ContentEditorProps> = ({
               </div>
             </div>
 
-            {/* Metrics */}
+            {/* Platform-Specific Metrics */}
             <div className="space-y-4">
               <h3 className="text-sm font-medium text-white">Performance Metrics</h3>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              
+              {/* Instagram Metrics */}
+              {selectedPlatform === 'instagram' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-white mb-1">Views</label>
+                    <label className="block text-sm font-medium text-white mb-2">Views</label>
                   <input
+                      {...register('views', { valueAsNumber: true })}
                     type="number"
                     min="0"
-                    className="w-full bg-[#0F0F0F] border border-[#333] p-3 rounded-sm text-white placeholder-[#666]"
-                    placeholder="1000"
-                    {...register('views', { valueAsNumber: true })}
+                      className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#666] focus:border-terminal-accent focus:outline-none"
+                      placeholder="0"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-white mb-1">Follows</label>
+                    <label className="block text-sm font-medium text-white mb-2">Likes</label>
                   <input
+                      {...register('likes', { valueAsNumber: true })}
                     type="number"
                     min="0"
-                    className="w-full bg-[#0F0F0F] border border-[#333] p-3 rounded-sm text-white placeholder-[#666]"
-                    placeholder="50"
+                      className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#666] focus:border-terminal-accent focus:outline-none"
+                      placeholder="0"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-white mb-2">New Followers</label>
+                    <input
                     {...register('follows', { valueAsNumber: true })}
+                      type="number"
+                      min="0"
+                      className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#666] focus:border-terminal-accent focus:outline-none"
+                      placeholder="0"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-white mb-1">Shares</label>
+                    <label className="block text-sm font-medium text-white mb-2">Shares</label>
                   <input
+                      {...register('shares', { valueAsNumber: true })}
                     type="number"
                     min="0"
-                    className="w-full bg-[#0F0F0F] border border-[#333] p-3 rounded-sm text-white placeholder-[#666]"
-                    placeholder="25"
-                    {...register('shares', { valueAsNumber: true })}
+                      className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#666] focus:border-terminal-accent focus:outline-none"
+                      placeholder="0"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-white mb-1">Saves</label>
+                    <label className="block text-sm font-medium text-white mb-2">Comments</label>
                   <input
+                      {...register('comments', { valueAsNumber: true })}
                     type="number"
                     min="0"
-                    className="w-full bg-[#0F0F0F] border border-[#333] p-3 rounded-sm text-white placeholder-[#666]"
-                    placeholder="75"
+                      className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#666] focus:border-terminal-accent focus:outline-none"
+                      placeholder="0"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-white mb-2">Saves</label>
+                    <input
                     {...register('saves', { valueAsNumber: true })}
+                      type="number"
+                      min="0"
+                      className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#666] focus:border-terminal-accent focus:outline-none"
+                      placeholder="0"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-white mb-1">Avg Watch Time (s)</label>
+                    <label className="block text-sm font-medium text-white mb-2">Total Engagement</label>
                   <input
+                      {...register('engagement_total', { valueAsNumber: true })}
                     type="number"
                     min="0"
-                    className="w-full bg-[#0F0F0F] border border-[#333] p-3 rounded-sm text-white placeholder-[#666]"
-                    placeholder="30"
+                      className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#666] focus:border-terminal-accent focus:outline-none"
+                      placeholder="shares + comments + saves"
+                    />
+                    <div className="text-xs text-[#8A8D93] mt-1">Or enter the total if you don't have individual counts</div>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-white mb-2">Avg Watch Time (seconds)</label>
+                    <input
                     {...register('average_watch_time_seconds', { valueAsNumber: true })}
+                      type="number"
+                      min="0"
+                      step="0.1"
+                      className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#666] focus:border-terminal-accent focus:outline-none"
+                      placeholder="0.0"
                   />
                 </div>
 
-                <div className="flex items-end">
-                  <div className="w-full">
-                    <label className="block text-sm font-medium text-white mb-1">Retention Rate</label>
-                    <div className="bg-[#0F0F0F] border border-[#333] p-3 rounded-sm text-terminal-accent">
-                      {retention !== undefined ? `${Math.round(retention * 100)}%` : '—'}
+                  <div>
+                    <label className="block text-sm font-medium text-white mb-2">Non-Follower %</label>
+                    <input
+                      {...register('non_follower_percent', { valueAsNumber: true })}
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.1"
+                      className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#666] focus:border-terminal-accent focus:outline-none"
+                      placeholder="0.0"
+                    />
                     </div>
-                    <div className="text-xs text-[#8A8D93] mt-1">Auto-calculated</div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-white mb-2">Skip Rate %</label>
+                    <input
+                      {...register('skip_rate', { valueAsNumber: true })}
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.1"
+                      className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#666] focus:border-terminal-accent focus:outline-none"
+                      placeholder="0.0"
+                    />
                   </div>
                 </div>
+              )}
 
-                <div>
-                  <label className="block text-sm font-medium text-white mb-1">Followers/Reach</label>
-                  <input
-                    type="number"
-                    step="0.0001"
-                    min="0"
-                    max="1"
-                    className="w-full bg-[#0F0F0F] border border-[#333] p-3 rounded-sm text-white placeholder-[#666]"
-                    placeholder="0.05"
-                    {...register('followers_per_reach', { valueAsNumber: true })}
-                  />
-                  <div className="text-xs text-[#8A8D93] mt-1">Decimal (0.0-1.0)</div>
+              {/* TikTok Metrics */}
+              {selectedPlatform === 'tiktok' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-white mb-2">Views</label>
+                    <input
+                      {...register('views', { valueAsNumber: true })}
+                      type="number"
+                      min="0"
+                      className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#666] focus:border-terminal-accent focus:outline-none"
+                      placeholder="0"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-white mb-2">Likes</label>
+                    <input
+                      {...register('likes', { valueAsNumber: true })}
+                      type="number"
+                      min="0"
+                      className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#666] focus:border-terminal-accent focus:outline-none"
+                      placeholder="0"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-white mb-2">New Followers</label>
+                    <input
+                      {...register('follows', { valueAsNumber: true })}
+                      type="number"
+                      min="0"
+                      className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#666] focus:border-terminal-accent focus:outline-none"
+                      placeholder="0"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-white mb-2">Total Engagement</label>
+                    <input
+                      {...register('engagement_total', { valueAsNumber: true })}
+                      type="number"
+                      min="0"
+                      className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#666] focus:border-terminal-accent focus:outline-none"
+                      placeholder="likes + shares + comments"
+                    />
+                    <div className="text-xs text-[#8A8D93] mt-1">Total interactions on the video</div>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-white mb-2">Avg Watch Time (seconds)</label>
+                    <input
+                      {...register('average_watch_time_seconds', { valueAsNumber: true })}
+                      type="number"
+                      min="0"
+                      step="0.1"
+                      className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#666] focus:border-terminal-accent focus:outline-none"
+                      placeholder="0.0"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-white mb-2">Retention %</label>
+                    <input
+                      {...register('retention_ratio', { valueAsNumber: true })}
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.1"
+                      className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#666] focus:border-terminal-accent focus:outline-none"
+                      placeholder="0.0"
+                    />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-white mb-1">Non-Follower Reach</label>
+                    <label className="block text-sm font-medium text-white mb-2">Non-Follower %</label>
                   <input
+                      {...register('non_follower_percent', { valueAsNumber: true })}
                     type="number"
-                    step="0.0001"
                     min="0"
-                    max="1"
-                    className="w-full bg-[#0F0F0F] border border-[#333] p-3 rounded-sm text-white placeholder-[#666]"
-                    placeholder="0.8"
-                    {...register('non_follower_reach_ratio', { valueAsNumber: true })}
-                  />
-                  <div className="text-xs text-[#8A8D93] mt-1">Decimal (0.0-1.0)</div>
+                      max="100"
+                      step="0.1"
+                      className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#666] focus:border-terminal-accent focus:outline-none"
+                      placeholder="0.0"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* YouTube Short Metrics */}
+              {selectedPlatform === 'youtube' && watch('format') === 'short' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-white mb-2">Views</label>
+                    <input
+                      {...register('views', { valueAsNumber: true })}
+                      type="number"
+                      min="0"
+                      className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#666] focus:border-terminal-accent focus:outline-none"
+                      placeholder="0"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-white mb-2">Likes</label>
+                    <input
+                      {...register('likes', { valueAsNumber: true })}
+                      type="number"
+                      min="0"
+                      className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#666] focus:border-terminal-accent focus:outline-none"
+                      placeholder="0"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-white mb-2">Retention %</label>
+                    <input
+                      {...register('retention_ratio', { valueAsNumber: true })}
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.1"
+                      className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#666] focus:border-terminal-accent focus:outline-none"
+                      placeholder="0.0"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-white mb-2">Swipe Rate %</label>
+                    <input
+                      {...register('swipe_rate', { valueAsNumber: true })}
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.1"
+                      className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#666] focus:border-terminal-accent focus:outline-none"
+                      placeholder="0.0"
+                    />
+                </div>
+
+                <div>
+                    <label className="block text-sm font-medium text-white mb-2">New Viewers %</label>
+                    <input
+                      {...register('new_viewers_percent', { valueAsNumber: true })}
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.1"
+                      className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#666] focus:border-terminal-accent focus:outline-none"
+                      placeholder="0.0"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-white mb-2">New Subscribers</label>
+                    <input
+                      {...register('subscribers', { valueAsNumber: true })}
+                      type="number"
+                      min="0"
+                      className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#666] focus:border-terminal-accent focus:outline-none"
+                      placeholder="0"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* YouTube Long Form Metrics */}
+              {selectedPlatform === 'youtube' && watch('format') === 'long_form' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-white mb-2">Views</label>
+                    <input
+                      {...register('views', { valueAsNumber: true })}
+                      type="number"
+                      min="0"
+                      className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#666] focus:border-terminal-accent focus:outline-none"
+                      placeholder="0"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-white mb-2">Likes</label>
+                    <input
+                      {...register('likes', { valueAsNumber: true })}
+                      type="number"
+                      min="0"
+                      className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#666] focus:border-terminal-accent focus:outline-none"
+                      placeholder="0"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-white mb-2">Total Retention %</label>
+                    <input
+                      {...register('total_retention_percent', { valueAsNumber: true })}
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.1"
+                      className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#666] focus:border-terminal-accent focus:outline-none"
+                      placeholder="0.0"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-white mb-2">CTR % (Initial)</label>
+                    <input
+                      {...register('ctr', { valueAsNumber: true })}
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#666] focus:border-terminal-accent focus:outline-none"
+                      placeholder="0.00"
+                    />
+                    <div className="text-xs text-[#8A8D93] mt-1">Will be tracked over time (7-day, 30-day)</div>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-white mb-2">Retention @ 10s %</label>
+                    <input
+                      {...register('retention_10s', { valueAsNumber: true })}
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.1"
+                      className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#666] focus:border-terminal-accent focus:outline-none"
+                      placeholder="0.0"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-white mb-2">Retention @ 30s % (Initial)</label>
+                    <input
+                      {...register('retention_30s', { valueAsNumber: true })}
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.1"
+                      className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#666] focus:border-terminal-accent focus:outline-none"
+                      placeholder="0.0"
+                    />
+                    <div className="text-xs text-[#8A8D93] mt-1">Will be tracked over time (7-day, 30-day)</div>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-white mb-2">New Viewers %</label>
+                    <input
+                      {...register('new_viewers_percent', { valueAsNumber: true })}
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.1"
+                      className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#666] focus:border-terminal-accent focus:outline-none"
+                      placeholder="0.0"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-white mb-2">Returning Viewers %</label>
+                    <input
+                      {...register('returning_viewers_percent', { valueAsNumber: true })}
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.1"
+                      className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#666] focus:border-terminal-accent focus:outline-none"
+                      placeholder="0.0"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-white mb-2">Total Watch Time (minutes)</label>
+                    <input
+                      {...register('total_watch_time_minutes', { valueAsNumber: true })}
+                      type="number"
+                      min="0"
+                      step="0.1"
+                      className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#666] focus:border-terminal-accent focus:outline-none"
+                      placeholder="0.0"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-white mb-2">New Subscribers</label>
+                  <input
+                      {...register('subscribers', { valueAsNumber: true })}
+                    type="number"
+                    min="0"
+                      className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#666] focus:border-terminal-accent focus:outline-none"
+                      placeholder="0"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-white mb-2">Thumbnail Variants</label>
+                    <input
+                      {...register('thumbnails')}
+                      type="text"
+                      className="w-full bg-[#0F0F0F] border border-[#333] rounded-sm p-3 text-white placeholder-[#666] focus:border-terminal-accent focus:outline-none"
+                      placeholder="e.g. A, B, C or thumbnail descriptions"
+                    />
+                    <div className="text-xs text-[#8A8D93] mt-1">Track which thumbnails you tested</div>
                 </div>
               </div>
+              )}
             </div>
           </div>
 

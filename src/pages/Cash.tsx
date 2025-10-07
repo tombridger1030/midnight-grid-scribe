@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import TypewriterText from '@/components/TypewriterText';
 import { Progress } from '@/components/ui/progress';
-import { DollarSign, LineChart, CreditCard, Flame, CalendarClock } from 'lucide-react';
+import { DollarSign, LineChart, CreditCard, Flame, CalendarClock, Eye, EyeOff } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, LineChart as ReLineChart, XAxis, YAxis, Tooltip, Line, CartesianGrid } from 'recharts';
 import { loadCashConsoleData, saveCashConsoleData, defaultCashConsoleData, CashConsoleData, CashHolding, updateNetWorthFromInvestments } from '@/lib/storage';
 import { fetchQuoteUSD, fetchQuoteAndPrevCloseUSD, fetchUsdToCad } from '@/lib/utils';
@@ -12,6 +12,7 @@ const Cash: React.FC = () => {
   const [data, setData] = useState<CashConsoleData>(defaultCashConsoleData());
   const [investmentsView, setInvestmentsView] = useState<'add' | 'pie' | 'line'>('add');
   const [preferences, setPreferences] = useState<UserPreferences | null>(null);
+  const [hideBalances, setHideBalances] = useState<boolean>(false);
 
   useEffect(() => {
     const loadData = async () => {
@@ -147,11 +148,36 @@ const Cash: React.FC = () => {
     await saveCashConsoleData(next);
   };
 
+  // Utility function to format currency values based on hideBalances state
+  const formatCurrency = (value: number, showPercentage?: boolean, percentageBase?: number): string => {
+    if (hideBalances) {
+      if (showPercentage && percentageBase && percentageBase > 0) {
+        const percentage = (value / percentageBase) * 100;
+        return `${percentage.toFixed(1)}%`;
+      }
+      return '•••••';
+    }
+    const currency = baseCurrency === 'CAD' ? 'C$' : '$';
+    return `${currency}${value.toLocaleString()}`;
+  };
+
   return (
     <div className="flex flex-col h-full">
       <div className="mb-4">
-        <TypewriterText text="Cash Console" className="text-xl mb-2" />
-        <p className="text-terminal-accent/70 text-sm">Batcomputer sub-panel meets runway dashboard.</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <TypewriterText text="Cash Console" className="text-xl mb-2" />
+            <p className="text-terminal-accent/70 text-sm">Batcomputer sub-panel meets runway dashboard.</p>
+          </div>
+          <button
+            onClick={() => setHideBalances(!hideBalances)}
+            className="terminal-button px-3 py-2 flex items-center gap-2"
+            title={hideBalances ? 'Show balances' : 'Hide balances'}
+          >
+            {hideBalances ? <Eye size={16} /> : <EyeOff size={16} />}
+            {hideBalances ? 'Show' : 'Hide'} Balance
+          </button>
+        </div>
       </div>
 
       {/* Runway Management */}
@@ -166,7 +192,7 @@ const Cash: React.FC = () => {
             <LineChart size={16} className="text-[#5FE3B3]" />
             <h3 className="text-terminal-accent">Investments</h3>
           </div>
-          <div className="text-2xl font-bold text-[#5FE3B3] mb-1">{baseCurrency === 'CAD' ? `C$${totalInvestmentsCad.toLocaleString()}` : `$${totalInvestmentsUsd.toLocaleString()}`}</div>
+          <div className="text-2xl font-bold text-[#5FE3B3] mb-1">{formatCurrency(baseCurrency === 'CAD' ? totalInvestmentsCad : totalInvestmentsUsd)}</div>
           <div className="text-xs text-terminal-accent/70 mb-2">Weekly Growth: {growthPct.toFixed(2)}%</div>
           {/* Investments sub-view switcher */}
           <div className="flex items-center gap-2 mb-2 text-xs">
@@ -204,7 +230,10 @@ const Cash: React.FC = () => {
               <ResponsiveContainer width="100%" height={200}>
                 <PieChart>
                   <Pie
-                    data={data.investments.holdings.map((h) => {
+                    data={hideBalances ? data.investments.holdings.map((h, idx) => {
+                      const label = h.type === 'equity' ? h.ticker : 'CASH';
+                      return { name: label, value: 1 }; // Equal segments when hidden
+                    }) : data.investments.holdings.map((h) => {
                       const label = h.type === 'equity' ? h.ticker : 'CASH';
                       const valUsd = h.type === 'equity' ? (h.currentValueUsd || 0) : (h.amountUsd || 0);
                       const val = baseCurrency === 'CAD' ? valUsd * usdToCad : valUsd;
@@ -219,7 +248,7 @@ const Cash: React.FC = () => {
                       <Cell key={idx} fill={["#5FE3B3","#53B4FF","#FFD700","#FF6B6B","#9D4EDD"][idx % 5]} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(v: any) => `${baseCurrency === 'CAD' ? 'C$' : '$'}${Number(v).toLocaleString()}`} />
+                  <Tooltip formatter={(v: any) => hideBalances ? '•••••' : `${baseCurrency === 'CAD' ? 'C$' : '$'}${Number(v).toLocaleString()}`} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
@@ -231,6 +260,12 @@ const Cash: React.FC = () => {
                 <ReLineChart data={(() => {
                   const hist = data.investments.history || [];
                   const last = hist.slice(-7);
+                  if (hideBalances) {
+                    return last.map((d, idx) => ({
+                      date: d.date.slice(5),
+                      value: 100 + idx * 5 // Fake growth curve when hidden
+                    }));
+                  }
                   return last.map(d => ({
                     date: d.date.slice(5),
                     value: baseCurrency === 'CAD' ? d.totalUsd * usdToCad : d.totalUsd
@@ -238,8 +273,8 @@ const Cash: React.FC = () => {
                 })()}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#333" />
                   <XAxis dataKey="date" stroke="#8A8D93" />
-                  <YAxis stroke="#8A8D93" tickFormatter={(v) => `${baseCurrency === 'CAD' ? 'C$' : '$'}${Math.round((v as number)/1000)}k`} />
-                  <Tooltip formatter={(v: any) => `${baseCurrency === 'CAD' ? 'C$' : '$'}${Number(v).toLocaleString()}`} />
+                  <YAxis stroke="#8A8D93" tickFormatter={(v) => hideBalances ? '•••' : `${baseCurrency === 'CAD' ? 'C$' : '$'}${Math.round((v as number)/1000)}k`} />
+                  <Tooltip formatter={(v: any) => hideBalances ? '•••••' : `${baseCurrency === 'CAD' ? 'C$' : '$'}${Number(v).toLocaleString()}`} />
                   <Line type="monotone" dataKey="value" stroke="#5FE3B3" dot={false} strokeWidth={2} />
                 </ReLineChart>
               </ResponsiveContainer>
@@ -261,7 +296,7 @@ const Cash: React.FC = () => {
                     <>
                       <span className="text-terminal-accent">{h.ticker} × {h.quantity}</span>
                       <span>
-                        {baseCurrency === 'CAD' ? 'C$' : '$'}{Number(value || 0).toLocaleString()} 
+                        {formatCurrency(value, true, totalInvestmentsCad)} 
                         <span className={pct >= 0 ? 'text-[#5FE3B3]' : 'text-[#FF6B6B]'}>
                           ({pct >= 0 ? '+' : ''}{pct.toFixed(2)}%)
                         </span>
@@ -274,7 +309,7 @@ const Cash: React.FC = () => {
                   return (
                     <>
                       <span className="text-terminal-accent">Cash ({h.currency})</span>
-                      <span>{baseCurrency === 'CAD' ? 'C$' : '$'}{Number(value || 0).toLocaleString()}</span>
+                      <span>{formatCurrency(value, true, totalInvestmentsCad)}</span>
                     </>
                   );
                 }
@@ -384,7 +419,7 @@ const Cash: React.FC = () => {
                   {e.date && <span className="opacity-50">• {e.date}</span>}
                 </div>
                 <div>
-                  {baseCurrency === 'CAD' ? 'C$' : '$'}{Number((baseCurrency === 'CAD' ? e.amountUsd * usdToCad : e.amountUsd) || 0).toLocaleString()}
+                  {formatCurrency(baseCurrency === 'CAD' ? e.amountUsd * usdToCad : e.amountUsd)}
                 </div>
                 <button
                   className="px-2 py-0.5 text-[10px] border border-terminal-accent/30 hover:border-terminal-accent/60"
@@ -427,13 +462,13 @@ const Cash: React.FC = () => {
           />
           <div className="flex items-center justify-between mb-2 mt-2">
             <span>Monthly Burn</span>
-            <span className="text-xl font-bold text-[#FFD700]">{baseCurrency === 'CAD' ? `C$${(burnRate*usdToCad).toLocaleString()}` : `$${burnRate.toLocaleString()}`}</span>
+            <span className="text-xl font-bold text-[#FFD700]">{formatCurrency(baseCurrency === 'CAD' ? burnRate*usdToCad : burnRate)}</span>
           </div>
           <div className="border border-terminal-accent/20 p-2 text-xs">
             {(data.cortal.items || []).map((i, idx) => (
               <div key={i.id} className="flex items-center justify-between py-1 border-b border-terminal-accent/10 last:border-b-0">
                 <span className="text-terminal-accent">{i.category} • {i.date}</span>
-                <span>{baseCurrency === 'CAD' ? 'C$' : '$'}{Number((baseCurrency==='CAD'? i.amountUsd*usdToCad : i.amountUsd) || 0).toLocaleString()}</span>
+                <span>{formatCurrency(baseCurrency==='CAD'? i.amountUsd*usdToCad : i.amountUsd)}</span>
               </div>
             ))}
           </div>
@@ -449,7 +484,7 @@ const Cash: React.FC = () => {
             </div>
           <div className="flex items-center justify-between">
             <div className="text-terminal-accent">Cash Reserves</div>
-            <div>${(data.cortal.cashReservesUsd || 0).toLocaleString()}</div>
+            <div>{formatCurrency(data.cortal.cashReservesUsd || 0)}</div>
           </div>
           <div className="flex items-center justify-between mt-1">
             <div className="text-terminal-accent">Runway</div>

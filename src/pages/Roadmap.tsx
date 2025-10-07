@@ -6,8 +6,8 @@ import {
   Goal,
   Month,
   GoalsData,
-  loadGoalsData,
-  saveGoalsData,
+  loadGoalsFromSupabase,
+  saveGoalsToSupabase,
   updateGoalMonthly,
   getCurrentMonth,
   monthNumberToName,
@@ -43,8 +43,8 @@ const Roadmap = () => {
 
   // Load goals data and weekly KPI data on mount
   useEffect(() => {
-    const loadData = () => {
-      const data = loadGoalsData();
+    const loadData = async () => {
+      const data = await loadGoalsFromSupabase();
       setGoalsData(data);
       console.log('Roadmap loaded goals data:', data.goals.length, 'goals found');
       console.log('Goals details:', data.goals.map(g => ({ id: g.id, name: g.name, currentTotal: g.currentTotal, monthly: g.monthly })));
@@ -129,36 +129,45 @@ const Roadmap = () => {
 
   // Auto-update goals with calculated monthly values when weekly KPI data changes
   useEffect(() => {
-    if (weeklyKPIData.records.length > 0) {
-      const kpiTotals = calculateCurrentMonthTotals();
+    const updateGoalsFromKPI = async () => {
+      if (weeklyKPIData.records.length > 0) {
+        const kpiTotals = calculateCurrentMonthTotals();
 
-      setGoalsData(prevData => {
-        const updatedGoals = prevData.goals.map(goal => {
-          let updatedGoal = { ...goal };
+        const updatedData = await new Promise<GoalsData>(resolve => {
+          setGoalsData(prevData => {
+            const updatedGoals = prevData.goals.map(goal => {
+              let updatedGoal = { ...goal };
 
-          // Update goals that have connected KPIs
-          if (goal.connectedKpi && goal.connectedKpi in kpiTotals) {
-            updatedGoal = {
-              ...goal,
-              monthly: {
-                ...goal.monthly,
-                [currentMonth]: kpiTotals[goal.connectedKpi]
+              // Update goals that have connected KPIs
+              if (goal.connectedKpi && goal.connectedKpi in kpiTotals) {
+                updatedGoal = {
+                  ...goal,
+                  monthly: {
+                    ...goal.monthly,
+                    [currentMonth]: kpiTotals[goal.connectedKpi]
+                  }
+                };
+                // Recalculate derived values
+                const monthlyValues = Object.values(updatedGoal.monthly).filter(val => val !== undefined && val !== null);
+                updatedGoal.currentTotal = monthlyValues.reduce((sum, val) => sum + (val || 0), 0);
+                updatedGoal.progressPct = updatedGoal.yearlyTarget > 0 ? Math.min(1, updatedGoal.currentTotal / updatedGoal.yearlyTarget) : 0;
               }
-            };
-            // Recalculate derived values
-            const monthlyValues = Object.values(updatedGoal.monthly).filter(val => val !== undefined && val !== null);
-            updatedGoal.currentTotal = monthlyValues.reduce((sum, val) => sum + (val || 0), 0);
-            updatedGoal.progressPct = updatedGoal.yearlyTarget > 0 ? Math.min(1, updatedGoal.currentTotal / updatedGoal.yearlyTarget) : 0;
-          }
 
-          return updatedGoal;
+              return updatedGoal;
+            });
+
+            const newData = { goals: updatedGoals };
+            resolve(newData);
+            return newData;
+          });
         });
 
-        const newData = { goals: updatedGoals };
-        saveGoalsData(newData); // Save the updated data
-        return newData;
-      });
-    }
+        // Save the updated data to Supabase
+        await saveGoalsToSupabase(updatedData);
+      }
+    };
+
+    updateGoalsFromKPI();
   }, [weeklyKPIData, currentMonth, calculateCurrentMonthTotals]);
 
   // Update monthly value for a goal
@@ -172,7 +181,7 @@ const Roadmap = () => {
   };
 
   // Add a new goal
-  const handleAddGoal = () => {
+  const handleAddGoal = async () => {
     console.log('Creating goal with data:', newGoal);
     
     if (!newGoal.name || !newGoal.unit || !newGoal.yearlyTarget || newGoal.yearlyTarget <= 0) {
@@ -204,7 +213,7 @@ const Roadmap = () => {
     console.log('Updated goals data:', updatedData);
     
     setGoalsData(updatedData);
-    saveGoalsData(updatedData);
+    await saveGoalsToSupabase(updatedData);
     setShowNewGoalForm(false);
     
     console.log('Goal added successfully, form closed');
@@ -220,18 +229,18 @@ const Roadmap = () => {
   };
 
   // Delete a goal
-  const handleDeleteGoal = (goalId: string) => {
+  const handleDeleteGoal = async (goalId: string) => {
     if (confirm('Are you sure you want to delete this goal? This action cannot be undone.')) {
       const updatedData = {
         goals: goalsData.goals.filter(goal => goal.id !== goalId)
       };
       setGoalsData(updatedData);
-      saveGoalsData(updatedData);
+      await saveGoalsToSupabase(updatedData);
     }
   };
 
   // Update an existing goal
-  const handleUpdateGoal = (goalId: string, updates: Partial<Goal>) => {
+  const handleUpdateGoal = async (goalId: string, updates: Partial<Goal>) => {
     const updatedData = {
       goals: goalsData.goals.map(goal => 
         goal.id === goalId 
@@ -247,7 +256,7 @@ const Roadmap = () => {
       )
     };
     setGoalsData(updatedData);
-    saveGoalsData(updatedData);
+    await saveGoalsToSupabase(updatedData);
     setEditingGoal(null);
   };
 
@@ -541,7 +550,7 @@ const Roadmap = () => {
                     type="number"
                     className="terminal-input flex-1 text-xs py-1"
                     value={goal.monthlyTargets[month]?.target || ''}
-                    onChange={(e) => {
+                    onChange={async (e) => {
                       const targetValue = parseFloat(e.target.value) || 0;
                       const updatedData = {
                         goals: goalsData.goals.map(g => 
@@ -560,7 +569,7 @@ const Roadmap = () => {
                         )
                       };
                       setGoalsData(updatedData);
-                      saveGoalsData(updatedData);
+                      await saveGoalsToSupabase(updatedData);
                     }}
                     placeholder="0"
                   />
@@ -763,7 +772,7 @@ const Roadmap = () => {
                           type="number"
                           className="terminal-input w-full text-xs"
                           value={monthlyTarget?.target || ''}
-                          onChange={(e) => {
+                          onChange={async (e) => {
                             const targetValue = parseFloat(e.target.value) || 0;
                             const updatedData = {
                               goals: goalsData.goals.map(g => 
@@ -782,7 +791,7 @@ const Roadmap = () => {
                               )
                             };
                             setGoalsData(updatedData);
-                            saveGoalsData(updatedData);
+                            await saveGoalsToSupabase(updatedData);
                           }}
                           placeholder="0"
                         />

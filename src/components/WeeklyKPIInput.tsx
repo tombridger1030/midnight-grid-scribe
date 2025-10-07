@@ -794,15 +794,17 @@ const WeeklyKPIInput: React.FC<WeeklyKPIInputProps> = ({ onWeekChange }) => {
                                     : hasProgress
                                       ? `${kpi.color}40`
                                       : 'transparent',
-                                borderColor: isEditing ? '#fff' : kpi.color,
-                                borderWidth: isEditing ? '3px' : '2px',
+                                // Primary colored ring
+                                borderColor: kpi.color,
+                                borderWidth: '2px',
                                 color: isEditing || isComplete
                                   ? '#000'
                                   : hasProgress
                                     ? kpi.color
                                     : `${kpi.color}80`,
                                 opacity: hasProgress || isEditing ? 1 : (shouldShowGuidance ? 0.7 : 0.3),
-                                boxShadow: isEditing ? `0 0 12px ${kpi.color}` : 'none'
+                                // Add white outline outside the colored border for contrast on dark backgrounds
+                                boxShadow: `${isEditing ? `0 0 12px ${kpi.color}, ` : ''}0 0 0 2px #ffffff`
                               }}
                               title={hasProgress
                                 ? `Day ${dayIndex + 1}: ${dailyValue}/${Math.ceil(dailyTarget)}`
@@ -1260,7 +1262,8 @@ const WeeklyKPIInput: React.FC<WeeklyKPIInputProps> = ({ onWeekChange }) => {
                     minTarget: 0,
                     unit: '',
                     category: '',
-                    color: '#5FE3B3'
+                    color: '#5FE3B3',
+                    isAverage: false
                   });
                 }}
                 className="terminal-button px-4 py-2 text-terminal-accent/60"
