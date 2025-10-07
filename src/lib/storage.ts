@@ -696,20 +696,103 @@ export function defaultCashConsoleData(): CashConsoleData {
   };
 }
 
-export function loadCashConsoleData(): CashConsoleData {
+export async function loadCashConsoleData(): Promise<CashConsoleData> {
+  const userId = getCurrentUserId();
+  
+  if (!userId) {
+    // Fallback to localStorage if not authenticated
+    try {
+      const raw = localStorage.getItem('noctisium-cash-console');
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    return defaultCashConsoleData();
+  }
+
   try {
-    const raw = localStorage.getItem('noctisium-cash-console');
-    if (raw) return JSON.parse(raw);
-  } catch {}
-  return defaultCashConsoleData();
+    // Try to load from Supabase
+    // Use maybeSingle() instead of single() to handle case where no row exists yet
+    const { data, error } = await supabase
+      .from('cash_console')
+      .select('data')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (error) {
+      console.warn('Failed to load cash console from Supabase:', error);
+      // Fallback to localStorage
+      const raw = localStorage.getItem('noctisium-cash-console');
+      if (raw) return JSON.parse(raw);
+      return defaultCashConsoleData();
+    }
+
+    // If no data exists in Supabase yet (new user)
+    if (!data) {
+      console.log('No cash console data in Supabase yet, checking localStorage...');
+      const raw = localStorage.getItem('noctisium-cash-console');
+      if (raw) {
+        const localData = JSON.parse(raw);
+        // Migrate localStorage data to Supabase
+        console.log('Migrating localStorage cash console data to Supabase...');
+        await saveCashConsoleData(localData);
+        return localData;
+      }
+      return defaultCashConsoleData();
+    }
+
+    if (data?.data) {
+      // Cache in localStorage
+      localStorage.setItem('noctisium-cash-console', JSON.stringify(data.data));
+      return data.data as CashConsoleData;
+    }
+
+    return defaultCashConsoleData();
+  } catch (error) {
+    console.error('Error loading cash console:', error);
+    // Fallback to localStorage
+    try {
+      const raw = localStorage.getItem('noctisium-cash-console');
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    return defaultCashConsoleData();
+  }
 }
 
 export async function saveCashConsoleData(data: CashConsoleData): Promise<void> {
+  const userId = getCurrentUserId();
+  
+  // Always save to localStorage as a cache
   try {
     localStorage.setItem('noctisium-cash-console', JSON.stringify(data));
-    // Optionally push to Supabase in future
   } catch (e) {
-    console.error('Failed to save cash console:', e);
+    console.error('Failed to save to localStorage:', e);
+  }
+
+  if (!userId) {
+    console.warn('No user ID, cash console data saved to localStorage only');
+    return;
+  }
+
+  try {
+    // Save to Supabase
+    const { error } = await supabase
+      .from('cash_console')
+      .upsert({
+        user_id: userId,
+        data: data as any,
+        updated_at: new Date().toISOString()
+      }, {
+        onConflict: 'user_id'
+      });
+
+    if (error) {
+      console.error('Failed to save cash console to Supabase:', error);
+      throw error;
+    }
+
+    console.log('Cash console data saved to Supabase successfully');
+  } catch (e) {
+    console.error('Error saving cash console:', e);
+    throw e;
   }
 }
 
