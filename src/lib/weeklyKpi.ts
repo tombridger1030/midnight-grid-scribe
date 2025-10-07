@@ -288,7 +288,7 @@ export async function migrateWeeklyKPIsToFiscalWeeks(original: WeeklyKPIData): P
         });
       }
       if (src.daily) {
-        if (!target.daily) target.daily = {} as any;
+        if (!target.daily) target.daily = {} as Record<string, number[]>;
         Object.entries(src.daily).forEach(([kpiId, arr]) => {
           const existing = (target.daily![kpiId] || new Array(7).fill(0)).slice();
           for (let i = 0; i < 7; i++) existing[i] = Math.max(0, Number(arr[i] || existing[i] || 0));
@@ -311,7 +311,9 @@ export async function migrateWeeklyKPIsToFiscalWeeks(original: WeeklyKPIData): P
         try {
           const { start } = getWeekDates(rec.weekKey);
           newKey = getWeekKey(start);
-        } catch {}
+        } catch {
+          // Ignore errors when parsing week dates
+        }
       }
 
       const merged = byWeek.get(newKey);
@@ -335,6 +337,12 @@ export async function migrateWeeklyKPIsToFiscalWeeks(original: WeeklyKPIData): P
  */
 async function migrateSupabaseWeeklyEntriesWeekKeys(): Promise<void> {
   try {
+    const userId = userStorage.getCurrentUserId();
+    if (!userId) {
+      console.log('No user ID available for migration');
+      return;
+    }
+    
     const { data, error } = await supabase
       .from('weekly_kpi_entries')
       .select('id, date, week_key, kpi_id, value')
@@ -343,7 +351,7 @@ async function migrateSupabaseWeeklyEntriesWeekKeys(): Promise<void> {
     if (error || !data) return;
 
     const updates: { id: string; week_key: string }[] = [];
-    for (const row of data as any[]) {
+    for (const row of data as Array<{ id: string; date: string; week_key: string; kpi_id: string; value: number }>) {
       if (!row?.date) continue;
       const expected = getWeekKey(new Date(row.date + 'T00:00:00'));
       if (row.week_key !== expected) {
@@ -378,6 +386,7 @@ export const updateWeeklyKPIRecord = async (weekKey: string, values: Partial<Wee
   const existingRecordIndex = data.records.findIndex(record => record.weekKey === weekKey);
   
   const now = new Date().toISOString();
+  const isUpdatingOldData = existingRecordIndex >= 0; // Flag to check if we're updating existing data
   
   if (existingRecordIndex >= 0) {
     // Update existing record
@@ -402,6 +411,25 @@ export const updateWeeklyKPIRecord = async (weekKey: string, values: Partial<Wee
   
   // Save to both localStorage and Supabase
   await saveWeeklyKPIs(data);
+  
+  // If updating old data, regenerate rank history to reflect changes (with throttling)
+  if (isUpdatingOldData && weekKey !== getCurrentWeek()) {
+    console.log(`🔄 Updated old KPI data for week ${weekKey}, scheduling rank history regeneration...`);
+    
+    // Throttle regeneration calls to prevent multiple simultaneous runs
+    const global = globalThis as unknown as Record<string, NodeJS.Timeout | undefined>;
+    if (global._rankRegenTimeout) {
+      clearTimeout(global._rankRegenTimeout);
+    }
+    global._rankRegenTimeout = setTimeout(async () => {
+      try {
+        const { rankingManager } = await import('./rankingSystem');
+        await rankingManager.regenerateRankHistory();
+      } catch (error) {
+        console.error('Failed to regenerate rank history after KPI update:', error);
+      }
+    }, 1000); // Wait 1 second before regenerating to batch multiple updates
+  }
 };
 
 // Read daily values for a KPI in a given week (always length 7)
@@ -488,6 +516,25 @@ export const updateWeeklyDailyValue = async (
 
   await saveWeeklyKPIs(data);
 
+  // If updating old data, regenerate rank history to reflect changes (with throttling)
+  if (weekKey !== getCurrentWeek()) {
+    console.log(`🔄 Updated daily KPI data for week ${weekKey}, scheduling rank history regeneration...`);
+    
+    // Throttle regeneration calls to prevent multiple simultaneous runs
+    const global = globalThis as unknown as Record<string, NodeJS.Timeout | undefined>;
+    if (global._rankRegenTimeout) {
+      clearTimeout(global._rankRegenTimeout);
+    }
+    global._rankRegenTimeout = setTimeout(async () => {
+      try {
+        const { rankingManager } = await import('./rankingSystem');
+        await rankingManager.regenerateRankHistory();
+      } catch (error) {
+        console.error('Failed to regenerate rank history after daily KPI update:', error);
+      }
+    }, 1000); // Wait 1 second before regenerating to batch multiple updates
+  }
+
   // Persist a per-date entry row for analytics/reporting
   try {
     const userId = userStorage.getCurrentUserId();
@@ -550,6 +597,25 @@ export const setWeeklyDailyValues = async (
   record.updatedAt = now;
 
   await saveWeeklyKPIs(data);
+  
+  // If updating old data, regenerate rank history to reflect changes (with throttling)
+  if (weekKey !== getCurrentWeek()) {
+    console.log(`🔄 Updated weekly daily values for week ${weekKey}, scheduling rank history regeneration...`);
+    
+    // Throttle regeneration calls to prevent multiple simultaneous runs
+    const global = globalThis as unknown as Record<string, NodeJS.Timeout | undefined>;
+    if (global._rankRegenTimeout) {
+      clearTimeout(global._rankRegenTimeout);
+    }
+    global._rankRegenTimeout = setTimeout(async () => {
+      try {
+        const { rankingManager } = await import('./rankingSystem');
+        await rankingManager.regenerateRankHistory();
+      } catch (error) {
+        console.error('Failed to regenerate rank history after weekly daily values update:', error);
+      }
+    }, 1000); // Wait 1 second before regenerating to batch multiple updates
+  }
 };
 
 // Load weekly KPIs with Supabase sync
@@ -645,8 +711,8 @@ export const calculateKPIProgress = async (kpiId: string, actualValue: number): 
 };
 
 // Get KPI status based on progress
-export const getKPIStatus = (kpiId: string, actualValue: number): 'excellent' | 'good' | 'fair' | 'poor' => {
-  const progress = calculateKPIProgress(kpiId, actualValue);
+export const getKPIStatus = async (kpiId: string, actualValue: number): Promise<'excellent' | 'good' | 'fair' | 'poor'> => {
+  const progress = await calculateKPIProgress(kpiId, actualValue);
   
   if (progress >= 100) return 'excellent';
   if (progress >= 80) return 'good';
@@ -655,12 +721,15 @@ export const getKPIStatus = (kpiId: string, actualValue: number): 'excellent' | 
 };
 
 // Calculate overall week completion percentage
-export const calculateWeekCompletion = (values: WeeklyKPIValues): number => {
+export const calculateWeekCompletion = async (values: WeeklyKPIValues): Promise<number> => {
   const totalKPIs = WEEKLY_KPI_DEFINITIONS.length;
-  const totalProgress = WEEKLY_KPI_DEFINITIONS.reduce((sum, kpi) => {
+  
+  let totalProgress = 0;
+  for (const kpi of WEEKLY_KPI_DEFINITIONS) {
     const value = values[kpi.id] || 0;
-    return sum + calculateKPIProgress(kpi.id, value);
-  }, 0);
+    const progress = await calculateKPIProgress(kpi.id, value);
+    totalProgress += progress;
+  }
   
   return Math.round(totalProgress / totalKPIs);
 };
@@ -861,7 +930,7 @@ export const syncDeepWorkHours = async (): Promise<void> => {
       const dayIndex = getDayIndexFromDate(date);
 
       if (dayIndex >= 0 && dayIndex < 7) {
-        await updateWeeklyKPIDaily(weekKey, 'deepWorkHours', dayIndex, hours);
+        await updateWeeklyDailyValue(weekKey, 'deepWorkHours', dayIndex, hours);
       }
     }
   } catch (error) {

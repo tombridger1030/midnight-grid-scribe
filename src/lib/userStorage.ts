@@ -591,6 +591,55 @@ export class UserStorage {
     }
   }
 
+  async clearRankHistory() {
+    if (!this.userId) {
+      console.log('⚠️ No user ID available for clearing rank history');
+      return;
+    }
+
+    try {
+      console.log('🗑️ Clearing all rank history for user:', this.userId);
+      
+      const { data: existingRecords, error: selectError } = await supabase
+        .from('rank_history')
+        .select('id')
+        .eq('user_id', this.userId);
+
+      if (selectError) {
+        console.error('Error checking existing rank history:', selectError);
+        throw selectError;
+      }
+
+      console.log(`📊 Found ${existingRecords?.length || 0} existing rank history records to delete`);
+
+      const { error: deleteError } = await supabase
+        .from('rank_history')
+        .delete()
+        .eq('user_id', this.userId);
+
+      if (deleteError) {
+        console.error('Error clearing rank history:', deleteError);
+        throw deleteError;
+      }
+
+      // Verify deletion worked
+      const { data: remainingRecords, error: verifyError } = await supabase
+        .from('rank_history')
+        .select('id')
+        .eq('user_id', this.userId);
+
+      if (verifyError) {
+        console.warn('Could not verify rank history deletion:', verifyError);
+      } else {
+        console.log(`✅ Rank history cleared successfully. Remaining records: ${remainingRecords?.length || 0}`);
+      }
+
+    } catch (error) {
+      console.error('Error clearing rank history:', error);
+      throw error;
+    }
+  }
+
   async getWeeklyAssessments(limit: number = 10) {
     if (!this.userId) {
       
