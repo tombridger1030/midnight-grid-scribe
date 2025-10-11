@@ -260,3 +260,5 @@ CREATE TRIGGER update_user_kpis_updated_at
     EXECUTE FUNCTION update_updated_at_column();
 
 SELECT 'Database setup completed successfully! You can now use the application.' as status;
+
+

@@ -175,15 +175,20 @@ function hasMetricsData(platformData: any): boolean {
 
 // Helper function to build metrics data based on platform
 function buildMetricsData(platform: string, platformData: any, userId: string, contentId: string, publishedAt: string) {
+  const isYouTube = platform === 'youtube_short' || platform === 'youtube_long';
   const baseData = {
     user_id: userId,
     content_id: contentId,
-    platform: platform === 'youtube_short' || platform === 'youtube_long' ? 'youtube' : platform,
+    platform: isYouTube ? 'youtube' : platform,
     snapshot_date: publishedAt,
     metric_snapshot_type: 'initial',
     views: platformData.views || 0,
     likes: platformData.likes || 0,
-    follows: platformData.follows || 0
+    // Use subscribers for YouTube, follows for other platforms
+    ...(isYouTube 
+      ? { subscribers: platformData.subscribers || platformData.follows || 0 }
+      : { follows: platformData.follows || 0 }
+    )
   };
 
   // Add platform-specific metrics
@@ -214,7 +219,6 @@ function buildMetricsData(platform: string, platformData: any, userId: string, c
         ...baseData,
         retention_ratio: (platformData as YouTubeShortMetrics).retention_ratio,
         swipe_rate: (platformData as YouTubeShortMetrics).swipe_rate,
-        subscribers: (platformData as YouTubeShortMetrics).subscribers,
         new_viewers_percent: (platformData as YouTubeShortMetrics).new_viewers_percent
       };
 
@@ -341,7 +345,8 @@ export async function loadMultiPlatformContent(limit: number = 20): Promise<Mult
       views: metrics?.views,
       shares: metrics?.shares,
       saves: metrics?.saves,
-      follows: item.platform === 'youtube' ? (metrics?.subscribers || metrics?.follows) : metrics?.follows,
+      follows: item.platform === 'youtube' ? 0 : (metrics?.follows || 0),
+      subscribers: item.platform === 'youtube' ? (metrics?.subscribers || 0) : 0,
       average_watch_time_seconds: metrics?.average_watch_time_seconds,
       retention_ratio: metrics?.retention_ratio,
       reach: metrics?.reach,
@@ -600,14 +605,24 @@ export async function updatePlatformMetrics(
       ...metricsUpdates
     };
     
+    console.log('🔍 Upserting metrics data:', {
+      contentId,
+      platform,
+      subscribers: upsertData.subscribers,
+      upsertDataKeys: Object.keys(upsertData),
+      hasSubscribers: 'subscribers' in upsertData
+    });
+    
     const { error: metricsError } = await supabase
       .from('content_metrics')
       .upsert(upsertData);
 
     if (metricsError) {
-      console.error('Error updating metrics:', metricsError);
+      console.error('❌ Error updating metrics:', metricsError);
       throw new Error(`Failed to update metrics: ${metricsError.message}`);
     }
+    
+    console.log('✅ Metrics upsert completed successfully');
   } else {
   }
 }

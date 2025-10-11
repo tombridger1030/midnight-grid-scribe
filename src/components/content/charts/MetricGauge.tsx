@@ -25,9 +25,14 @@ const MetricGauge: React.FC<MetricGaugeProps> = ({
 }) => {
   const [isHovered, setIsHovered] = useState(false);
 
-  const max = target || maxValue || Math.max(value * 1.5, 100);
-  const progress = Math.min(value / max, 1);
-  const targetProgress = target ? Math.min(target / max, 1) : 0;
+  // Ensure value is a valid number to prevent NaN
+  const safeValue = Number.isFinite(value) ? value : 0;
+  const safeTarget = Number.isFinite(target) ? target : undefined;
+  const safeMaxValue = Number.isFinite(maxValue) ? maxValue : undefined;
+  
+  const max = safeTarget || safeMaxValue || Math.max(safeValue * 1.5, 100);
+  const progress = Math.min(safeValue / max, 1);
+  const targetProgress = safeTarget ? Math.min(safeTarget / max, 1) : 0;
 
   // Simple semicircle gauge (180 degrees)
   const radius = size * 0.35;
@@ -42,9 +47,9 @@ const MetricGauge: React.FC<MetricGaugeProps> = ({
   const targetX = center - Math.cos(targetAngle) * radius;
   const targetY = center - Math.sin(targetAngle) * radius;
 
-  const primaryDisplay = target !== undefined && target !== null
+  const primaryDisplay = safeTarget !== undefined && safeTarget !== null
     ? `${Math.round(progress * 100)}%`
-    : `${formatNumber(value)}${unit}`;
+    : `${formatNumber(safeValue)}${unit}`;
 
   return (
     <div
@@ -90,7 +95,7 @@ const MetricGauge: React.FC<MetricGaugeProps> = ({
             />
 
             {/* Target indicator */}
-            {target && (
+            {safeTarget && (
               <circle
                 cx={targetX}
                 cy={targetY}
@@ -113,9 +118,9 @@ const MetricGauge: React.FC<MetricGaugeProps> = ({
             >
               {primaryDisplay}
             </div>
-            {target !== undefined && target !== null && (
+            {safeTarget !== undefined && safeTarget !== null && (
               <div className="text-xs text-[#8A8D93]">
-                {formatNumber(value)}{unit} of {formatNumber(target)}{unit}
+                {formatNumber(safeValue)}{unit} of {formatNumber(safeTarget)}{unit}
               </div>
             )}
           </div>
