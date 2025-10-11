@@ -20,15 +20,15 @@ const Cash: React.FC = () => {
       const userPrefs = await preferencesManager.getUserPreferences();
       setPreferences(userPrefs);
 
-      // Load cash data
-      const d = loadCashConsoleData();
+      // Load cash data (now async)
+      const d = await loadCashConsoleData();
       console.log('[Cash] loadCashConsoleData:', d);
       setData(d);
     };
 
     // Auto-refresh prices on page load after loading data
     const autoRefresh = async () => {
-      const d = loadCashConsoleData();
+      const d = await loadCashConsoleData();
       const today = new Date().toISOString().slice(0, 10);
       if (d.investments.holdings.some(h => h.type === 'equity')) {
         const next = { ...d };
@@ -93,6 +93,33 @@ const Cash: React.FC = () => {
     if (monthlyIncome <= 0) return 0;
     return (totalExpenses / monthlyIncome) * 100;
   }, [monthlyIncome, totalExpenses]);
+
+  // Calculate average daily spend and projection
+  const dailySpendStats = useMemo(() => {
+    const [year, month] = expenseMonth.split('-').map(Number);
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
+    
+    // Only calculate for current or past months
+    if (year > currentYear || (year === currentYear && month > currentMonth)) {
+      return { avgDailySpend: 0, daysElapsed: 0, daysInMonth: 0, projectedTotal: 0, projectedPct: 0 };
+    }
+    
+    const daysInMonth = new Date(year, month, 0).getDate();
+    let daysElapsed = daysInMonth; // Default to full month for past months
+    
+    // If it's the current month, calculate days elapsed
+    if (year === currentYear && month === currentMonth) {
+      daysElapsed = now.getDate();
+    }
+    
+    const avgDailySpend = daysElapsed > 0 ? totalExpenses / daysElapsed : 0;
+    const projectedTotal = avgDailySpend * daysInMonth;
+    const projectedPct = monthlyIncome > 0 ? (projectedTotal / monthlyIncome) * 100 : 0;
+    
+    return { avgDailySpend, daysElapsed, daysInMonth, projectedTotal, projectedPct };
+  }, [expenseMonth, totalExpenses, monthlyIncome]);
 
   const burnRate = useMemo(() => {
     // Sum current month's cortal items
@@ -377,9 +404,79 @@ const Cash: React.FC = () => {
             <CreditCard size={16} className="text-[#FF6B6B]" />
             <h3 className="text-terminal-accent">Expenditure (Lifestyle)</h3>
           </div>
-          {/* Month selector + New expense row */}
+
+          {/* Monthly Income Input */}
+          <div className="mb-3 p-3 border border-terminal-accent/20 bg-black/20">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-terminal-accent text-sm">Monthly Income</span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-terminal-accent/70">{baseCurrency}</span>
+                <input
+                  className="terminal-input px-2 py-1 w-32 text-right"
+                  type="number"
+                  min="0"
+                  step="100"
+                  placeholder="0"
+                  value={monthlyIncome > 0 ? (baseCurrency === 'CAD' ? (monthlyIncome * usdToCad).toFixed(0) : monthlyIncome.toFixed(0)) : ''}
+                  onChange={(e) => {
+                    const val = Number(e.target.value);
+                    if (Number.isFinite(val) && val >= 0) {
+                      const next = { ...data };
+                      next.expenses.monthlyIncomeUsd = baseCurrency === 'CAD' ? val / usdToCad : val;
+                      handleSave(next);
+                    }
+                  }}
+                />
+              </div>
+            </div>
+            <div className="text-xs text-terminal-accent/70">Target: ≤ {data.expenses.targetPctOfIncome || 40}% of income</div>
+          </div>
+
+          {/* Spending Stats */}
+          <div className="mb-3 p-3 border border-terminal-accent/20">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-terminal-accent text-sm">Total Spent This Month</span>
+              <span className="text-lg font-bold text-[#FF6B6B]">
+                {formatCurrency(baseCurrency === 'CAD' ? totalExpenses * usdToCad : totalExpenses)}
+              </span>
+            </div>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-terminal-accent/70 text-xs">% of Income</span>
+              <span className={`text-sm font-bold ${lifestylePct > (data.expenses.targetPctOfIncome || 40) ? 'text-[#FF6B6B]' : 'text-[#5FE3B3]'}`}>
+                {lifestylePct.toFixed(1)}% {lifestylePct > (data.expenses.targetPctOfIncome || 40) ? '⚠️' : '✓'}
+              </span>
+            </div>
+            <Progress 
+              value={Math.min(lifestylePct, 100)} 
+              className="h-2 mb-2"
+            />
+            
+            {dailySpendStats.daysElapsed > 0 && dailySpendStats.daysElapsed < dailySpendStats.daysInMonth && (
+              <div className="mt-3 pt-3 border-t border-terminal-accent/20">
+                <div className="flex items-center justify-between text-xs mb-1">
+                  <span className="text-terminal-accent/70">Avg Daily Spend ({dailySpendStats.daysElapsed}/{dailySpendStats.daysInMonth} days)</span>
+                  <span className="font-mono">
+                    {formatCurrency(baseCurrency === 'CAD' ? dailySpendStats.avgDailySpend * usdToCad : dailySpendStats.avgDailySpend)}/day
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-terminal-accent/70">Projected End of Month</span>
+                  <span className={`font-mono ${dailySpendStats.projectedPct > (data.expenses.targetPctOfIncome || 40) ? 'text-[#FF6B6B]' : 'text-[#5FE3B3]'}`}>
+                    {formatCurrency(baseCurrency === 'CAD' ? dailySpendStats.projectedTotal * usdToCad : dailySpendStats.projectedTotal)} ({dailySpendStats.projectedPct.toFixed(1)}%)
+                  </span>
+                </div>
+                {dailySpendStats.projectedPct > (data.expenses.targetPctOfIncome || 40) && monthlyIncome > 0 && (
+                  <div className="mt-2 text-xs text-[#FF6B6B] bg-[#FF6B6B]/10 p-2 border border-[#FF6B6B]/30">
+                    ⚠️ On track to exceed target. Reduce daily spend to {formatCurrency(baseCurrency === 'CAD' ? ((monthlyIncome * (data.expenses.targetPctOfIncome || 40) / 100) / dailySpendStats.daysInMonth * usdToCad) : ((monthlyIncome * (data.expenses.targetPctOfIncome || 40) / 100) / dailySpendStats.daysInMonth))}/day
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Month selector */}
           <div className="flex items-center justify-between mb-2 text-xs">
-            <span className="text-terminal-accent/70">Target ≤ {data.expenses.targetPctOfIncome || 0}% of income</span>
+            <span className="text-terminal-accent/70">Expense History</span>
             <div className="flex items-center gap-2">
               <span>Month</span>
               <input
