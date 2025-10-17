@@ -265,14 +265,58 @@ const ContentWeekly: React.FC = () => {
     const weekDates = getWeekDayDates(currentWeek);
     const weekStart = weekDates[0].toISOString().split('T')[0];
     const weekEnd = weekDates[6].toISOString().split('T')[0];
+    
+    // Debug logging
+    console.log('🔍 Weekly metrics calculation:', {
+      currentWeek,
+      weekStart,
+      weekEnd,
+      weekDates: weekDates.map(d => d.toISOString().split('T')[0]),
+      allContentCount: allContent.length,
+      multiPlatformContentCount: multiPlatformContent.length
+    });
+
+    // Filter content for this week  
+    const filteredAllContent = allContent.filter(item =>
+      item.published_at >= weekStart && item.published_at <= weekEnd
+    );
+    const filteredMultiContent = multiPlatformContent.filter(item => 
+      item.published_at >= weekStart && item.published_at <= weekEnd
+    );
+    
+    // Debug filtered content with detailed date comparison
+    console.log('🔍 Filtered content for week:', {
+      filteredAllContentCount: filteredAllContent.length,
+      filteredMultiContentCount: filteredMultiContent.length,
+      weekStart,
+      weekEnd,
+      allContentSample: allContent.slice(0, 5).map(item => ({
+        title: item.title,
+        published_at: item.published_at,
+        views: item.views,
+        platform: item.platform,
+        dateComparison: {
+          isAfterStart: item.published_at >= weekStart,
+          isBeforeEnd: item.published_at <= weekEnd,
+          matches: item.published_at >= weekStart && item.published_at <= weekEnd
+        }
+      })),
+      multiContentSample: multiPlatformContent.slice(0, 3).map(item => ({
+        title: item.title, 
+        published_at: item.published_at,
+        platforms: Object.keys(item.platforms),
+        dateComparison: {
+          isAfterStart: item.published_at >= weekStart,
+          isBeforeEnd: item.published_at <= weekEnd,
+          matches: item.published_at >= weekStart && item.published_at <= weekEnd
+        }
+      }))
+    });
 
     // Flatten all content for this week
     const weekContent = [
-      ...allContent.filter(item =>
-        item.published_at >= weekStart && item.published_at <= weekEnd
-      ),
-      ...multiPlatformContent
-        .filter(item => item.published_at >= weekStart && item.published_at <= weekEnd)
+      ...filteredAllContent,
+      ...filteredMultiContent
         .flatMap(item =>
           Object.entries(item.platforms).map(([platform, data]) => ({
             id: `${item.id}-${platform}`,
@@ -288,20 +332,64 @@ const ContentWeekly: React.FC = () => {
         )
     ];
 
-    // Platform-specific calculations
+    console.log('🔍 Week content after flattening:', {
+      weekContentCount: weekContent.length,
+      weekContentSample: weekContent.slice(0, 3).map(item => ({
+        title: item.title,
+        platform: item.platform,
+        views: item.views,
+        follows: item.follows,
+        retention_ratio: item.retention_ratio,
+        likes: item.likes,
+        comments: item.comments,
+        subscribers: item.subscribers
+      })),
+      totalViewsSum: weekContent.reduce((sum, item) => sum + (item.views || 0), 0),
+      totalFollowsSum: weekContent.reduce((sum, item) => sum + (item.platform === 'youtube' ? (item.subscribers || 0) : (item.follows || 0)), 0)
+    });
+
+    // Platform-specific calculations with debugging
     const youtube = weekContent.filter(item => item.platform === 'youtube');
     const instagram = weekContent.filter(item => item.platform === 'instagram');
     const tiktok = weekContent.filter(item => item.platform === 'tiktok');
+
+    console.log('🔍 Platform distribution:', {
+      totalContent: weekContent.length,
+      youtubeCount: youtube.length,
+      instagramCount: instagram.length,
+      tiktokCount: tiktok.length,
+      platformBreakdown: weekContent.map(item => ({
+        title: item.title,
+        platform: item.platform,
+        format: item.format,
+        views: item.views
+      }))
+    });
 
     // YouTube metrics - separate shorts and long form
     const youtubeShorts = youtube.filter(item => item.format === 'short');
     const youtubeLongs = youtube.filter(item => item.format === 'long_form');
 
-    // YouTube Shorts metrics
+    // YouTube Shorts metrics with debugging (using subscribers not follows)
     const shortsViews = youtubeShorts.reduce((sum, item) => sum + (item.views || 0), 0);
     const shortsLikes = youtubeShorts.reduce((sum, item) => sum + (item.likes || 0), 0);
-    const shortsSubscribers = youtubeShorts.reduce((sum, item) => sum + (item.subscribers || 0), 0);
+    const shortsSubscribers = youtubeShorts.reduce((sum, item) => sum + (item.subscribers || item.follows || 0), 0);
     const shortsComments = youtubeShorts.reduce((sum, item) => sum + (item.comments || 0), 0);
+
+    console.log('🔍 YouTube Shorts metrics:', {
+      shortsCount: youtubeShorts.length,
+      shortsViews,
+      shortsLikes,
+      shortsSubscribers,
+      shortsComments,
+      shortsSample: youtubeShorts.slice(0, 2).map(item => ({
+        title: item.title,
+        views: item.views,
+        likes: item.likes,
+        subscribers: item.subscribers,
+        comments: item.comments
+      }))
+    });
     const avgShortsRetention = youtubeShorts.length > 0
       ? youtubeShorts.reduce((sum, item) => sum + (item.retention_ratio || 0), 0) / youtubeShorts.length
       : 0;
@@ -312,9 +400,9 @@ const ContentWeekly: React.FC = () => {
       ? youtubeShorts.reduce((sum, item) => sum + (item.new_viewers_percent || 0), 0) / youtubeShorts.length
       : 0;
 
-    // YouTube Long Form metrics
+    // YouTube Long Form metrics (using subscribers not follows)
     const longViews = youtubeLongs.reduce((sum, item) => sum + (item.views || 0), 0);
-    const longSubscribers = youtubeLongs.reduce((sum, item) => sum + (item.subscribers || 0), 0);
+    const longSubscribers = youtubeLongs.reduce((sum, item) => sum + (item.subscribers || item.follows || 0), 0);
     const totalYouTubeLongWatchTime = youtubeLongs.reduce((sum, item) => sum + (item.total_watch_time_minutes || 0), 0);
 
     // Combined YouTube metrics
@@ -325,15 +413,40 @@ const ContentWeekly: React.FC = () => {
     const youtubeViews = shortsViews + longViews;
     const youtubeSubscribers = shortsSubscribers + longSubscribers;
 
-    // Instagram metrics
+    // Instagram metrics (using follows not subscribers)
     const totalReach = instagram.reduce((sum, item) => sum + ((item as any).reach || 0), 0);
     const profileVisits = instagram.reduce((sum, item) => sum + ((item as any).profile_visits || 0), 0);
     const instagramFollowers = instagram.reduce((sum, item) => sum + (item.follows || 0), 0);
 
-    // TikTok metrics
+    console.log('🔍 Instagram metrics:', {
+      instagramCount: instagram.length,
+      totalReach,
+      profileVisits,
+      instagramFollowers,
+      instagramSample: instagram.slice(0, 2).map(item => ({
+        title: item.title,
+        reach: (item as any).reach,
+        follows: item.follows
+      }))
+    });
+
+    // TikTok metrics (using follows not subscribers)
     const tiktokViews = tiktok.reduce((sum, item) => sum + (item.views || 0), 0);
     const tiktokLikes = tiktok.reduce((sum, item) => sum + (item.likes || 0), 0);
     const tiktokFollowers = tiktok.reduce((sum, item) => sum + (item.follows || 0), 0);
+
+    console.log('🔍 TikTok metrics:', {
+      tiktokCount: tiktok.length,
+      tiktokViews,
+      tiktokLikes,
+      tiktokFollowers,
+      tiktokSample: tiktok.slice(0, 2).map(item => ({
+        title: item.title,
+        views: item.views,
+        likes: item.likes,
+        follows: item.follows
+      }))
+    });
 
     // Total metrics
     const totalViews = weekContent.reduce((sum, item) => sum + (item.views || 0), 0);

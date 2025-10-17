@@ -1,16 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { Target, Edit2, Check, X, Plus, Trash2, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import {
-  loadNoctisiumData,
-  saveNoctisiumData,
-  getCurrentWorkSlice,
-  addAvoidanceItem,
-  toggleAvoidanceItem,
-  deleteAvoidanceItem,
-  getAvoidanceItems,
-  type AvoidanceItem
-} from '@/lib/storage';
+import { userStorage } from '@/lib/userStorage';
+import { getCurrentWorkSlice } from '@/lib/storage';
+
+// Define AvoidanceItem type locally to match userStorage interface
+type AvoidanceItem = {
+  id: string;
+  text: string;
+  isCompleted: boolean;
+  createdAt: string;
+};
 
 interface PriorityManagerProps {
   className?: string;
@@ -27,11 +27,17 @@ export const PriorityManager: React.FC<PriorityManagerProps> = ({
   const [isActiveSlice, setIsActiveSlice] = useState(false);
 
   useEffect(() => {
-    const loadData = () => {
-      setAvoidanceItems(getAvoidanceItems());
+    const loadData = async () => {
+      try {
+        const items = await userStorage.getAvoidanceItems();
+        setAvoidanceItems(items);
 
-      const slice = getCurrentWorkSlice();
-      setIsActiveSlice(!!slice?.isActive);
+        const slice = getCurrentWorkSlice();
+        setIsActiveSlice(!!slice?.isActive);
+      } catch (error) {
+        console.error('Failed to load avoidance items:', error);
+        setAvoidanceItems([]);
+      }
     };
 
     loadData();
@@ -41,27 +47,61 @@ export const PriorityManager: React.FC<PriorityManagerProps> = ({
     return () => clearInterval(interval);
   }, []);
 
-  const handleAddItem = () => {
+  const handleAddItem = async () => {
     if (newItemText.trim()) {
-      const newItem = addAvoidanceItem(newItemText);
-      setAvoidanceItems(prev => [...prev, newItem]);
-      setNewItemText('');
-      setIsAddingItem(false);
+      try {
+        const newItem = await userStorage.addAvoidanceItem(newItemText);
+        if (newItem) {
+          setAvoidanceItems(prev => [...prev, newItem]);
+        }
+        setNewItemText('');
+        setIsAddingItem(false);
+      } catch (error) {
+        console.error('Failed to add avoidance item:', error);
+        // Still close the input but show error in console
+        setNewItemText('');
+        setIsAddingItem(false);
+      }
     }
   };
 
-  const handleToggleItem = (itemId: string) => {
-    toggleAvoidanceItem(itemId);
+  const handleToggleItem = async (itemId: string) => {
+    // Optimistically update UI first
     setAvoidanceItems(prev =>
       prev.map(item =>
         item.id === itemId ? { ...item, isCompleted: !item.isCompleted } : item
       )
     );
+
+    try {
+      await userStorage.toggleAvoidanceItem(itemId);
+    } catch (error) {
+      console.error('Failed to toggle avoidance item:', error);
+      // Revert the optimistic update
+      setAvoidanceItems(prev =>
+        prev.map(item =>
+          item.id === itemId ? { ...item, isCompleted: !item.isCompleted } : item
+        )
+      );
+    }
   };
 
-  const handleDeleteItem = (itemId: string) => {
-    deleteAvoidanceItem(itemId);
+  const handleDeleteItem = async (itemId: string) => {
+    // Optimistically remove from UI first
+    const removedItem = avoidanceItems.find(item => item.id === itemId);
     setAvoidanceItems(prev => prev.filter(item => item.id !== itemId));
+
+    try {
+      await userStorage.deleteAvoidanceItem(itemId);
+    } catch (error) {
+      console.error('Failed to delete avoidance item:', error);
+      // Revert the optimistic update by adding the item back
+      if (removedItem) {
+        setAvoidanceItems(prev => [...prev, removedItem].sort((a, b) =>
+          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+        ));
+      }
+    }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {

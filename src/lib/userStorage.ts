@@ -900,6 +900,207 @@ export class UserStorage {
       return false;
     }
   }
+
+  // Weekly Constraints Management
+  async getCurrentWeeklyConstraint(): Promise<{id: string; weekStart: string; constraint: string; reason?: string; isActive: boolean} | null> {
+    try {
+      const weeklyConstraints = await this.getUserConfig('weekly_constraints', []);
+      const now = new Date();
+      const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay()).toISOString().split('T')[0];
+
+      return weeklyConstraints.find((c: any) => c.weekStart === weekStart && c.isActive) || null;
+    } catch (error) {
+      console.error('Error getting current weekly constraint:', error);
+
+      // Fallback to old localStorage method
+      try {
+        const { getCurrentWeeklyConstraint } = await import('./storage');
+        return getCurrentWeeklyConstraint();
+      } catch (fallbackError) {
+        console.error('Fallback to storage.ts also failed:', fallbackError);
+        return null;
+      }
+    }
+  }
+
+  async setWeeklyConstraint(constraint: string, reason?: string): Promise<{id: string; weekStart: string; constraint: string; reason?: string; isActive: boolean} | null> {
+    try {
+      const now = new Date();
+      const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay()).toISOString().split('T')[0];
+
+      // Get existing constraints
+      const weeklyConstraints = await this.getUserConfig('weekly_constraints', []);
+
+      // Deactivate any existing constraint for this week
+      weeklyConstraints.forEach((c: any) => {
+        if (c.weekStart === weekStart) {
+          c.isActive = false;
+        }
+      });
+
+      // Create new constraint
+      const newConstraint = {
+        id: `constraint-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        weekStart,
+        constraint,
+        reason,
+        isActive: true,
+        createdAt: new Date().toISOString()
+      };
+
+      weeklyConstraints.push(newConstraint);
+
+      // Save to Supabase via user config
+      await this.setUserConfig('weekly_constraints', weeklyConstraints);
+
+      console.log('✅ Weekly constraint saved to Supabase and localStorage');
+      return newConstraint;
+    } catch (error) {
+      console.error('Error saving weekly constraint:', error);
+
+      // Fallback to old localStorage method
+      try {
+        const { setWeeklyConstraint } = await import('./storage');
+        return setWeeklyConstraint(constraint, reason);
+      } catch (fallbackError) {
+        console.error('Fallback to storage.ts also failed:', fallbackError);
+        return null;
+      }
+    }
+  }
+
+  async clearWeeklyConstraint(weekStart?: string): Promise<boolean> {
+    try {
+      const targetWeekStart = weekStart || new Date(Date.now() - new Date().getDay() * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+      // Get existing constraints
+      const weeklyConstraints = await this.getUserConfig('weekly_constraints', []);
+
+      // Deactivate constraint for the specified week
+      let found = false;
+      weeklyConstraints.forEach((c: any) => {
+        if (c.weekStart === targetWeekStart) {
+          c.isActive = false;
+          found = true;
+        }
+      });
+
+      if (found) {
+        await this.setUserConfig('weekly_constraints', weeklyConstraints);
+        console.log('✅ Weekly constraint cleared from Supabase and localStorage');
+      }
+
+      return found;
+    } catch (error) {
+      console.error('Error clearing weekly constraint:', error);
+      return false;
+    }
+  }
+
+  // Avoidance Items Management
+  async getAvoidanceItems(): Promise<{id: string; text: string; isCompleted: boolean; createdAt: string}[]> {
+    try {
+      const avoidanceItems = await this.getUserConfig('avoidance_items', []);
+      return avoidanceItems;
+    } catch (error) {
+      console.error('Error getting avoidance items:', error);
+
+      // Fallback to old localStorage method
+      try {
+        const { getAvoidanceItems } = await import('./storage');
+        return getAvoidanceItems();
+      } catch (fallbackError) {
+        console.error('Fallback to storage.ts also failed:', fallbackError);
+        return [];
+      }
+    }
+  }
+
+  async addAvoidanceItem(text: string): Promise<{id: string; text: string; isCompleted: boolean; createdAt: string} | null> {
+    try {
+      const avoidanceItems = await this.getUserConfig('avoidance_items', []);
+
+      const newItem = {
+        id: `avoid-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        text: text.trim(),
+        isCompleted: false,
+        createdAt: new Date().toISOString()
+      };
+
+      avoidanceItems.push(newItem);
+      await this.setUserConfig('avoidance_items', avoidanceItems);
+
+      console.log('✅ Avoidance item added to Supabase and localStorage');
+      return newItem;
+    } catch (error) {
+      console.error('Error adding avoidance item:', error);
+
+      // Fallback to old localStorage method
+      try {
+        const { addAvoidanceItem } = await import('./storage');
+        return addAvoidanceItem(text);
+      } catch (fallbackError) {
+        console.error('Fallback to storage.ts also failed:', fallbackError);
+        return null;
+      }
+    }
+  }
+
+  async toggleAvoidanceItem(itemId: string): Promise<boolean> {
+    try {
+      const avoidanceItems = await this.getUserConfig('avoidance_items', []);
+      const item = avoidanceItems.find((item: any) => item.id === itemId);
+
+      if (item) {
+        item.isCompleted = !item.isCompleted;
+        await this.setUserConfig('avoidance_items', avoidanceItems);
+        console.log('✅ Avoidance item toggled in Supabase and localStorage');
+        return true;
+      }
+
+      return false;
+    } catch (error) {
+      console.error('Error toggling avoidance item:', error);
+
+      // Fallback to old localStorage method
+      try {
+        const { toggleAvoidanceItem } = await import('./storage');
+        toggleAvoidanceItem(itemId);
+        return true;
+      } catch (fallbackError) {
+        console.error('Fallback to storage.ts also failed:', fallbackError);
+        return false;
+      }
+    }
+  }
+
+  async deleteAvoidanceItem(itemId: string): Promise<boolean> {
+    try {
+      const avoidanceItems = await this.getUserConfig('avoidance_items', []);
+      const originalLength = avoidanceItems.length;
+      const filteredItems = avoidanceItems.filter((item: any) => item.id !== itemId);
+
+      if (filteredItems.length !== originalLength) {
+        await this.setUserConfig('avoidance_items', filteredItems);
+        console.log('✅ Avoidance item deleted from Supabase and localStorage');
+        return true;
+      }
+
+      return false;
+    } catch (error) {
+      console.error('Error deleting avoidance item:', error);
+
+      // Fallback to old localStorage method
+      try {
+        const { deleteAvoidanceItem } = await import('./storage');
+        deleteAvoidanceItem(itemId);
+        return true;
+      } catch (fallbackError) {
+        console.error('Fallback to storage.ts also failed:', fallbackError);
+        return false;
+      }
+    }
+  }
 }
 
 // Global instance

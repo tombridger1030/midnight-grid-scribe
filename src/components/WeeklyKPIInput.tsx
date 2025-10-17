@@ -135,7 +135,17 @@ const WeeklyKPIInput: React.FC<WeeklyKPIInputProps> = ({ onWeekChange }) => {
   const incrementKPI = async (kpiId: string) => {
     const kpi = userKPIs.find(k => k.kpi_id === kpiId);
     const step = kpi?.unit === 'hours' ? 0.5 : 1;
-    const currentValue = values[kpiId] || 0;
+    let currentValue = values[kpiId] || 0;
+
+    // For average KPIs, get the correct calculated current average
+    const isAverageKPI = kpi?.is_average || kpiId === 'sleepAverage' || kpi?.name === 'Sleep Average';
+    if (isAverageKPI) {
+      const dailyValues = getWeeklyDailyValues(currentWeek, kpiId);
+      const daysWithData = dailyValues.filter(val => val > 0).length;
+      const totalValue = dailyValues.reduce((sum, val) => sum + (val || 0), 0);
+      currentValue = daysWithData > 0 ? (totalValue / daysWithData) : 0;
+    }
+
     updateKPI(kpiId, currentValue + step);
   };
 
@@ -143,7 +153,17 @@ const WeeklyKPIInput: React.FC<WeeklyKPIInputProps> = ({ onWeekChange }) => {
   const decrementKPI = async (kpiId: string) => {
     const kpi = userKPIs.find(k => k.kpi_id === kpiId);
     const step = kpi?.unit === 'hours' ? 0.5 : 1;
-    const currentValue = values[kpiId] || 0;
+    let currentValue = values[kpiId] || 0;
+
+    // For average KPIs, get the correct calculated current average
+    const isAverageKPI = kpi?.is_average || kpiId === 'sleepAverage' || kpi?.name === 'Sleep Average';
+    if (isAverageKPI) {
+      const dailyValues = getWeeklyDailyValues(currentWeek, kpiId);
+      const daysWithData = dailyValues.filter(val => val > 0).length;
+      const totalValue = dailyValues.reduce((sum, val) => sum + (val || 0), 0);
+      currentValue = daysWithData > 0 ? (totalValue / daysWithData) : 0;
+    }
+
     updateKPI(kpiId, Math.max(0, currentValue - step));
   };
 
@@ -388,10 +408,22 @@ const WeeklyKPIInput: React.FC<WeeklyKPIInputProps> = ({ onWeekChange }) => {
 
           <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
             {kpis.map(kpi => {
-              const currentValue = values[kpi.kpi_id] || 0;
+              const rawValue = values[kpi.kpi_id] || 0;
 
               // Check if this is an average-based KPI
               const isAverageKPI = kpi.is_average || kpi.kpi_id === 'sleepAverage' || kpi.name === 'Sleep Average';
+
+              // Calculate the correct current value display
+              let currentValue = rawValue;
+              if (isAverageKPI) {
+                // For average KPIs, calculate the actual average from daily data
+                const dailyValues = getWeeklyDailyValues(currentWeek, kpi.kpi_id);
+                const daysWithData = dailyValues.filter(val => val > 0).length;
+                const totalValue = dailyValues.reduce((sum, val) => sum + (val || 0), 0);
+
+                // Show the average, not the total
+                currentValue = daysWithData > 0 ? Math.round((totalValue / daysWithData) * 10) / 10 : 0;
+              }
 
               // Calculate progress based on KPI type
               let progress = 0;

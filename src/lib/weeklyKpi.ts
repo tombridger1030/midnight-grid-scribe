@@ -32,6 +32,29 @@ export function clearKPIConfigCache() {
   kpiConfigCache = null;
 }
 
+// Helper function to calculate weekly value from daily array based on KPI type
+async function calculateWeeklyValueFromDaily(kpiId: string, dailyArray: number[]): Promise<number> {
+  const arr = dailyArray.map(v => (Number.isFinite(Number(v)) ? Math.max(0, Number(v)) : 0));
+  const sum = arr.reduce((s, n) => s + n, 0);
+  const isAvgKPI = await isAverageKPI(kpiId);
+
+  if (isAvgKPI) {
+    // Store the average per day (only for days with data)
+    const daysWithData = arr.filter(v => v > 0).length;
+    return daysWithData > 0 ? sum / daysWithData : 0;
+  } else if (kpiId === 'noCompromises') {
+    // Store longest streak within this week (consecutive 1s)
+    let best = 0, cur = 0;
+    for (const v of arr) {
+      if (Number(v) > 0) { cur += 1; best = Math.max(best, cur); } else { cur = 0; }
+    }
+    return best;
+  } else {
+    // Default: weekly total
+    return sum;
+  }
+}
+
 // Weekly KPI targets and definitions
 export interface WeeklyKPIDefinition {
   id: string;
@@ -384,18 +407,39 @@ export const getWeeklyKPIRecord = (weekKey: string): WeeklyKPIRecord | null => {
 export const updateWeeklyKPIRecord = async (weekKey: string, values: Partial<WeeklyKPIValues>): Promise<void> => {
   const data = loadWeeklyKPIs();
   const existingRecordIndex = data.records.findIndex(record => record.weekKey === weekKey);
-  
+
   const now = new Date().toISOString();
   const isUpdatingOldData = existingRecordIndex >= 0; // Flag to check if we're updating existing data
-  
+
   if (existingRecordIndex >= 0) {
     // Update existing record
+    const record = data.records[existingRecordIndex];
+
+    // Merge the values first
+    const mergedValues = {
+      ...record.values,
+      ...values
+    };
+
+    // For KPIs with daily data, recalculate from daily instead of using raw values
+    const finalValues = { ...mergedValues };
+    for (const [kpiId, value] of Object.entries(values)) {
+      // Check if we have daily data for this KPI
+      const dailyData = getWeeklyDailyValues(weekKey, kpiId);
+      const hasDailyData = dailyData.some(v => v > 0);
+
+      if (hasDailyData) {
+        // Recalculate from daily data to ensure correct average/total calculation
+        finalValues[kpiId] = await calculateWeeklyValueFromDaily(kpiId, dailyData);
+      } else {
+        // Use provided value if no daily data exists
+        finalValues[kpiId] = value;
+      }
+    }
+
     data.records[existingRecordIndex] = {
-      ...data.records[existingRecordIndex],
-      values: {
-        ...data.records[existingRecordIndex].values,
-        ...values
-      },
+      ...record,
+      values: finalValues,
       updatedAt: now
     };
   } else {
@@ -494,24 +538,7 @@ export const updateWeeklyDailyValue = async (
   record.dailyByDate[dateKey][kpiId] = Math.max(0, Number(value) || 0);
 
   // Compute weekly aggregate with KPI-specific rules
-  const sum = arr.reduce((s, n) => s + (Number.isFinite(n) ? Number(n) : 0), 0);
-  const isAvgKPI = await isAverageKPI(kpiId);
-
-  if (isAvgKPI) {
-    // Store the average per day (only for days with data)
-    const daysWithData = arr.filter(v => v > 0).length;
-    record.values[kpiId] = daysWithData > 0 ? sum / daysWithData : 0;
-  } else if (kpiId === 'noCompromises') {
-    // Store longest streak within this week (consecutive 1s)
-    let best = 0, cur = 0;
-    for (const v of arr) {
-      if (Number(v) > 0) { cur += 1; best = Math.max(best, cur); } else { cur = 0; }
-    }
-    record.values[kpiId] = best;
-  } else {
-    // Default: weekly total
-    record.values[kpiId] = sum;
-  }
+  record.values[kpiId] = await calculateWeeklyValueFromDaily(kpiId, arr);
   record.updatedAt = now;
 
   await saveWeeklyKPIs(data);

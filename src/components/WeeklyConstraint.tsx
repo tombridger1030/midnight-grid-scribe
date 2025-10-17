@@ -1,11 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { Focus, Edit2, Check, X, Calendar } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import {
-  getCurrentWeeklyConstraint,
-  setWeeklyConstraint,
-  WeeklyConstraint as WeeklyConstraintType
-} from '@/lib/storage';
+import { userStorage } from '@/lib/userStorage';
+
+// Define WeeklyConstraint type locally to match userStorage interface
+type WeeklyConstraintType = {
+  id: string;
+  weekStart: string;
+  constraint: string;
+  reason?: string;
+  isActive: boolean;
+} | null;
 
 interface WeeklyConstraintProps {
   className?: string;
@@ -22,9 +27,14 @@ export const WeeklyConstraint: React.FC<WeeklyConstraintProps> = ({
   const [editReason, setEditReason] = useState('');
 
   useEffect(() => {
-    const loadConstraint = () => {
-      const constraint = getCurrentWeeklyConstraint();
-      setCurrentConstraint(constraint);
+    const loadConstraint = async () => {
+      try {
+        const constraint = await userStorage.getCurrentWeeklyConstraint();
+        setCurrentConstraint(constraint);
+      } catch (error) {
+        console.error('Failed to load weekly constraint:', error);
+        setCurrentConstraint(null);
+      }
     };
 
     loadConstraint();
@@ -40,18 +50,26 @@ export const WeeklyConstraint: React.FC<WeeklyConstraintProps> = ({
     setIsEditing(true);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!editConstraint.trim()) return;
 
-    const constraint = setWeeklyConstraint(
-      editConstraint.trim(),
-      editReason.trim() || undefined
-    );
+    try {
+      const constraint = await userStorage.setWeeklyConstraint(
+        editConstraint.trim(),
+        editReason.trim() || undefined
+      );
 
-    setCurrentConstraint(constraint);
-    setIsEditing(false);
-    setEditConstraint('');
-    setEditReason('');
+      setCurrentConstraint(constraint);
+      setIsEditing(false);
+      setEditConstraint('');
+      setEditReason('');
+    } catch (error) {
+      console.error('Failed to save weekly constraint:', error);
+      // Still close the editing mode but show the error in console
+      setIsEditing(false);
+      setEditConstraint('');
+      setEditReason('');
+    }
   };
 
   const handleCancel = () => {
