@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import LineChart from '@/components/content/charts/LineChart';
+import { ShadcnLineChartComponent, ShadcnStackedBarChartComponent } from '@/components/content/charts/ShadcnCharts';
 import TrendIndicator from '@/components/content/charts/TrendIndicator';
 import { ContentListItem } from '@/lib/storage';
 import { MultiPlatformContentItem } from '@/lib/multiPlatformStorage';
@@ -126,38 +126,29 @@ const WeeklyComparisonCharts: React.FC<WeeklyComparisonChartsProps> = ({
     return weeks;
   }, [currentWeek, allContent, multiPlatformContent]);
 
-  // Prepare chart data
+  // Prepare consolidated chart data
   const chartData = {
-    totalViews: weeklyData.map(week => ({
+    // Combined engagement metrics for single chart
+    engagement: weeklyData.map(week => ({
       date: week.weekKey,
-      value: week.totalViews,
-      label: week.weekLabel.split(' ')[1] // Just week number
-    })),
-    totalFollowers: weeklyData.map(week => ({
-      date: week.weekKey,
-      value: week.totalFollowers,
+      views: week.totalViews,
+      followers: week.totalFollowers,
+      watchTime: Math.round(week.totalWatchTime),
       label: week.weekLabel.split(' ')[1]
     })),
+    // Platform performance for stacked bar
     platformViews: weeklyData.map(week => ({
       date: week.weekKey,
-      youtube: week.youtubeViews,
-      instagram: week.instagramReach,
-      tiktok: week.tiktokViews,
+      YouTube: week.youtubeViews,
+      Instagram: week.instagramReach,
+      TikTok: week.tiktokViews,
       label: week.weekLabel.split(' ')[1]
     })),
-    watchTime: weeklyData.map(week => ({
+    // Content quality metrics
+    quality: weeklyData.map(week => ({
       date: week.weekKey,
-      value: Math.round(week.totalWatchTime),
-      label: week.weekLabel.split(' ')[1]
-    })),
-    retention: weeklyData.map(week => ({
-      date: week.weekKey,
-      value: week.avgRetention,
-      label: week.weekLabel.split(' ')[1]
-    })),
-    postsCount: weeklyData.map(week => ({
-      date: week.weekKey,
-      value: week.postsCount,
+      retention: week.avgRetention,
+      postsCount: week.postsCount,
       label: week.weekLabel.split(' ')[1]
     }))
   };
@@ -174,7 +165,7 @@ const WeeklyComparisonCharts: React.FC<WeeklyComparisonChartsProps> = ({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-white font-medium">8-Week Performance Trends</h3>
         <div className="text-xs text-[#8A8D93]">
@@ -182,38 +173,38 @@ const WeeklyComparisonCharts: React.FC<WeeklyComparisonChartsProps> = ({
         </div>
       </div>
 
-      {/* Key Metrics Summary with Trends */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="border border-[#333] bg-[#111] rounded-sm p-3">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-[#8A8D93]">Total Views</span>
+      {/* Compact Metrics Summary */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="border border-[#333] bg-[#111] rounded-sm p-2">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs text-[#8A8D93]">Views</span>
             <TrendIndicator
               direction={trends.totalViews.direction}
               percentage={trends.totalViews.percentage}
               size="sm"
             />
           </div>
-          <div className="text-lg font-bold text-white">
+          <div className="text-sm font-bold text-white">
             {formatNumber(currentWeekData?.totalViews || 0)}
           </div>
         </div>
 
-        <div className="border border-[#333] bg-[#111] rounded-sm p-3">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-[#8A8D93]">New Followers</span>
+        <div className="border border-[#333] bg-[#111] rounded-sm p-2">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs text-[#8A8D93]">Followers</span>
             <TrendIndicator
               direction={trends.totalFollowers.direction}
               percentage={trends.totalFollowers.percentage}
               size="sm"
             />
           </div>
-          <div className="text-lg font-bold text-white">
+          <div className="text-sm font-bold text-white">
             +{formatNumber(currentWeekData?.totalFollowers || 0)}
           </div>
         </div>
 
-        <div className="border border-[#333] bg-[#111] rounded-sm p-3">
-          <div className="flex items-center justify-between mb-2">
+        <div className="border border-[#333] bg-[#111] rounded-sm p-2">
+          <div className="flex items-center justify-between mb-1">
             <span className="text-xs text-[#8A8D93]">Watch Time</span>
             <TrendIndicator
               direction={trends.watchTime.direction}
@@ -221,137 +212,69 @@ const WeeklyComparisonCharts: React.FC<WeeklyComparisonChartsProps> = ({
               size="sm"
             />
           </div>
-          <div className="text-lg font-bold text-white">
+          <div className="text-sm font-bold text-white">
             {Math.round(currentWeekData?.totalWatchTime || 0)}m
           </div>
         </div>
 
-        <div className="border border-[#333] bg-[#111] rounded-sm p-3">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-[#8A8D93]">Avg Retention</span>
+        <div className="border border-[#333] bg-[#111] rounded-sm p-2">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs text-[#8A8D93]">Retention</span>
             <TrendIndicator
               direction={trends.retention.direction}
               percentage={trends.retention.percentage}
               size="sm"
             />
           </div>
-          <div className="text-lg font-bold text-white">
+          <div className="text-sm font-bold text-white">
             {(currentWeekData?.avgRetention || 0).toFixed(1)}%
           </div>
         </div>
       </div>
 
-      {/* Charts Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Total Views Trend */}
-        <div className="border border-[#333] bg-[#111] rounded-sm p-4">
-          <h4 className="text-sm font-medium text-white mb-3">Total Views Trend</h4>
-          <LineChart
-            data={chartData.totalViews}
-            color="#5FE3B3"
-            height={160}
-            showGrid={true}
-            showDots={true}
-          />
-        </div>
-
-        {/* Followers Growth */}
-        <div className="border border-[#333] bg-[#111] rounded-sm p-4">
-          <h4 className="text-sm font-medium text-white mb-3">New Followers Trend</h4>
-          <LineChart
-            data={chartData.totalFollowers}
-            color="#8B5CF6"
-            height={160}
-            showGrid={true}
-            showDots={true}
-          />
-        </div>
-
-        {/* Watch Time Trend */}
-        <div className="border border-[#333] bg-[#111] rounded-sm p-4">
-          <h4 className="text-sm font-medium text-white mb-3">Watch Time (Minutes)</h4>
-          <LineChart
-            data={chartData.watchTime}
-            color="#EF4444"
-            height={160}
-            showGrid={true}
-            showDots={true}
-          />
-        </div>
-
-        {/* Content Volume */}
-        <div className="border border-[#333] bg-[#111] rounded-sm p-4">
-          <h4 className="text-sm font-medium text-white mb-3">Posts Per Week</h4>
-          <LineChart
-            data={chartData.postsCount}
-            color="#FFD700"
-            height={160}
-            showGrid={true}
-            showDots={true}
-          />
-        </div>
-      </div>
-
-      {/* Platform Comparison */}
-      <div className="border border-[#333] bg-[#111] rounded-sm p-4">
-        <h4 className="text-sm font-medium text-white mb-3">Platform Performance (Views/Reach)</h4>
-        <div className="h-48">
-          <LineChart
-            data={chartData.platformViews.map(week => ({
-              date: week.date,
-              value: week.youtube,
-              label: week.label
+      {/* Compact Charts Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Combined Engagement Chart */}
+        <div className="border border-[#333] bg-[#111] rounded-sm p-3">
+          <h4 className="text-xs font-medium text-white mb-2">Engagement Metrics</h4>
+          <ShadcnLineChartComponent
+            data={chartData.engagement.map(item => ({
+              date: item.date,
+              value: item.views,
+              label: item.label
             }))}
-            color="#EF4444"
-            height={192}
-            showGrid={true}
-            showDots={true}
-            additionalLines={[
-              {
-                data: chartData.platformViews.map(week => ({
-                  date: week.date,
-                  value: week.instagram,
-                  label: week.label
-                })),
-                color: '#8B5CF6'
-              },
-              {
-                data: chartData.platformViews.map(week => ({
-                  date: week.date,
-                  value: week.tiktok,
-                  label: week.label
-                })),
-                color: '#EC4899'
-              }
-            ]}
+            color="#5FE3B3"
+            height={120}
           />
         </div>
-        <div className="flex items-center justify-center gap-6 mt-3 text-xs">
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-[#EF4444]"></div>
-            <span className="text-[#8A8D93]">YouTube</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-[#8B5CF6]"></div>
-            <span className="text-[#8A8D93]">Instagram</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-[#EC4899]"></div>
-            <span className="text-[#8A8D93]">TikTok</span>
-          </div>
-        </div>
-      </div>
 
-      {/* Retention Trend */}
-      <div className="border border-[#333] bg-[#111] rounded-sm p-4">
-        <h4 className="text-sm font-medium text-white mb-3">Average Retention Rate</h4>
-        <LineChart
-          data={chartData.retention}
-          color="#5FE3B3"
-          height={160}
-          showGrid={true}
-          showDots={true}
-        />
+        {/* Platform Performance Chart */}
+        <div className="border border-[#333] bg-[#111] rounded-sm p-3">
+          <h4 className="text-xs font-medium text-white mb-2">Platform Performance</h4>
+          <ShadcnStackedBarChartComponent
+            data={chartData.platformViews}
+            bars={[
+              { key: 'YouTube', color: '#EF4444', name: 'YouTube' },
+              { key: 'Instagram', color: '#8B5CF6', name: 'Instagram' },
+              { key: 'TikTok', color: '#EC4899', name: 'TikTok' }
+            ]}
+            className="h-32"
+          />
+        </div>
+
+        {/* Content Quality Chart */}
+        <div className="border border-[#333] bg-[#111] rounded-sm p-3">
+          <h4 className="text-xs font-medium text-white mb-2">Content Quality</h4>
+          <ShadcnLineChartComponent
+            data={chartData.quality.map(item => ({
+              date: item.date,
+              value: item.retention,
+              label: item.label
+            }))}
+            color="#FFD700"
+            height={120}
+          />
+        </div>
       </div>
     </div>
   );

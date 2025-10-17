@@ -15,6 +15,7 @@ import ContentRoot from "./pages/ContentRoot";
 import ContentDashboard from "./pages/ContentDashboard";
 import ContentWeekly from "./pages/ContentWeekly";
 import ContentInput from "./pages/ContentInput";
+import ContentMetrics from "./pages/ContentMetrics";
 import Profile from "./pages/Profile";
 import { useState, useEffect } from "react";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
@@ -25,6 +26,7 @@ import { kpiManager } from "@/lib/configurableKpis";
 import { userStorage } from "@/lib/userStorage";
 import { preferencesManager } from "@/lib/userPreferences";
 import { supabase } from "@/lib/supabase";
+import { CustomHeroUIProvider } from "@/components/providers/HeroUIProvider";
 
 const queryClient = new QueryClient();
 
@@ -97,6 +99,7 @@ const AppContent = () => {
             <Route path="dashboard" element={<ContentDashboard />} />
             <Route path="weekly" element={<ContentWeekly />} />
             <Route path="input" element={<ContentInput />} />
+            <Route path="metrics" element={<ContentMetrics />} />
           </Route>
         </Route>
         <Route path="*" element={<NotFound />} />
@@ -110,11 +113,13 @@ const App = () => {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <TooltipProvider>
-          <Toaster />
-          <Sonner />
-          <AppContent />
-        </TooltipProvider>
+        <CustomHeroUIProvider>
+          <TooltipProvider>
+            <Toaster />
+            <Sonner />
+            <AppContent />
+          </TooltipProvider>
+        </CustomHeroUIProvider>
       </AuthProvider>
     </QueryClientProvider>
   );

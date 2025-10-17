@@ -20,6 +20,7 @@ const Content: React.FC = () => {
   const isDashboard = location.pathname === base || location.pathname === `${base}/dashboard`;
   const isWeekly = location.pathname === `${base}/weekly`;
   const isInput = location.pathname === `${base}/input`;
+  const isMetrics = location.pathname === `${base}/metrics`;
 
   return (
     <div className="flex flex-col gap-3">
@@ -29,6 +30,7 @@ const Content: React.FC = () => {
           <SubNavButton to={`${base}/dashboard`} label="Dashboard" active={isDashboard} />
           <SubNavButton to={`${base}/weekly`} label="Weekly Review" active={isWeekly} />
           <SubNavButton to={`${base}/input`} label="Per Content Input" active={isInput} />
+          <SubNavButton to={`${base}/metrics`} label="Update Metrics" active={isMetrics} />
         </div>
       </div>
 

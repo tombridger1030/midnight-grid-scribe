@@ -7,12 +7,14 @@ import CurrentWeekOverview from '@/components/content/dashboard/CurrentWeekOverv
 import UnifiedContentCard from '@/components/content/shared/UnifiedContentCard';
 import ContentEditor from '@/components/content/shared/ContentEditor';
 import MultiPlatformContentEditor from '@/components/content/shared/MultiPlatformContentEditor';
-import MetricUpdatePrompt from '@/components/content/shared/MetricUpdatePrompt';
 import LineChart from '@/components/content/charts/LineChart';
 import PieChart from '@/components/content/charts/PieChart';
 import MetricGauge from '@/components/content/charts/MetricGauge';
 import TrendIndicator from '@/components/content/charts/TrendIndicator';
 import PerformanceBar from '@/components/content/charts/PerformanceBar';
+import EnhancedContentDashboard from '@/components/content/dashboard/EnhancedContentDashboard';
+import { Button, Card, CardBody, CardHeader, Chip } from '@heroui/react';
+import { BarChart3 } from 'lucide-react';
 
 const ContentDashboard: React.FC = () => {
   const [allContent, setAllContent] = useState<ContentListItem[]>([]);
@@ -21,7 +23,6 @@ const ContentDashboard: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [editingContentId, setEditingContentId] = useState<string | null>(null);
   const [editingMultiPlatform, setEditingMultiPlatform] = useState<{ title: string; publishedAt: string } | null>(null);
-  const [showMetricUpdates, setShowMetricUpdates] = useState(false);
 
   // Load recent content for real-time overview
   const loadContent = async () => {
@@ -47,8 +48,6 @@ const ContentDashboard: React.FC = () => {
 
   useEffect(() => {
     loadContent();
-    // Show metric update prompts after loading content
-    setTimeout(() => setShowMetricUpdates(true), 1000);
   }, []);
 
   const handleEdit = (contentId: string) => {
@@ -182,185 +181,8 @@ const ContentDashboard: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="text-sm text-[#8A8D93]">
-        Visual overview of all your accounts (@konavus). Check Weekly Review for detailed progression analysis.
-      </div>
 
-      {/* Performance Trends - Visual First */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-        <TrendIndicator
-          label="Avg Views/Post"
-          current={currentAvgViews}
-          previous={previousAvgViews}
-          size="sm"
-        />
-        <TrendIndicator
-          label="Total Follows"
-          current={totalFollows}
-          previous={0}
-          size="sm"
-        />
-        <TrendIndicator
-          label="Retention Rate"
-          current={avgRetention}
-          previous={20}
-          format="percentage"
-          size="sm"
-        />
-        <TrendIndicator
-          label="Posts This Month"
-          current={postsThisMonth}
-          previous={previous15DaysUnique.length}
-          size="sm"
-        />
-      </div>
-
-      {/* Charts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <LineChart
-          data={last30DaysData}
-          title="Views Over Time (30 Days)"
-          color="#5FE3B3"
-          height={200}
-          yAxisLabel="Views"
-          showGrid={true}
-        />
-        <div className="grid grid-cols-2 gap-4">
-          <PieChart
-            data={platformDistribution}
-            title="Platform Distribution"
-            size={180}
-            showPercentages={true}
-          />
-          <PieChart
-            data={formatDistribution}
-            title="Content Format"
-            size={180}
-            showPercentages={true}
-          />
-        </div>
-      </div>
-
-      {/* Performance Gauges */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <MetricGauge
-          label="Views Target"
-          value={totalViews}
-          target={50000}
-          color="#5FE3B3"
-          size={120}
-        />
-        <MetricGauge
-          label="Followers Goal"
-          value={totalFollows}
-          target={1000}
-          color="#8B5CF6"
-          size={120}
-        />
-        <MetricGauge
-          label="Retention Rate"
-          value={avgRetention}
-          target={35}
-          color="#EC4899"
-          unit="%"
-          size={120}
-        />
-        <MetricGauge
-          label="Monthly Posts"
-          value={postsThisMonth}
-          target={20}
-          color="#EF4444"
-          size={120}
-        />
-      </div>
-
-      {/* Performance Bars */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="border border-[#333] bg-[#111] rounded-sm p-4 space-y-4">
-          <h3 className="text-sm font-medium text-white mb-4">Growth Progress</h3>
-          <PerformanceBar
-            label="Instagram Target 2025"
-            value={totalFollows * 0.4}
-            target={100000}
-            color="#8B5CF6"
-            height={16}
-          />
-          <PerformanceBar
-            label="TikTok Target 2025"
-            value={totalFollows * 0.35}
-            target={100000}
-            color="#EC4899"
-            height={16}
-          />
-          <PerformanceBar
-            label="YouTube Target 2025"
-            value={totalFollows * 0.25}
-            target={10000}
-            color="#EF4444"
-            height={16}
-          />
-        </div>
-
-        <div className="border border-[#333] bg-[#111] rounded-sm p-4 space-y-4">
-          <h3 className="text-sm font-medium text-white mb-4">Monthly Metrics</h3>
-          <PerformanceBar
-            label="Views This Month"
-            value={totalViews}
-            target={50000}
-            color="#5FE3B3"
-            height={16}
-          />
-          <PerformanceBar
-            label="Posts This Month"
-            value={postsThisMonth}
-            target={20}
-            color="#F59E0B"
-            height={16}
-          />
-          <PerformanceBar
-            label="Avg Retention Rate"
-            value={avgRetention}
-            target={35}
-            color="#06B6D4"
-            height={16}
-          />
-        </div>
-      </div>
-
-      {/* Latest Posts - Compact */}
-      {latestContent.length > 0 && (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-medium text-white">Latest Posts</h3>
-            <div className="text-xs text-[#8A8D93]">Most recent content</div>
-          </div>
-
-          <div className="space-y-2">
-            {latestContent.map((item) => (
-              <UnifiedContentCard
-                key={`${item.type}-${item.id}`}
-                content={item}
-                variant="compact"
-                showMetrics={true}
-                showEditButton={true}
-                onEdit={handleEdit}
-                onEditMultiPlatform={handleEditMultiPlatform}
-              />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {allCombinedContent.length === 0 && (
-        <div className="text-center py-12 text-[#8A8D93] border border-[#333] bg-[#111] rounded-sm">
-          <div className="text-lg mb-2">📊 Dashboard Empty</div>
-          <div className="text-sm mb-4">No content data available yet</div>
-          <div className="text-xs opacity-70">
-            Add some content through the input page to see your dashboard metrics
-          </div>
-        </div>
-      )}
+      <EnhancedContentDashboard />
 
       {/* Content Editor Modals */}
       {editingContentId && (
@@ -382,14 +204,7 @@ const ContentDashboard: React.FC = () => {
         />
       )}
 
-      {/* Metric Update Prompts */}
-      {showMetricUpdates && (
-        <MetricUpdatePrompt
-          onComplete={() => setShowMetricUpdates(false)}
-          onDismiss={() => setShowMetricUpdates(false)}
-        />
-      )}
-    </div>
+      </div>
   );
 };
 
