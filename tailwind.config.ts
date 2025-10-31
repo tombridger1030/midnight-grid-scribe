@@ -154,5 +154,5 @@ export default {
 			}
 		}
 	},
-	plugins: [tailwindcssAnimate],
+	plugins: [tailwindcssAnimate, require('@heroui/react').heroui],
 } satisfies Config;

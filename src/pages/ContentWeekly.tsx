@@ -2,10 +2,12 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { loadRecentContent, ContentListItem } from '@/lib/storage';
 import { loadMultiPlatformContent, MultiPlatformContentItem } from '@/lib/multiPlatformStorage';
 import { getCurrentWeek, formatWeekKey, getWeekDayDates } from '@/lib/weeklyKpi';
-import { ChevronLeft, ChevronRight, Edit2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Edit2, Settings } from 'lucide-react';
 import PlatformIcon from '@/components/content/shared/PlatformIcon';
 import { formatNumber } from '@/lib/chartUtils';
 import WeeklyComparisonCharts from '@/components/content/weekly/WeeklyComparisonCharts';
+import EnhancedWeeklyReview from '@/components/content/weekly/EnhancedWeeklyReview';
+import { Button, Card, CardBody, CardHeader, Chip } from '@heroui/react';
 
 // Instagram Weekly Card Component with editing capability
 interface InstagramWeeklyCardProps {
@@ -212,6 +214,7 @@ const ContentWeekly: React.FC = () => {
   const [currentWeek, setCurrentWeek] = useState(getCurrentWeek());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [useEnhancedView, setUseEnhancedView] = useState(true);
 
   // Load content data for weekly analysis
   const loadContent = async () => {
@@ -530,192 +533,247 @@ const ContentWeekly: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Week Navigation Header */}
-      <div className="flex items-center justify-between border border-[#333] bg-[#111] rounded-sm p-4">
-        <button
-          onClick={() => navigateWeek('prev')}
-          className="flex items-center justify-center w-10 h-10 border border-[#333] bg-[#0F0F0F] rounded-sm hover:border-[#555] transition-colors"
-        >
-          <ChevronLeft size={16} className="text-[#8A8D93]" />
-        </button>
+      {/* Header with View Toggle */}
+      <Card className="bg-[#111] border-[#333]">
+        <CardBody className="p-4">
+          <div className="flex items-center justify-between">
+            <Button
+              isIconOnly
+              variant="flat"
+              color="default"
+              onClick={() => navigateWeek('prev')}
+            >
+              <ChevronLeft size={16} />
+            </Button>
 
-        <div className="text-center">
-          <h2 className="text-lg text-white font-medium cyberpunk-header">{formatWeekKey(currentWeek)}</h2>
-          <div className="text-sm text-[#8A8D93]">
-            Week {currentWeek} • Weekly Performance Review
-          </div>
-        </div>
-
-        <button
-          onClick={() => navigateWeek('next')}
-          className="flex items-center justify-center w-10 h-10 border border-[#333] bg-[#0F0F0F] rounded-sm hover:border-[#555] transition-colors"
-        >
-          <ChevronRight size={16} className="text-[#8A8D93]" />
-        </button>
-      </div>
-
-      {/* Total Views Summary */}
-      <div className="border border-[#333] bg-[#111] rounded-sm p-4">
-        <div className="text-center">
-          <div className="text-2xl font-bold text-terminal-accent mb-1">
-            {formatNumber(weeklyMetrics.totals.views)}
-          </div>
-          <div className="text-sm text-[#8A8D93]">Total Views This Week</div>
-        </div>
-      </div>
-
-      {/* Platform-Specific Metrics */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* YouTube */}
-        <div className="border border-[#333] bg-[#111] rounded-sm p-4 space-y-4">
-          <div className="flex items-center space-x-2 mb-3">
-            <PlatformIcon platform="youtube" size="md" />
-            <h3 className="text-white font-medium">YouTube</h3>
-          </div>
-
-          {/* YouTube Shorts */}
-          <div className="space-y-2">
-            <h4 className="text-xs font-medium text-terminal-accent uppercase tracking-wide">Shorts</h4>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <div className="flex justify-between">
-                <span className="text-[#8A8D93]">Views</span>
-                <span className="text-white">{formatNumber(weeklyMetrics.youtube.shorts.views)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-[#8A8D93]">Likes</span>
-                <span className="text-white">{formatNumber(weeklyMetrics.youtube.shorts.likes)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-[#8A8D93]">Subscribers</span>
-                <span className="text-white">+{formatNumber(weeklyMetrics.youtube.shorts.subscribers)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-[#8A8D93]">Comments</span>
-                <span className="text-white">{formatNumber(weeklyMetrics.youtube.shorts.comments)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-[#8A8D93]">Retention</span>
-                <span className="text-white">{weeklyMetrics.youtube.shorts.avgRetention.toFixed(1)}%</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-[#8A8D93]">Swipe Rate</span>
-                <span className="text-white">{weeklyMetrics.youtube.shorts.avgSwipeRate.toFixed(1)}%</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-[#8A8D93]">New Viewers</span>
-                <span className="text-white">{weeklyMetrics.youtube.shorts.avgNewViewersPercent.toFixed(1)}%</span>
+            <div className="text-center">
+              <h2 className="text-lg text-white font-medium cyberpunk-header">{formatWeekKey(currentWeek)}</h2>
+              <div className="text-sm text-[#8A8D93]">
+                Week {currentWeek} • Weekly Performance Review
               </div>
             </div>
-          </div>
 
-          {/* YouTube Long Form */}
-          <div className="space-y-2 border-t border-[#333] pt-3">
-            <h4 className="text-xs font-medium text-terminal-accent uppercase tracking-wide">Long Form</h4>
-            <div className="space-y-1 text-xs">
-              <div className="flex justify-between">
-                <span className="text-[#8A8D93]">Views</span>
-                <span className="text-white">{formatNumber(weeklyMetrics.youtube.longs.views)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-[#8A8D93]">Subscribers</span>
-                <span className="text-white">+{formatNumber(weeklyMetrics.youtube.longs.subscribers)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-[#8A8D93]">Watch Time</span>
-                <span className="text-white">{Math.round(weeklyMetrics.youtube.longs.totalWatchTime)}m</span>
-              </div>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant={useEnhancedView ? "solid" : "flat"}
+                color={useEnhancedView ? "primary" : "default"}
+                onClick={() => setUseEnhancedView(true)}
+                startContent={<Settings size={14} />}
+              >
+                Enhanced
+              </Button>
+              <Button
+                size="sm"
+                variant={!useEnhancedView ? "solid" : "flat"}
+                color={!useEnhancedView ? "primary" : "default"}
+                onClick={() => setUseEnhancedView(false)}
+              >
+                Classic
+              </Button>
+              <Button
+                isIconOnly
+                variant="flat"
+                color="default"
+                onClick={() => navigateWeek('next')}
+              >
+                <ChevronRight size={16} />
+              </Button>
             </div>
           </div>
+        </CardBody>
+      </Card>
 
-          {/* Total Combined */}
-          <div className="border-t border-[#333] pt-3">
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-terminal-accent font-medium">Total Watch Time</span>
-              <span className="text-white font-bold">
-                {Math.round(weeklyMetrics.youtube.combined.totalWatchTime)}m
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Instagram */}
-        <InstagramWeeklyCard
-          weekKey={currentWeek}
-          totalReach={weeklyMetrics.instagram.totalReach}
-          profileVisits={weeklyMetrics.instagram.profileVisits}
-          followers={weeklyMetrics.instagram.followers}
-          onUpdate={loadContent}
-        />
-
-        {/* TikTok */}
-        <div className="border border-[#333] bg-[#111] rounded-sm p-4 space-y-4">
-          <div className="flex items-center space-x-2 mb-3">
-            <PlatformIcon platform="tiktok" size="md" />
-            <h3 className="text-white font-medium">TikTok</h3>
-          </div>
-
-          <div className="space-y-3">
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-[#8A8D93]">Views</span>
-              <span className="text-white font-medium">
-                {formatNumber(weeklyMetrics.tiktok.views)}
-              </span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-[#8A8D93]">Likes</span>
-              <span className="text-white font-medium">
-                {formatNumber(weeklyMetrics.tiktok.likes)}
-              </span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-[#8A8D93]">Followers</span>
-              <span className="text-white font-medium">
-                +{formatNumber(weeklyMetrics.tiktok.followers)}
-              </span>
-            </div>
-          </div>
+      {/* View Info */}
+      <div className="text-center">
+        <div className="text-sm text-[#8A8D93]">
+          {useEnhancedView ? (
+            <>
+              <Chip size="sm" color="primary" variant="flat" className="mb-2">
+                Enhanced View
+              </Chip>
+              <p>Full manual override controls for all platform metrics with modern charts</p>
+            </>
+          ) : (
+            <>
+              <Chip size="sm" color="default" variant="flat" className="mb-2">
+                Classic View
+              </Chip>
+              <p>Original weekly review with basic Instagram editing</p>
+            </>
+          )}
         </div>
       </div>
 
-      {/* Weekly Comparison Charts */}
-      <WeeklyComparisonCharts
-        currentWeek={currentWeek}
-        allContent={allContent}
-        multiPlatformContent={multiPlatformContent}
-      />
-
-      {/* Posting Schedule */}
-      <div className="border border-[#333] bg-[#111] rounded-sm p-4">
-        <h3 className="text-white font-medium mb-4 cyberpunk-header">Posting Schedule</h3>
-
-        <div className="grid grid-cols-7 gap-2">
-          {weeklyMetrics.postingSchedule.map((day, index) => (
-            <div key={index} className="text-center">
-              <div className="text-xs text-[#8A8D93] mb-1">{day.dayName}</div>
-              <div className={`w-full h-8 rounded-sm flex items-center justify-center text-sm font-medium ${
-                day.posts > 0
-                  ? 'bg-terminal-accent text-black'
-                  : 'bg-[#0F0F0F] border border-[#333] text-[#8A8D93]'
-              }`}>
-                {day.posts || '—'}
+      {/* Render the appropriate view */}
+      {useEnhancedView ? (
+        <EnhancedWeeklyReview />
+      ) : (
+        <>
+          {/* Total Views Summary */}
+          <div className="border border-[#333] bg-[#111] rounded-sm p-4">
+            <div className="text-center">
+              <div className="text-2xl font-bold text-terminal-accent mb-1">
+                {formatNumber(weeklyMetrics.totals.views)}
               </div>
-              <div className="text-xs text-[#8A8D93] mt-1">
-                {day.date.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' })}
+              <div className="text-sm text-[#8A8D93]">Total Views This Week</div>
+            </div>
+          </div>
+
+          {/* Platform-Specific Metrics */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* YouTube */}
+            <div className="border border-[#333] bg-[#111] rounded-sm p-4 space-y-4">
+              <div className="flex items-center space-x-2 mb-3">
+                <PlatformIcon platform="youtube" size="md" />
+                <h3 className="text-white font-medium">YouTube</h3>
+              </div>
+
+              {/* YouTube Shorts */}
+              <div className="space-y-2">
+                <h4 className="text-xs font-medium text-terminal-accent uppercase tracking-wide">Shorts</h4>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-[#8A8D93]">Views</span>
+                    <span className="text-white">{formatNumber(weeklyMetrics.youtube.shorts.views)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-[#8A8D93]">Likes</span>
+                    <span className="text-white">{formatNumber(weeklyMetrics.youtube.shorts.likes)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-[#8A8D93]">Subscribers</span>
+                    <span className="text-white">+{formatNumber(weeklyMetrics.youtube.shorts.subscribers)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-[#8A8D93]">Comments</span>
+                    <span className="text-white">{formatNumber(weeklyMetrics.youtube.shorts.comments)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-[#8A8D93]">Retention</span>
+                    <span className="text-white">{weeklyMetrics.youtube.shorts.avgRetention.toFixed(1)}%</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-[#8A8D93]">Swipe Rate</span>
+                    <span className="text-white">{weeklyMetrics.youtube.shorts.avgSwipeRate.toFixed(1)}%</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-[#8A8D93]">New Viewers</span>
+                    <span className="text-white">{weeklyMetrics.youtube.shorts.avgNewViewersPercent.toFixed(1)}%</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* YouTube Long Form */}
+              <div className="space-y-2 border-t border-[#333] pt-3">
+                <h4 className="text-xs font-medium text-terminal-accent uppercase tracking-wide">Long Form</h4>
+                <div className="space-y-1 text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-[#8A8D93]">Views</span>
+                    <span className="text-white">{formatNumber(weeklyMetrics.youtube.longs.views)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-[#8A8D93]">Subscribers</span>
+                    <span className="text-white">+{formatNumber(weeklyMetrics.youtube.longs.subscribers)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-[#8A8D93]">Watch Time</span>
+                    <span className="text-white">{Math.round(weeklyMetrics.youtube.longs.totalWatchTime)}m</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Total Combined */}
+              <div className="border-t border-[#333] pt-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-terminal-accent font-medium">Total Watch Time</span>
+                  <span className="text-white font-bold">
+                    {Math.round(weeklyMetrics.youtube.combined.totalWatchTime)}m
+                  </span>
+                </div>
               </div>
             </div>
-          ))}
-        </div>
-      </div>
 
-      {/* Empty State */}
-      {weeklyMetrics.totals.views === 0 && (
-        <div className="text-center py-12 text-[#8A8D93] border border-[#333] bg-[#111] rounded-sm">
-          <div className="text-lg mb-2">📊 No Content This Week</div>
-          <div className="text-sm mb-4">No content posted during {formatWeekKey(currentWeek)}</div>
-          <div className="text-xs opacity-70">
-            Navigate to other weeks or add content through the input page
+            {/* Instagram */}
+            <InstagramWeeklyCard
+              weekKey={currentWeek}
+              totalReach={weeklyMetrics.instagram.totalReach}
+              profileVisits={weeklyMetrics.instagram.profileVisits}
+              followers={weeklyMetrics.instagram.followers}
+              onUpdate={loadContent}
+            />
+
+            {/* TikTok */}
+            <div className="border border-[#333] bg-[#111] rounded-sm p-4 space-y-4">
+              <div className="flex items-center space-x-2 mb-3">
+                <PlatformIcon platform="tiktok" size="md" />
+                <h3 className="text-white font-medium">TikTok</h3>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-[#8A8D93]">Views</span>
+                  <span className="text-white font-medium">
+                    {formatNumber(weeklyMetrics.tiktok.views)}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-[#8A8D93]">Likes</span>
+                  <span className="text-white font-medium">
+                    {formatNumber(weeklyMetrics.tiktok.likes)}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-[#8A8D93]">Followers</span>
+                  <span className="text-white font-medium">
+                    +{formatNumber(weeklyMetrics.tiktok.followers)}
+                  </span>
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
+
+          {/* Weekly Comparison Charts */}
+          <WeeklyComparisonCharts
+            currentWeek={currentWeek}
+            allContent={allContent}
+            multiPlatformContent={multiPlatformContent}
+          />
+
+          {/* Posting Schedule */}
+          <div className="border border-[#333] bg-[#111] rounded-sm p-4">
+            <h3 className="text-white font-medium mb-4 cyberpunk-header">Posting Schedule</h3>
+
+            <div className="grid grid-cols-7 gap-2">
+              {weeklyMetrics.postingSchedule.map((day, index) => (
+                <div key={index} className="text-center">
+                  <div className="text-xs text-[#8A8D93] mb-1">{day.dayName}</div>
+                  <div className={`w-full h-8 rounded-sm flex items-center justify-center text-sm font-medium ${
+                    day.posts > 0
+                      ? 'bg-terminal-accent text-black'
+                      : 'bg-[#0F0F0F] border border-[#333] text-[#8A8D93]'
+                  }`}>
+                    {day.posts || '—'}
+                  </div>
+                  <div className="text-xs text-[#8A8D93] mt-1">
+                    {day.date.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Empty State */}
+          {weeklyMetrics.totals.views === 0 && (
+            <div className="text-center py-12 text-[#8A8D93] border border-[#333] bg-[#111] rounded-sm">
+              <div className="text-lg mb-2">📊 No Content This Week</div>
+              <div className="text-sm mb-4">No content posted during {formatWeekKey(currentWeek)}</div>
+              <div className="text-xs opacity-70">
+                Navigate to other weeks or add content through the input page
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
