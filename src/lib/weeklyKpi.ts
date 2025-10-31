@@ -264,6 +264,7 @@ export const formatWeekKey = (weekKey: string): string => {
 // -------- Week-specific target resolution --------
 type TargetTuple = { target: number; minTarget?: number };
 const weeklyTargetCache: Map<string, Map<string, TargetTuple>> = new Map(); // weekKey -> (kpiId -> targets)
+const weeklyNameCache: Map<string, Map<string, string>> = new Map(); // weekKey -> (kpiId -> nameOverride)
 
 export async function getEffectiveTargetsForWeek(weekKey: string): Promise<Map<string, TargetTuple>> {
   // Return cached if present
@@ -283,12 +284,15 @@ export async function getEffectiveTargetsForWeek(weekKey: string): Promise<Map<s
 
     // 2) Apply per-week overrides
     const overrides = await userStorage.getWeeklyTargetOverrides(weekKey);
+    const nameMap = new Map<string, string>();
     overrides.forEach(o => {
       map.set(o.kpi_id, {
         target: Number(o.target_value) || 0,
         minTarget: o.min_target_value !== null && o.min_target_value !== undefined ? Number(o.min_target_value) : map.get(o.kpi_id)?.minTarget
       });
+      if (o.name_override) nameMap.set(o.kpi_id, o.name_override);
     });
+    if (nameMap.size > 0) weeklyNameCache.set(weekKey, nameMap);
   } catch (e) {
     console.warn('Failed loading effective targets; falling back to definitions', e);
     // Fallback to built-in definitions
@@ -304,6 +308,28 @@ export async function getEffectiveTargetsForWeek(weekKey: string): Promise<Map<s
 export function clearWeeklyTargetCache(weekKey?: string) {
   if (weekKey) weeklyTargetCache.delete(weekKey);
   else weeklyTargetCache.clear();
+}
+
+// Resolve effective KPI name for a week (override -> global)
+export async function getEffectiveKPIName(weekKey: string, kpiId: string): Promise<string> {
+  // Check cached name override first
+  const nameMap = weeklyNameCache.get(weekKey);
+  if (nameMap && nameMap.has(kpiId)) return nameMap.get(kpiId)!;
+
+  // Ensure caches are hydrated
+  await getEffectiveTargetsForWeek(weekKey);
+  const nameMap2 = weeklyNameCache.get(weekKey);
+  if (nameMap2 && nameMap2.has(kpiId)) return nameMap2.get(kpiId)!;
+
+  // Fallback to global KPI name
+  try {
+    const { kpiManager } = await import('./configurableKpis');
+    const all = await kpiManager.getUserKPIs();
+    const k = all.find(x => x.kpi_id === kpiId);
+    return k?.name || kpiId;
+  } catch {
+    return kpiId;
+  }
 }
 
 // Storage functions (localStorage + Supabase hybrid)

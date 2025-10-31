@@ -353,13 +353,13 @@ export class UserStorage {
   // Weekly KPI target overrides (per-week targets)
   async getWeeklyTargetOverrides(weekKey: string) {
     if (!this.userId) {
-      return [] as Array<{ kpi_id: string; target_value: number; min_target_value: number | null }>;
+      return [] as Array<{ kpi_id: string; target_value: number; min_target_value: number | null; name_override: string | null }>;
     }
 
     try {
       const { data, error } = await supabase
         .from('weekly_kpi_targets')
-        .select('kpi_id,target_value,min_target_value')
+        .select('kpi_id,target_value,min_target_value,name_override')
         .eq('user_id', this.userId)
         .eq('week_key', weekKey);
 
@@ -368,29 +368,34 @@ export class UserStorage {
         return [];
       }
 
-      return (data || []) as Array<{ kpi_id: string; target_value: number; min_target_value: number | null }>;
+      return (data || []) as Array<{ kpi_id: string; target_value: number; min_target_value: number | null; name_override: string | null }>;
     } catch (error) {
       console.error('Error getting weekly target overrides:', error);
       return [];
     }
   }
 
-  async setWeeklyTargetOverride(weekKey: string, kpiId: string, targetValue: number, minTargetValue?: number | null) {
+  async setWeeklyTargetOverride(weekKey: string, kpiId: string, targetValue: number, minTargetValue?: number | null, nameOverride?: string | null) {
     if (!this.userId) {
       return null;
     }
 
     try {
+      const payload: any = {
+        user_id: this.userId,
+        week_key: weekKey,
+        kpi_id: kpiId,
+        target_value: targetValue,
+        min_target_value: typeof minTargetValue === 'number' ? minTargetValue : null,
+        updated_at: new Date().toISOString()
+      };
+      if (typeof nameOverride !== 'undefined') {
+        payload.name_override = nameOverride;
+      }
+
       const { data, error } = await supabase
         .from('weekly_kpi_targets')
-        .upsert({
-          user_id: this.userId,
-          week_key: weekKey,
-          kpi_id: kpiId,
-          target_value: targetValue,
-          min_target_value: typeof minTargetValue === 'number' ? minTargetValue : null,
-          updated_at: new Date().toISOString()
-        }, {
+        .upsert(payload, {
           onConflict: 'user_id,week_key,kpi_id'
         })
         .select()
@@ -405,6 +410,26 @@ export class UserStorage {
     } catch (error) {
       console.error('Error setting weekly target override:', error);
       return null;
+    }
+  }
+
+  async clearWeeklyNameOverride(weekKey: string, kpiId: string) {
+    if (!this.userId) return false;
+    try {
+      const { error } = await supabase
+        .from('weekly_kpi_targets')
+        .update({ name_override: null, updated_at: new Date().toISOString() })
+        .eq('user_id', this.userId)
+        .eq('week_key', weekKey)
+        .eq('kpi_id', kpiId);
+      if (error) {
+        console.error('Error clearing weekly name override:', error);
+        return false;
+      }
+      return true;
+    } catch (e) {
+      console.error('Error clearing weekly name override:', e);
+      return false;
     }
   }
 

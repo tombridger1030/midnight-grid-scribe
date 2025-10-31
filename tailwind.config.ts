@@ -1,6 +1,15 @@
 import type { Config } from "tailwindcss";
 import tailwindcssAnimate from "tailwindcss-animate";
 
+// Make the HeroUI Tailwind plugin optional to avoid crashes when the package isn't installed yet
+let herouiPlugin: any = () => {};
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  herouiPlugin = require('@heroui/react').heroui;
+} catch (_) {
+  // Optional dependency not installed; continue without the plugin
+}
+
 export default {
 	darkMode: ["class"],
 	content: [
@@ -154,5 +163,5 @@ export default {
 			}
 		}
 	},
-	plugins: [tailwindcssAnimate, require('@heroui/react').heroui],
+	plugins: [tailwindcssAnimate, herouiPlugin],
 } satisfies Config;

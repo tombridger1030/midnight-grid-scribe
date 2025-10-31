@@ -42,8 +42,11 @@ const WeeklyKPIInput: React.FC<WeeklyKPIInputProps> = ({ onWeekChange }) => {
   });
   // Week-specific target overrides state
   const [weekTargets, setWeekTargets] = useState<Record<string, { target: number; minTarget?: number }>>({});
+  const [weekNames, setWeekNames] = useState<Record<string, string>>({});
   const [editingWeekTarget, setEditingWeekTarget] = useState<string | null>(null);
   const [weekTargetForm, setWeekTargetForm] = useState<{ target: number; minTarget?: number }>({ target: 0, minTarget: undefined });
+  const [editingWeekName, setEditingWeekName] = useState<string | null>(null);
+  const [weekNameForm, setWeekNameForm] = useState<string>('');
   const [newKPIForm, setNewKPIForm] = useState({
     name: '',
     target: 0,
@@ -89,10 +92,13 @@ const WeeklyKPIInput: React.FC<WeeklyKPIInputProps> = ({ onWeekChange }) => {
         try {
           const overrides = await userStorage.getWeeklyTargetOverrides(currentWeek);
           const map: Record<string, { target: number; minTarget?: number }> = {};
+          const nameMap: Record<string, string> = {};
           overrides.forEach(o => {
             map[o.kpi_id] = { target: Number(o.target_value) || 0, minTarget: o.min_target_value !== null ? Number(o.min_target_value) : undefined };
+            if (o.name_override) nameMap[o.kpi_id] = o.name_override;
           });
           setWeekTargets(map);
+          setWeekNames(nameMap);
         } catch (e) {
           console.warn('Failed to load weekly target overrides:', e);
         }
@@ -120,10 +126,13 @@ const WeeklyKPIInput: React.FC<WeeklyKPIInputProps> = ({ onWeekChange }) => {
         try {
           const overrides = await userStorage.getWeeklyTargetOverrides(currentWeek);
           const map: Record<string, { target: number; minTarget?: number }> = {};
+          const nameMap: Record<string, string> = {};
           overrides.forEach(o => {
             map[o.kpi_id] = { target: Number(o.target_value) || 0, minTarget: o.min_target_value !== null ? Number(o.min_target_value) : undefined };
+            if (o.name_override) nameMap[o.kpi_id] = o.name_override;
           });
           setWeekTargets(map);
+          setWeekNames(nameMap);
         } catch (e) {
           console.warn('Failed to load weekly target overrides for week change:', e);
         }
@@ -316,6 +325,39 @@ const WeeklyKPIInput: React.FC<WeeklyKPIInputProps> = ({ onWeekChange }) => {
       setEditingWeekTarget(null);
     } catch (e) {
       console.error('Failed to clear weekly target override:', e);
+    }
+  };
+
+  // Begin editing week-specific name for a KPI
+  const startEditingWeekName = (kpi: ConfigurableKPI) => {
+    setEditingWeekName(kpi.kpi_id);
+    const effectiveName = weekNames[kpi.kpi_id] || kpi.name;
+    setWeekNameForm(effectiveName);
+  };
+
+  const saveWeekName = async (kpi: ConfigurableKPI) => {
+    try {
+      const eff = weekTargets[kpi.kpi_id];
+      const effTarget = (eff?.target ?? kpi.target) as number;
+      const effMin = (typeof eff?.minTarget === 'number' ? eff.minTarget : (typeof kpi.min_target === 'number' ? kpi.min_target : undefined));
+      await userStorage.setWeeklyTargetOverride(currentWeek, kpi.kpi_id, effTarget, effMin, weekNameForm);
+      setWeekNames(prev => ({ ...prev, [kpi.kpi_id]: weekNameForm }));
+      setEditingWeekName(null);
+    } catch (e) {
+      console.error('Failed to save weekly name override:', e);
+    }
+  };
+
+  const clearWeekName = async (kpi: ConfigurableKPI) => {
+    try {
+      await userStorage.clearWeeklyNameOverride(currentWeek, kpi.kpi_id);
+      setWeekNames(prev => {
+        const { [kpi.kpi_id]: _, ...rest } = prev;
+        return rest;
+      });
+      setEditingWeekName(null);
+    } catch (e) {
+      console.error('Failed to clear weekly name override:', e);
     }
   };
 
@@ -669,7 +711,41 @@ const WeeklyKPIInput: React.FC<WeeklyKPIInputProps> = ({ onWeekChange }) => {
                     // Display Mode
                     <div className="flex items-center justify-between">
                       <div>
-                        <div className="text-sm font-medium">{kpi.name}</div>
+                        <div className="text-sm font-medium">
+                          {editingWeekName === kpi.kpi_id ? (
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="text"
+                                value={weekNameForm}
+                                onChange={(e) => setWeekNameForm(e.target.value)}
+                                className="terminal-input text-xs"
+                                placeholder="Week name..."
+                              />
+                              <button
+                                onClick={() => saveWeekName(kpi)}
+                                className="terminal-button px-2 py-1 text-xs"
+                                style={{ color: kpi.color }}
+                              >Save</button>
+                              <button
+                                onClick={() => setEditingWeekName(null)}
+                                className="terminal-button px-2 py-1 text-xs text-terminal-accent/70"
+                              >Cancel</button>
+                              <button
+                                onClick={() => clearWeekName(kpi)}
+                                className="terminal-button px-2 py-1 text-xs text-red-400"
+                              >Clear</button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => startEditingWeekName(kpi)}
+                              className="hover:text-white text-left"
+                              title="Click to edit name for this week only"
+                              style={{ color: 'inherit' }}
+                            >
+                              {weekNames[kpi.kpi_id] || kpi.name}
+                            </button>
+                          )}
+                        </div>
                         {editingWeekTarget === kpi.kpi_id ? (
                           <div className="mt-2 space-y-2">
                             <div className="grid grid-cols-2 gap-2">
