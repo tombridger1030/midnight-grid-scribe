@@ -121,6 +121,28 @@ export class UserStorage {
         .single();
 
       if (error) {
+        // Retry without weight if schema cache doesn't have it yet
+        const msg = (error as any)?.message || '';
+        const code = (error as any)?.code || '';
+        if (code === 'PGRST204' || String(msg).includes("'weight'")) {
+          try {
+            const { data: data2, error: error2 } = await supabase
+              .from('user_kpis')
+              .upsert({
+                user_id: this.userId,
+                ...Object.fromEntries(Object.entries(kpiData).filter(([k]) => k !== 'weight'))
+              })
+              .select()
+              .single();
+            // Persist weight to hybrid config as a temporary overlay
+            if (typeof (kpiData?.kpi_id) === 'string' && typeof (kpiData?.weight) === 'number') {
+              const map = await this.getHybridData('kpi_weights', {} as Record<string, number>);
+              map[kpiData.kpi_id] = kpiData.weight;
+              await this.setHybridData('kpi_weights', map);
+            }
+            if (!error2) return data2;
+          } catch {}
+        }
         console.error('Error setting user KPI:', error);
         return null;
       }
@@ -148,7 +170,44 @@ export class UserStorage {
         .single();
 
       if (error) {
-        console.error('Error updating user KPI:', error);
+        // If weight is not yet visible to PostgREST schema cache, retry without weight field
+        const msg = (error as any)?.message || '';
+        const code = (error as any)?.code || '';
+        if (code === 'PGRST204' || String(msg).includes("'weight'")) {
+          try {
+            const filtered = Object.fromEntries(Object.entries(kpiData).filter(([k]) => k !== 'weight'));
+            const { data: data2, error: error2 } = await supabase
+              .from('user_kpis')
+              .update(filtered)
+              .eq('id', kpiId)
+              .eq('user_id', this.userId)
+              .select()
+              .single();
+            // Persist weight to hybrid config as a temporary overlay
+            if (typeof (kpiData?.weight) === 'number') {
+              // We don't know kpi_id here; try to fetch it first
+              try {
+                const { data: row } = await supabase
+                  .from('user_kpis')
+                  .select('kpi_id')
+                  .eq('id', kpiId)
+                  .eq('user_id', this.userId)
+                  .single();
+                if (row?.kpi_id) {
+                  const map = await this.getHybridData('kpi_weights', {} as Record<string, number>);
+                  map[row.kpi_id] = kpiData.weight;
+                  await this.setHybridData('kpi_weights', map);
+                }
+              } catch {}
+            }
+            if (!error2) return data2;
+          } catch {}
+        }
+        try {
+          console.error('Error updating user KPI:', JSON.stringify(error));
+        } catch {
+          console.error('Error updating user KPI:', error);
+        }
         return null;
       }
 
@@ -288,6 +347,88 @@ export class UserStorage {
       }
     } catch (error) {
       console.error('Error setting user weekly KPIs:', error);
+    }
+  }
+
+  // Weekly KPI target overrides (per-week targets)
+  async getWeeklyTargetOverrides(weekKey: string) {
+    if (!this.userId) {
+      return [] as Array<{ kpi_id: string; target_value: number; min_target_value: number | null }>;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('weekly_kpi_targets')
+        .select('kpi_id,target_value,min_target_value')
+        .eq('user_id', this.userId)
+        .eq('week_key', weekKey);
+
+      if (error) {
+        console.error('Error getting weekly target overrides:', error);
+        return [];
+      }
+
+      return (data || []) as Array<{ kpi_id: string; target_value: number; min_target_value: number | null }>;
+    } catch (error) {
+      console.error('Error getting weekly target overrides:', error);
+      return [];
+    }
+  }
+
+  async setWeeklyTargetOverride(weekKey: string, kpiId: string, targetValue: number, minTargetValue?: number | null) {
+    if (!this.userId) {
+      return null;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('weekly_kpi_targets')
+        .upsert({
+          user_id: this.userId,
+          week_key: weekKey,
+          kpi_id: kpiId,
+          target_value: targetValue,
+          min_target_value: typeof minTargetValue === 'number' ? minTargetValue : null,
+          updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'user_id,week_key,kpi_id'
+        })
+        .select()
+        .maybeSingle();
+
+      if (error) {
+        console.error('Error setting weekly target override:', error);
+        return null;
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Error setting weekly target override:', error);
+      return null;
+    }
+  }
+
+  async deleteWeeklyTargetOverride(weekKey: string, kpiId: string) {
+    if (!this.userId) {
+      return false;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('weekly_kpi_targets')
+        .delete()
+        .eq('user_id', this.userId)
+        .eq('week_key', weekKey)
+        .eq('kpi_id', kpiId);
+
+      if (error) {
+        console.error('Error deleting weekly target override:', error);
+        return false;
+      }
+      return true;
+    } catch (error) {
+      console.error('Error deleting weekly target override:', error);
+      return false;
     }
   }
 

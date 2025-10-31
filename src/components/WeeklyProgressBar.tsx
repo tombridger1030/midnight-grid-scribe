@@ -10,15 +10,17 @@ interface WeeklyProgressBarProps {
   kpi: ConfigurableKPI;
   actualValue: number;
   compact?: boolean;
+  weekKey?: string;
 }
 
 const WeeklyProgressBar: React.FC<WeeklyProgressBarProps> = ({ 
   kpi, 
   actualValue, 
-  compact = false 
+  compact = false,
+  weekKey
 }) => {
-  const progress = calculateKPIProgress(kpi.kpi_id, actualValue);
-  const status = getKPIStatus(kpi.kpi_id, actualValue);
+  const progress = calculateKPIProgress(kpi.kpi_id, actualValue, weekKey);
+  const status = getKPIStatus(kpi.kpi_id, actualValue, weekKey);
   const isRange = kpi.min_target !== undefined;
   
   // Get status color

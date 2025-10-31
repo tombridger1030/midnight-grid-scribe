@@ -111,7 +111,7 @@ const SimpleWeeklyKPIInput: React.FC<SimpleWeeklyKPIInputProps> = ({ onWeekChang
     return acc;
   }, {} as Record<string, ConfigurableKPI[]>);
 
-  const overallCompletion = calculateWeekCompletion(values);
+  const overallCompletion = calculateWeekCompletion(values, currentWeek);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -178,8 +178,8 @@ const SimpleWeeklyKPIInput: React.FC<SimpleWeeklyKPIInputProps> = ({ onWeekChang
           <div className="space-y-4">
             {kpis.map(kpi => {
               const currentValue = values[kpi.kpi_id] || 0;
-              const progress = calculateKPIProgress(kpi.kpi_id, currentValue);
-              const status = getKPIStatus(kpi.kpi_id, currentValue);
+              const progress = calculateKPIProgress(kpi.kpi_id, currentValue, currentWeek);
+              const status = getKPIStatus(kpi.kpi_id, currentValue, currentWeek);
               const statusColor = getStatusColor(status);
 
               return (

@@ -261,6 +261,51 @@ export const formatWeekKey = (weekKey: string): string => {
   return `${startStr} - ${endStr}`;
 };
 
+// -------- Week-specific target resolution --------
+type TargetTuple = { target: number; minTarget?: number };
+const weeklyTargetCache: Map<string, Map<string, TargetTuple>> = new Map(); // weekKey -> (kpiId -> targets)
+
+export async function getEffectiveTargetsForWeek(weekKey: string): Promise<Map<string, TargetTuple>> {
+  // Return cached if present
+  if (weeklyTargetCache.has(weekKey)) {
+    return weeklyTargetCache.get(weekKey)!;
+  }
+
+  const map = new Map<string, TargetTuple>();
+
+  try {
+    // 1) Load user KPI globals
+    const { kpiManager } = await import('./configurableKpis');
+    const userKPIs = await kpiManager.getUserKPIs();
+    userKPIs.forEach(k => {
+      map.set(k.kpi_id, { target: Number(k.target) || 0, minTarget: typeof k.min_target === 'number' ? Number(k.min_target) : undefined });
+    });
+
+    // 2) Apply per-week overrides
+    const overrides = await userStorage.getWeeklyTargetOverrides(weekKey);
+    overrides.forEach(o => {
+      map.set(o.kpi_id, {
+        target: Number(o.target_value) || 0,
+        minTarget: o.min_target_value !== null && o.min_target_value !== undefined ? Number(o.min_target_value) : map.get(o.kpi_id)?.minTarget
+      });
+    });
+  } catch (e) {
+    console.warn('Failed loading effective targets; falling back to definitions', e);
+    // Fallback to built-in definitions
+    WEEKLY_KPI_DEFINITIONS.forEach(def => {
+      map.set(def.id, { target: def.target, minTarget: def.minTarget });
+    });
+  }
+
+  weeklyTargetCache.set(weekKey, map);
+  return map;
+}
+
+export function clearWeeklyTargetCache(weekKey?: string) {
+  if (weekKey) weeklyTargetCache.delete(weekKey);
+  else weeklyTargetCache.clear();
+}
+
 // Storage functions (localStorage + Supabase hybrid)
 export const loadWeeklyKPIs = (): WeeklyKPIData => {
   try {
@@ -362,7 +407,6 @@ async function migrateSupabaseWeeklyEntriesWeekKeys(): Promise<void> {
   try {
     const userId = userStorage.getCurrentUserId();
     if (!userId) {
-      console.log('No user ID available for migration');
       return;
     }
     
@@ -458,7 +502,6 @@ export const updateWeeklyKPIRecord = async (weekKey: string, values: Partial<Wee
   
   // If updating old data, regenerate rank history to reflect changes (with throttling)
   if (isUpdatingOldData && weekKey !== getCurrentWeek()) {
-    console.log(`🔄 Updated old KPI data for week ${weekKey}, scheduling rank history regeneration...`);
     
     // Throttle regeneration calls to prevent multiple simultaneous runs
     const global = globalThis as unknown as Record<string, NodeJS.Timeout | undefined>;
@@ -545,7 +588,6 @@ export const updateWeeklyDailyValue = async (
 
   // If updating old data, regenerate rank history to reflect changes (with throttling)
   if (weekKey !== getCurrentWeek()) {
-    console.log(`🔄 Updated daily KPI data for week ${weekKey}, scheduling rank history regeneration...`);
     
     // Throttle regeneration calls to prevent multiple simultaneous runs
     const global = globalThis as unknown as Record<string, NodeJS.Timeout | undefined>;
@@ -627,7 +669,6 @@ export const setWeeklyDailyValues = async (
   
   // If updating old data, regenerate rank history to reflect changes (with throttling)
   if (weekKey !== getCurrentWeek()) {
-    console.log(`🔄 Updated weekly daily values for week ${weekKey}, scheduling rank history regeneration...`);
     
     // Throttle regeneration calls to prevent multiple simultaneous runs
     const global = globalThis as unknown as Record<string, NodeJS.Timeout | undefined>;
@@ -662,7 +703,7 @@ export const loadWeeklyKPIsWithSync = async (): Promise<WeeklyKPIData> => {
 
       // IMPORTANT: Also load daily entries from weekly_kpi_entries table
       // This populates the dailyByDate field with per-date values
-      console.log('🔄 Loading daily entries from weekly_kpi_entries...');
+      // silently load daily entries
       const currentWeek = getCurrentWeek();
       await loadWeeklyEntriesForWeek(currentWeek);
 
@@ -691,55 +732,79 @@ export const loadWeeklyKPIsWithSync = async (): Promise<WeeklyKPIData> => {
 };
 
 // Calculate KPI progress percentage
-export const calculateKPIProgress = async (kpiId: string, actualValue: number): Promise<number> => {
-  const definition = WEEKLY_KPI_DEFINITIONS.find(kpi => kpi.id === kpiId);
-  if (!definition) return 0;
+export const calculateKPIProgress = async (kpiId: string, actualValue: number, weekKey?: string): Promise<number> => {
+  // Resolve targets: prefer week override -> user KPI -> default definition
+  let targetTuple: TargetTuple | undefined;
+  try {
+    const wk = weekKey || getCurrentWeek();
+    const targets = await getEffectiveTargetsForWeek(wk);
+    targetTuple = targets.get(kpiId);
+  } catch {}
+
+  if (!targetTuple) {
+    const definition = WEEKLY_KPI_DEFINITIONS.find(kpi => kpi.id === kpiId);
+    if (!definition) return 0;
+    targetTuple = { target: definition.target, minTarget: definition.minTarget };
+  }
 
   // Check if this is an average-based KPI
   const isAvgKPI = await isAverageKPI(kpiId);
 
-  // Special handling for average KPIs (like sleep average)
-  if (isAvgKPI && kpiId === 'sleepAverage') {
-    // actualValue is already the average hours per night
-    const avg = Number(actualValue) || 0;
-    // Optimal band is 6.5–7.0 hours (inclusive). Within band -> 100.
-    if (avg >= 6.5 && avg <= 7) return 100;
-    // Degrade outside the band proportionally. 0.25h outside still near 100; ~3.5h outside -> 0
-    const center = 6.75;
-    const deviation = Math.abs(avg - center);
-    const excess = Math.max(0, deviation - 0.25);
-    const progress = 100 - (excess / 3.5) * 100;
-    return Math.max(0, Math.min(100, progress));
-  }
+  // On-track projection calculation
+  const target = Number(targetTuple.target) || 0;
+  if (target <= 0) return 0;
 
+  // Special cases
   if (kpiId === 'noCompromises') {
-    // actualValue represents streak length (0..7)
+    // Keep simple mapping for streak-based KPI
     return Math.min(100, Math.max(0, (Number(actualValue) || 0) / 7 * 100));
   }
 
-  const target = definition.target;
-  const minTarget = definition.minTarget;
+  const wk = weekKey || getCurrentWeek();
+  const dates = getWeekDayDates(wk);
+  const today = new Date(); today.setHours(0,0,0,0);
+  const start = toMidnight(dates[0]);
+  const end = toMidnight(dates[6]);
+  let elapsedDays = 0;
+  if (today < start) elapsedDays = 0;
+  else if (today > end) elapsedDays = 7;
+  else elapsedDays = Math.min(7, Math.max(0, Math.floor((today.getTime() - start.getTime()) / (24*60*60*1000)) + 1));
+  const remainingDays = Math.max(0, 7 - elapsedDays);
 
-  // If a range is defined (minTarget..target), map 0..minTarget -> 0..80, minTarget..target -> 80..100
-  if (typeof minTarget === 'number' && minTarget > 0 && target > minTarget) {
-    if (actualValue >= target) return 100;
-    if (actualValue <= 0) return 0;
-    if (actualValue <= minTarget) {
-      // Scale linearly up to 80% at minTarget
-      return Math.max(0, Math.min(80, (actualValue / minTarget) * 80));
+  // Pull daily values if available
+  let currentSum = Number(actualValue) || 0;
+  try {
+    const arr = getWeeklyDailyValues(wk, kpiId);
+    const sumElapsed = arr.slice(0, elapsedDays).reduce((s, n) => s + (Number.isFinite(n) ? Number(n) : 0), 0);
+    const hasAnyDaily = arr.some(v => (Number(v) || 0) > 0);
+    if (hasAnyDaily) currentSum = sumElapsed + arr.slice(elapsedDays).reduce((s,n)=>s+(Number.isFinite(n)?Number(n):0),0);
+    // For pace, use only elapsed days portion
+    const paceBase = hasAnyDaily ? sumElapsed : Math.min(currentSum, sumElapsed || currentSum);
+    const currentPace = elapsedDays > 0 ? (paceBase / elapsedDays) : 0;
+
+    if (isAvgKPI) {
+      // Treat average target as total target over 7 days
+      const projectedTotal = paceBase + currentPace * remainingDays + arr.slice(elapsedDays).reduce((s,n)=>s+(Number.isFinite(n)?Number(n):0),0);
+      const projectedAvg = projectedTotal / 7;
+      return Math.min(100, Math.max(0, (projectedAvg / target) * 100));
+    } else {
+      const projectedTotal = paceBase + currentPace * remainingDays + arr.slice(elapsedDays).reduce((s,n)=>s+(Number.isFinite(n)?Number(n):0),0);
+      return Math.min(100, Math.max(0, (projectedTotal / target) * 100));
     }
-    // Between minTarget and target: scale linearly from 80% to 100%
-    const fraction = (actualValue - minTarget) / (target - minTarget);
-    return Math.max(80, Math.min(100, 80 + fraction * 20));
+  } catch {
+    // Fallback without daily breakdown
+    if (elapsedDays === 0) {
+      return Math.min(100, (currentSum / target) * 100);
+    }
+    const currentPace = currentSum / elapsedDays;
+    const projectedTotal = currentSum + currentPace * remainingDays;
+    return Math.min(100, Math.max(0, (projectedTotal / target) * 100));
   }
-
-  // Default linear scaling to 100% at target
-  return Math.min(100, (actualValue / target) * 100);
 };
 
 // Get KPI status based on progress
-export const getKPIStatus = async (kpiId: string, actualValue: number): Promise<'excellent' | 'good' | 'fair' | 'poor'> => {
-  const progress = await calculateKPIProgress(kpiId, actualValue);
+export const getKPIStatus = async (kpiId: string, actualValue: number, weekKey?: string): Promise<'excellent' | 'good' | 'fair' | 'poor'> => {
+  const progress = await calculateKPIProgress(kpiId, actualValue, weekKey);
   
   if (progress >= 100) return 'excellent';
   if (progress >= 80) return 'good';
@@ -748,22 +813,37 @@ export const getKPIStatus = async (kpiId: string, actualValue: number): Promise<
 };
 
 // Calculate overall week completion percentage
-export const calculateWeekCompletion = async (values: WeeklyKPIValues): Promise<number> => {
-  const totalKPIs = WEEKLY_KPI_DEFINITIONS.length;
-  
-  let totalProgress = 0;
-  for (const kpi of WEEKLY_KPI_DEFINITIONS) {
-    const value = values[kpi.id] || 0;
-    const progress = await calculateKPIProgress(kpi.id, value);
-    totalProgress += progress;
+export const calculateWeekCompletion = async (values: WeeklyKPIValues, weekKey?: string): Promise<number> => {
+  try {
+    const { kpiManager } = await import('./configurableKpis');
+    const kpis = await kpiManager.getActiveKPIs();
+    let weighted = 0;
+    let totalWeight = 0;
+    for (const kpi of kpis) {
+      const val = values[kpi.kpi_id] || 0;
+      const progress = await calculateKPIProgress(kpi.kpi_id, val, weekKey);
+      const weight = (typeof kpi.weight === 'number' && kpi.weight >= 0) ? kpi.weight : 1;
+      if (weight > 0) {
+        weighted += progress * weight;
+        totalWeight += weight;
+      }
+    }
+    return totalWeight > 0 ? Math.round(weighted / totalWeight) : 0;
+  } catch {
+    // Fallback to equal weights using static definitions
+    const totalKPIs = WEEKLY_KPI_DEFINITIONS.length;
+    let totalProgress = 0;
+    for (const kpi of WEEKLY_KPI_DEFINITIONS) {
+      const value = values[kpi.id] || 0;
+      const progress = await calculateKPIProgress(kpi.id, value, weekKey);
+      totalProgress += progress;
+    }
+    return Math.round(totalProgress / totalKPIs);
   }
-  
-  return Math.round(totalProgress / totalKPIs);
 };
 
 // Supabase integration functions
 export const loadWeeklyKPIsFromSupabase = async (userId: string): Promise<WeeklyKPIData | null> => {
-  console.log('📥 loadWeeklyKPIsFromSupabase called for userId:', userId);
 
   try {
     const { data, error } = await supabase
@@ -777,7 +857,7 @@ export const loadWeeklyKPIsFromSupabase = async (userId: string): Promise<Weekly
       return null;
     }
 
-    console.log('✅ Loaded weekly_kpis records:', data?.length || 0, 'records');
+    // loaded records count (silenced)
 
     const records: WeeklyKPIRecord[] = (data || []).map(row => ({
       weekKey: row.week_key,
@@ -843,7 +923,7 @@ export const getRecentWeeks = (count: number = 6): string[] => {
 export const loadWeeklyEntriesForWeek = async (weekKey: string): Promise<void> => {
   try {
     const userId = userStorage.getCurrentUserId();
-    console.log(`📅 loadWeeklyEntriesForWeek for week ${weekKey}, userId:`, userId);
+    // loading entries for week (silenced)
 
     if (!userId) {
       console.warn('⚠️ No user ID available for loadWeeklyEntriesForWeek');
@@ -861,7 +941,7 @@ export const loadWeeklyEntriesForWeek = async (weekKey: string): Promise<void> =
       return;
     }
 
-    console.log(`✅ Loaded ${data?.length || 0} entries for week ${weekKey}`);
+    // loaded entries count (silenced)
 
     const store = loadWeeklyKPIs();
     const now = new Date().toISOString();
@@ -924,7 +1004,7 @@ export const incrementContentShippedKPI = async (publishedDate?: string): Promis
       // Update the specific day
       await updateWeeklyDailyValue(weekKey, 'contentShipped', dayIndex, newValue);
       
-      console.log(`Updated contentShipped KPI: +1 for ${date.toISOString().split('T')[0]} (week ${weekKey})`);
+      // contentShipped KPI incremented (silenced)
     }
   } catch (error) {
     console.error('Failed to update contentShipped KPI:', error);

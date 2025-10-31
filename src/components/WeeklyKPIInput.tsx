@@ -11,9 +11,11 @@ import {
   loadWeeklyKPIsWithSync,
   getWeeklyDailyValues,
   updateWeeklyDailyValue,
-  getWeekDayDates
+  getWeekDayDates,
+  clearWeeklyTargetCache
 } from '@/lib/weeklyKpi';
 import { kpiManager, ConfigurableKPI } from '@/lib/configurableKpis';
+import { userStorage } from '@/lib/userStorage';
 import { Progress } from "@/components/ui/progress";
 import { ChevronLeft, ChevronRight, Target, TrendingUp, Plus, Minus, Edit3, Trash2, Save, X, PlusCircle } from 'lucide-react';
 
@@ -35,8 +37,13 @@ const WeeklyKPIInput: React.FC<WeeklyKPIInputProps> = ({ onWeekChange }) => {
     name: '',
     target: 0,
     minTarget: 0,
-    unit: ''
+    unit: '',
+    weight: 1
   });
+  // Week-specific target overrides state
+  const [weekTargets, setWeekTargets] = useState<Record<string, { target: number; minTarget?: number }>>({});
+  const [editingWeekTarget, setEditingWeekTarget] = useState<string | null>(null);
+  const [weekTargetForm, setWeekTargetForm] = useState<{ target: number; minTarget?: number }>({ target: 0, minTarget: undefined });
   const [newKPIForm, setNewKPIForm] = useState({
     name: '',
     target: 0,
@@ -46,7 +53,8 @@ const WeeklyKPIInput: React.FC<WeeklyKPIInputProps> = ({ onWeekChange }) => {
     color: '#5FE3B3',
     isAverage: false,
     reverseScoring: false,
-    equalIsBetter: false
+    equalIsBetter: false,
+    weight: 1
   });
   const [isCreatingCategory, setIsCreatingCategory] = useState(false);
   const [newCategoryForm, setNewCategoryForm] = useState({
@@ -76,6 +84,18 @@ const WeeklyKPIInput: React.FC<WeeklyKPIInputProps> = ({ onWeekChange }) => {
         const record = getWeeklyKPIRecord(currentWeek);
         setValues(record?.values || {});
         onWeekChange?.(currentWeek);
+
+        // Load week-specific target overrides for current week
+        try {
+          const overrides = await userStorage.getWeeklyTargetOverrides(currentWeek);
+          const map: Record<string, { target: number; minTarget?: number }> = {};
+          overrides.forEach(o => {
+            map[o.kpi_id] = { target: Number(o.target_value) || 0, minTarget: o.min_target_value !== null ? Number(o.min_target_value) : undefined };
+          });
+          setWeekTargets(map);
+        } catch (e) {
+          console.warn('Failed to load weekly target overrides:', e);
+        }
       } catch (error) {
         console.error('Failed to load weekly KPI data:', error);
         // Fall back to local data
@@ -95,6 +115,19 @@ const WeeklyKPIInput: React.FC<WeeklyKPIInputProps> = ({ onWeekChange }) => {
       const record = getWeeklyKPIRecord(currentWeek);
       setValues(record?.values || {});
       onWeekChange?.(currentWeek);
+      // Refresh week-specific targets on week change
+      (async () => {
+        try {
+          const overrides = await userStorage.getWeeklyTargetOverrides(currentWeek);
+          const map: Record<string, { target: number; minTarget?: number }> = {};
+          overrides.forEach(o => {
+            map[o.kpi_id] = { target: Number(o.target_value) || 0, minTarget: o.min_target_value !== null ? Number(o.min_target_value) : undefined };
+          });
+          setWeekTargets(map);
+        } catch (e) {
+          console.warn('Failed to load weekly target overrides for week change:', e);
+        }
+      })();
     }
   }, [currentWeek, onWeekChange, isLoading]);
 
@@ -174,8 +207,13 @@ const WeeklyKPIInput: React.FC<WeeklyKPIInputProps> = ({ onWeekChange }) => {
       name: kpi.name,
       target: kpi.target,
       minTarget: kpi.min_target || 0,
-      unit: kpi.unit
+      unit: kpi.unit,
+      weight: (typeof kpi.weight === 'number' ? kpi.weight : 1)
     });
+    try {
+      // Minimal debug to confirm weight is loaded for existing KPIs
+      console.log('[KPI Edit] Start editing', kpi.kpi_id, 'weight=', kpi.weight);
+    } catch {}
   };
 
   // Save KPI edits
@@ -188,8 +226,12 @@ const WeeklyKPIInput: React.FC<WeeklyKPIInputProps> = ({ onWeekChange }) => {
         name: editForm.name,
         target: editForm.target,
         min_target: editForm.minTarget || undefined,
-        unit: editForm.unit
+        unit: editForm.unit,
+        weight: typeof editForm.weight === 'number' ? editForm.weight : 1
       });
+      try {
+        console.log('[KPI Edit] Saved', kpiId, 'new weight=', editForm.weight || 1);
+      } catch {}
 
       // Update local state
       setUserKPIs(prev =>
@@ -200,14 +242,15 @@ const WeeklyKPIInput: React.FC<WeeklyKPIInputProps> = ({ onWeekChange }) => {
                 name: editForm.name,
                 target: editForm.target,
                 min_target: editForm.minTarget || undefined,
-                unit: editForm.unit
+                unit: editForm.unit,
+                weight: typeof editForm.weight === 'number' ? editForm.weight : 1
               }
             : k
         )
       );
 
       setEditingKPI(null);
-      setEditForm({ name: '', target: 0, minTarget: 0, unit: '' });
+      setEditForm({ name: '', target: 0, minTarget: 0, unit: '', weight: 1 });
     } catch (error) {
       console.error('Failed to save KPI edit:', error);
     }
@@ -216,7 +259,7 @@ const WeeklyKPIInput: React.FC<WeeklyKPIInputProps> = ({ onWeekChange }) => {
   // Cancel editing
   const cancelEdit = () => {
     setEditingKPI(null);
-    setEditForm({ name: '', target: 0, minTarget: 0, unit: '' });
+    setEditForm({ name: '', target: 0, minTarget: 0, unit: '', weight: 1 });
   };
 
   // Delete KPI
@@ -231,6 +274,48 @@ const WeeklyKPIInput: React.FC<WeeklyKPIInputProps> = ({ onWeekChange }) => {
       setUserKPIs(prev => prev.filter(k => k.kpi_id !== kpiId));
     } catch (error) {
       console.error('Failed to delete KPI:', error);
+    }
+  };
+
+  // Begin editing week-specific target for a KPI
+  const startEditingWeekTarget = (kpi: ConfigurableKPI) => {
+    setEditingWeekTarget(kpi.kpi_id);
+    const effective = weekTargets[kpi.kpi_id] || { target: kpi.target, minTarget: kpi.min_target };
+    setWeekTargetForm({ target: effective.target, minTarget: effective.minTarget });
+  };
+
+  // Save week-specific target override
+  const saveWeekTarget = async (kpi: ConfigurableKPI) => {
+    try {
+      await userStorage.setWeeklyTargetOverride(
+        currentWeek,
+        kpi.kpi_id,
+        Number(weekTargetForm.target) || 0,
+        typeof weekTargetForm.minTarget === 'number' ? Number(weekTargetForm.minTarget) : null
+      );
+      clearWeeklyTargetCache(currentWeek);
+      setWeekTargets(prev => ({
+        ...prev,
+        [kpi.kpi_id]: { target: Number(weekTargetForm.target) || 0, minTarget: typeof weekTargetForm.minTarget === 'number' ? Number(weekTargetForm.minTarget) : undefined }
+      }));
+      setEditingWeekTarget(null);
+    } catch (e) {
+      console.error('Failed to save weekly target override:', e);
+    }
+  };
+
+  // Clear week-specific target override (revert to global)
+  const clearWeekTarget = async (kpi: ConfigurableKPI) => {
+    try {
+      await userStorage.deleteWeeklyTargetOverride(currentWeek, kpi.kpi_id);
+      clearWeeklyTargetCache(currentWeek);
+      setWeekTargets(prev => {
+        const { [kpi.kpi_id]: _, ...rest } = prev;
+        return rest;
+      });
+      setEditingWeekTarget(null);
+    } catch (e) {
+      console.error('Failed to clear weekly target override:', e);
     }
   };
 
@@ -250,7 +335,8 @@ const WeeklyKPIInput: React.FC<WeeklyKPIInputProps> = ({ onWeekChange }) => {
         newKPIForm.minTarget || undefined,
         newKPIForm.isAverage,
         newKPIForm.reverseScoring,
-        newKPIForm.equalIsBetter
+        newKPIForm.equalIsBetter,
+        (typeof newKPIForm.weight === 'number' ? newKPIForm.weight : 1)
       );
 
       if (newKPI) {
@@ -264,7 +350,8 @@ const WeeklyKPIInput: React.FC<WeeklyKPIInputProps> = ({ onWeekChange }) => {
           color: '#5FE3B3',
           isAverage: false,
           reverseScoring: false,
-          equalIsBetter: false
+          equalIsBetter: false,
+          weight: 1
         });
         setIsCreatingKPI(null);
       }
@@ -289,7 +376,8 @@ const WeeklyKPIInput: React.FC<WeeklyKPIInputProps> = ({ onWeekChange }) => {
         newKPIForm.minTarget || undefined,
         newKPIForm.isAverage,
         newKPIForm.reverseScoring,
-        newKPIForm.equalIsBetter
+        newKPIForm.equalIsBetter,
+        (typeof newKPIForm.weight === 'number' ? newKPIForm.weight : 1)
       );
 
       if (newKPI) {
@@ -303,7 +391,8 @@ const WeeklyKPIInput: React.FC<WeeklyKPIInputProps> = ({ onWeekChange }) => {
           color: '#5FE3B3',
           isAverage: false,
           reverseScoring: false,
-          equalIsBetter: false
+          equalIsBetter: false,
+          weight: 1
         });
         setNewCategoryForm({
           name: '',
@@ -425,15 +514,22 @@ const WeeklyKPIInput: React.FC<WeeklyKPIInputProps> = ({ onWeekChange }) => {
                 currentValue = daysWithData > 0 ? Math.round((totalValue / daysWithData) * 10) / 10 : 0;
               }
 
-              // Calculate progress based on KPI type
+              // Calculate progress based on KPI type (respect week-specific overrides)
               let progress = 0;
               let status: 'excellent' | 'good' | 'fair' | 'poor' = 'poor';
+
+              // Effective targets for this week
+              const effOverride = weekTargets[kpi.kpi_id];
+              const effTarget = (effOverride?.target ?? kpi.target) as number;
+              const effMinTarget = (typeof effOverride?.minTarget === 'number'
+                ? effOverride.minTarget
+                : (typeof kpi.min_target === 'number' ? kpi.min_target : undefined)) as number | undefined;
 
               if (isAverageKPI && kpi.kpi_id === 'sleepAverage') {
                 // Sleep Average has an optimal range (6.5-7 hours)
                 const avg = currentValue;
-                const minTarget = kpi.min_target || 6;
-                const maxTarget = kpi.target || 7;
+                const minTarget = typeof effMinTarget === 'number' ? effMinTarget : 6;
+                const maxTarget = effTarget || 7;
 
                 // Optimal band: 6.5-7 hours = 100%
                 if (avg >= 6.5 && avg <= 7) {
@@ -458,7 +554,7 @@ const WeeklyKPIInput: React.FC<WeeklyKPIInputProps> = ({ onWeekChange }) => {
                 }
               } else {
                 // Standard progress calculation for other KPIs
-                const targetValue = kpi.min_target || kpi.target;
+                const targetValue = (typeof effMinTarget === 'number' ? effMinTarget : effTarget);
                 
                 if (kpi.equal_is_better) {
                   // For equal is better (being exactly at target is best)
@@ -523,7 +619,7 @@ const WeeklyKPIInput: React.FC<WeeklyKPIInputProps> = ({ onWeekChange }) => {
                           placeholder="Unit"
                         />
                       </div>
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-3 gap-2">
                         <input
                           type="number"
                           value={editForm.minTarget}
@@ -541,6 +637,16 @@ const WeeklyKPIInput: React.FC<WeeklyKPIInputProps> = ({ onWeekChange }) => {
                           placeholder="Target"
                           min="0"
                           step="0.1"
+                        />
+                        <input
+                          type="number"
+                          value={editForm.weight}
+                          onChange={(e) => setEditForm(prev => ({ ...prev, weight: Math.max(0, parseFloat(e.target.value) || 0) }))}
+                          className="terminal-input text-sm"
+                          placeholder="Weight"
+                          min="0"
+                          step="0.1"
+                          title="Relative importance for weekly completion"
                         />
                       </div>
                       <div className="flex gap-2 justify-end">
@@ -564,9 +670,60 @@ const WeeklyKPIInput: React.FC<WeeklyKPIInputProps> = ({ onWeekChange }) => {
                     <div className="flex items-center justify-between">
                       <div>
                         <div className="text-sm font-medium">{kpi.name}</div>
-                        <div className="text-xs text-terminal-accent/70">
-                          Target: {isRange ? `${kpi.min_target}-${kpi.target}` : kpi.target} {kpi.unit}
-                        </div>
+                        {editingWeekTarget === kpi.kpi_id ? (
+                          <div className="mt-2 space-y-2">
+                            <div className="grid grid-cols-2 gap-2">
+                              <input
+                                type="number"
+                                value={weekTargetForm.minTarget ?? ''}
+                                onChange={(e) => setWeekTargetForm(prev => ({ ...prev, minTarget: e.target.value === '' ? undefined : (parseFloat(e.target.value) || 0) }))}
+                                className="terminal-input text-xs"
+                                placeholder="Min (optional)"
+                                min="0"
+                                step="0.1"
+                              />
+                              <input
+                                type="number"
+                                value={weekTargetForm.target}
+                                onChange={(e) => setWeekTargetForm(prev => ({ ...prev, target: parseFloat(e.target.value) || 0 }))}
+                                className="terminal-input text-xs"
+                                placeholder="Target"
+                                min="0"
+                                step="0.1"
+                              />
+                            </div>
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => saveWeekTarget(kpi)}
+                                className="terminal-button px-2 py-1 text-xs"
+                                style={{ color: kpi.color }}
+                              >Save</button>
+                              <button
+                                onClick={() => setEditingWeekTarget(null)}
+                                className="terminal-button px-2 py-1 text-xs text-terminal-accent/70"
+                              >Cancel</button>
+                              <button
+                                onClick={() => clearWeekTarget(kpi)}
+                                className="terminal-button px-2 py-1 text-xs text-red-400"
+                              >Clear week override</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => startEditingWeekTarget(kpi)}
+                            className="text-xs text-terminal-accent/70 hover:text-white transition-colors"
+                            title="Click to edit this week's target only"
+                          >
+                            Target: {(() => {
+                              const eff = weekTargets[kpi.kpi_id];
+                              const effTarget = eff?.target ?? kpi.target;
+                              const effMin = eff?.minTarget ?? kpi.min_target;
+                              return isRange || eff?.minTarget !== undefined
+                                ? `${effMin ?? effTarget}-${effTarget}`
+                                : effTarget;
+                            })()} {kpi.unit}
+                          </button>
+                        )}
                       </div>
                       <div className="flex items-center gap-2">
                         <div className="text-right">
@@ -616,12 +773,16 @@ const WeeklyKPIInput: React.FC<WeeklyKPIInputProps> = ({ onWeekChange }) => {
                       </div>
                       <div className="flex justify-between text-xs text-terminal-accent/50">
                         <span>0</span>
-                        {isRange && (
+                        {(() => {
+                          const eff = weekTargets[kpi.kpi_id];
+                          const effMin = eff?.minTarget ?? kpi.min_target;
+                          return (isRange || typeof effMin === 'number') ? (
                           <span className="text-terminal-accent/70">
-                            Min: {kpi.min_target}
+                            Min: {effMin}
                           </span>
-                        )}
-                        <span>Target: {kpi.target}</span>
+                          ) : null;
+                        })()}
+                        <span>Target: {(weekTargets[kpi.kpi_id]?.target ?? kpi.target)}</span>
                       </div>
                     </div>
                   )}
@@ -637,7 +798,8 @@ const WeeklyKPIInput: React.FC<WeeklyKPIInputProps> = ({ onWeekChange }) => {
                           const today = new Date();
                           today.setHours(0, 0, 0, 0);
 
-                          const weeklyMinTarget = kpi.min_target || kpi.target;
+                          const eff = weekTargets[kpi.kpi_id];
+                          const weeklyMinTarget = (typeof eff?.minTarget === 'number' ? eff.minTarget : undefined) ?? (typeof kpi.min_target === 'number' ? kpi.min_target : undefined) ?? (eff?.target ?? kpi.target);
 
                           // Check if this is an average-based KPI (from the kpi.is_average field)
                           // Fallback: also check for known average KPI IDs for backward compatibility
@@ -746,37 +908,7 @@ const WeeklyKPIInput: React.FC<WeeklyKPIInputProps> = ({ onWeekChange }) => {
                             }
                           }
 
-                          // Debug logging for specific KPIs
-                          if (kpi.name === 'Deep Work Hours' || kpi.name === 'Sleep Average') {
-                            const emptyFutureDays = futureDayIndices.filter(dayIdx => dailyValues[dayIdx] === 0);
-                            const daysWithData = dailyValues.filter(val => val > 0).length;
-                            console.log(`🔍 ${kpi.name} DEBUG:`, {
-                              weeklyMinTarget,
-                              currentWeekTotal,
-                              remainingNeeded,
-                              futureDaysCount: futureDaysCount,
-                              emptyFutureDaysCount: emptyFutureDays.length,
-                              calculatedAvgPerEmptyDay: emptyFutureDays.length > 0 ? (remainingNeeded / emptyFutureDays.length) : 0,
-                              // Average-specific calculations
-                              ...(isAverageKPI && {
-                                weeklyTargetTotal: weeklyMinTarget * 7,
-                                currentWeekAverage: daysWithData > 0 ? currentWeekTotal / daysWithData : 0,
-                                avgPerEmptyDay: emptyFutureDays.length > 0 ? (remainingNeeded / emptyFutureDays.length) : 0
-                              }),
-                              suggestedDailyValue,
-                              futureDayIndices,
-                              emptyFutureDayIndices: emptyFutureDays,
-                              dailyValues,
-                              dailyGuidanceValues,
-                              unit: kpi.unit,
-                              isSleepAverage: kpi.name === 'Sleep Average' || kpi.kpi_id === 'sleepAverage',
-                              isAverageKPI,
-                              daysWithData,
-                              guidanceOnlyForEmptyDays: isAverageKPI,
-                              isDiscrete: kpi.unit === 'sessions' || kpi.unit === 'requests' || kpi.unit === 'bugs' || kpi.unit === 'items' || kpi.unit === 'days',
-                              todayString: today.toDateString()
-                            });
-                          }
+                          // Debug logging removed
 
                           return [0, 1, 2, 3, 4, 5, 6].map((dayIndex) => {
                             const dailyValue = dailyValues[dayIndex] || 0;
@@ -995,7 +1127,7 @@ const WeeklyKPIInput: React.FC<WeeklyKPIInputProps> = ({ onWeekChange }) => {
                       placeholder="Unit"
                     />
                   </div>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-4 gap-2">
                     <input
                       type="number"
                       value={newKPIForm.minTarget}
@@ -1013,6 +1145,16 @@ const WeeklyKPIInput: React.FC<WeeklyKPIInputProps> = ({ onWeekChange }) => {
                       placeholder="Target"
                       min="0"
                       step="0.1"
+                    />
+                    <input
+                      type="number"
+                      value={newKPIForm.weight}
+                      onChange={(e) => setNewKPIForm(prev => ({ ...prev, weight: Math.max(0, parseFloat(e.target.value) || 0) }))}
+                      className="terminal-input text-sm"
+                      placeholder="Weight"
+                      min="0"
+                      step="0.1"
+                      title="Relative importance for weekly completion"
                     />
                     <input
                       type="color"
@@ -1183,7 +1325,7 @@ const WeeklyKPIInput: React.FC<WeeklyKPIInputProps> = ({ onWeekChange }) => {
                   placeholder="Unit"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 <input
                   type="number"
                   value={newKPIForm.minTarget}
@@ -1201,6 +1343,16 @@ const WeeklyKPIInput: React.FC<WeeklyKPIInputProps> = ({ onWeekChange }) => {
                   placeholder="Target"
                   min="0"
                   step="0.1"
+                />
+                <input
+                  type="number"
+                  value={newKPIForm.weight}
+                  onChange={(e) => setNewKPIForm(prev => ({ ...prev, weight: Math.max(0, parseFloat(e.target.value) || 0) }))}
+                  className="terminal-input text-sm"
+                  placeholder="Weight"
+                  min="0"
+                  step="0.1"
+                  title="Relative importance for weekly completion"
                 />
               </div>
               <div className="space-y-2">

@@ -15,6 +15,7 @@ export interface ConfigurableKPI {
   reverse_scoring?: boolean; // If true, lower values are better (e.g., screen time). If false, higher values are better
   equal_is_better?: boolean; // If true, being exactly at target is best, scores decrease as you move away in either direction
   sort_order: number;
+  weight?: number; // Weight for weekly completion contribution (default 1)
   created_at?: string;
   updated_at?: string;
 }
@@ -142,6 +143,13 @@ export class ConfigurableKPIManager {
   async getUserKPIs(): Promise<ConfigurableKPI[]> {
     try {
       const kpis = await userStorage.getUserKPIs();
+      // Overlay temporary weights from hybrid storage if DB schema not updated yet
+      let weightOverlay: Record<string, number> = {};
+      try {
+        const maybe = await userStorage.getHybridData('kpi_weights', {});
+        if (maybe && typeof maybe === 'object') weightOverlay = maybe as Record<string, number>;
+      } catch {}
+
       return kpis.map((kpi: any) => ({
         id: kpi.id,
         kpi_id: kpi.kpi_id,
@@ -156,6 +164,9 @@ export class ConfigurableKPIManager {
         reverse_scoring: kpi.reverse_scoring || false,
         equal_is_better: kpi.equal_is_better || false,
         sort_order: kpi.sort_order,
+        weight: (typeof weightOverlay[kpi.kpi_id] === 'number')
+          ? Number(weightOverlay[kpi.kpi_id])
+          : (typeof kpi.weight !== 'undefined' && kpi.weight !== null ? parseFloat(kpi.weight) : 1),
         created_at: kpi.created_at,
         updated_at: kpi.updated_at
       }));
@@ -192,7 +203,8 @@ export class ConfigurableKPIManager {
     minTarget?: number,
     isAverage?: boolean,
     reverseScoring?: boolean,
-    equalIsBetter?: boolean
+    equalIsBetter?: boolean,
+    weight: number = 1
   ): Promise<ConfigurableKPI | null> {
     const kpiId = name.toLowerCase().replace(/[^a-z0-9]/g, '');
 
@@ -208,6 +220,7 @@ export class ConfigurableKPIManager {
       is_average: isAverage || false,
       reverse_scoring: reverseScoring || false,
       equal_is_better: equalIsBetter || false,
+      weight,
       sort_order: 999 // Custom KPIs go to the end
     };
 
@@ -267,20 +280,30 @@ export class ConfigurableKPIManager {
   // Update an existing KPI
   async updateKPI(kpiId: string, updates: Partial<Omit<ConfigurableKPI, 'id' | 'kpi_id' | 'created_at' | 'updated_at'>>): Promise<void> {
     try {
-      const userKPIs = await this.getUserKPIs();
-      const existingKPI = userKPIs.find(kpi => kpi.id === kpiId);
+      // Only send whitelisted columns to DB to avoid updating immutable fields
+      const payload: Record<string, any> = { updated_at: new Date().toISOString() };
+      const allowedKeys = [
+        'name',
+        'target',
+        'min_target',
+        'unit',
+        'category',
+        'color',
+        'is_active',
+        'sort_order',
+        'is_average',
+        'reverse_scoring',
+        'equal_is_better',
+        'weight'
+      ] as const;
 
-      if (!existingKPI) {
-        throw new Error('KPI not found');
+      for (const key of allowedKeys) {
+        if (key in (updates as any)) {
+          (payload as any)[key] = (updates as any)[key];
+        }
       }
 
-      const updatedKPI = {
-        ...existingKPI,
-        ...updates,
-        updated_at: new Date().toISOString()
-      };
-
-      await userStorage.updateUserKPI(kpiId, updatedKPI);
+      await userStorage.updateUserKPI(kpiId, payload);
     } catch (error) {
       console.error('Failed to update KPI:', error);
       throw error;
@@ -342,6 +365,35 @@ export class ConfigurableKPIManager {
     });
   }
 
+  // Week-specific target overrides
+  async getWeeklyTargetOverrides(weekKey: string): Promise<Array<{ kpi_id: string; target_value: number; min_target_value: number | null }>> {
+    try {
+      return await userStorage.getWeeklyTargetOverrides(weekKey);
+    } catch (e) {
+      console.error('Failed to load weekly target overrides:', e);
+      return [];
+    }
+  }
+
+  async setWeeklyTargetOverride(weekKey: string, kpiId: string, targetValue: number, minTargetValue?: number | null): Promise<boolean> {
+    try {
+      const res = await userStorage.setWeeklyTargetOverride(weekKey, kpiId, targetValue, typeof minTargetValue === 'number' ? minTargetValue : null);
+      return !!res;
+    } catch (e) {
+      console.error('Failed to set weekly target override:', e);
+      return false;
+    }
+  }
+
+  async clearWeeklyTargetOverride(weekKey: string, kpiId: string): Promise<boolean> {
+    try {
+      return await userStorage.deleteWeeklyTargetOverride(weekKey, kpiId);
+    } catch (e) {
+      console.error('Failed to clear weekly target override:', e);
+      return false;
+    }
+  }
+
   // Weekly KPI data management
   async getWeeklyKPIData(): Promise<ConfigurableKPIData> {
     try {
@@ -364,8 +416,8 @@ export class ConfigurableKPIManager {
   calculateWeekCompletion(weekValues: WeeklyKPIValues, kpis: ConfigurableKPI[]): number {
     if (kpis.length === 0) return 0;
 
-    let totalProgress = 0;
-    let validKPIs = 0;
+    let weightedProgress = 0;
+    let totalWeight = 0;
 
     for (const kpi of kpis.filter(k => k.is_active)) {
       const value = weekValues[kpi.kpi_id] || 0;
@@ -399,12 +451,16 @@ export class ConfigurableKPIManager {
           progress = Math.min(1, value / target);
         }
         
-        totalProgress += progress;
-        validKPIs++;
+        // Allow 0 weight to exclude KPI from completion
+        const weight = (typeof kpi.weight === 'number' && kpi.weight >= 0) ? kpi.weight : 1;
+        if (weight > 0) {
+          weightedProgress += progress * weight;
+          totalWeight += weight;
+        }
       }
     }
 
-    return validKPIs > 0 ? (totalProgress / validKPIs) * 100 : 0;
+    return totalWeight > 0 ? (weightedProgress / totalWeight) * 100 : 0;
   }
 
   // Get KPI performance stats

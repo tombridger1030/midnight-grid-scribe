@@ -39,7 +39,6 @@ const Visualizer = () => {
       
       // Load active KPIs first
       const kpis = await kpiManager.getActiveKPIs();
-      console.log('Refreshed active KPIs for Visualizer:', kpis);
       setActiveKPIs(kpis);
       
       // Clear selected KPI if it no longer exists
@@ -50,12 +49,10 @@ const Visualizer = () => {
       // Try to load weekly data from Supabase first, fall back to local
       try {
         const data = await loadWeeklyKPIsWithSync();
-        console.log('Refreshed weekly KPI data for Visualizer:', data);
         setWeeklyData(data);
       } catch (syncError) {
         console.warn('Supabase sync failed, falling back to local data:', syncError);
         const localData = loadWeeklyKPIs();
-        console.log('Refreshed local weekly KPI data for Visualizer:', localData);
         setWeeklyData(localData);
       }
     } catch (error) {
@@ -95,7 +92,6 @@ const Visualizer = () => {
       const date = new Date(currentDate);
       date.setDate(currentDate.getDate() - (i * 7));
       const weekKey = getWeekKey(date);
-      console.log('Generated week key:', weekKey, typeof weekKey);
       weeks.push(weekKey);
     }
     
@@ -117,15 +113,12 @@ const Visualizer = () => {
   const getKPIProgressionData = (): WeeklyChartData[] => {
     try {
       const weeks = getWeekRange(selectedPeriod);
-      console.log('Generated weeks for KPI progression:', weeks);
 
       if (!weeks || weeks.length === 0) {
-        console.log('No weeks available for KPI progression');
         return [];
       }
 
       if (!weeklyData || !weeklyData.records) {
-        console.log('No weekly data available for KPI progression');
         return [];
       }
 
@@ -142,13 +135,7 @@ const Visualizer = () => {
           dataPoint[kpi.kpi_id] = value;
         });
 
-        console.log('KPI progression data point:', dataPoint);
-
-        // Log individual KPI values for debugging
-        activeKPIs.forEach(kpi => {
-          const value = dataPoint[kpi.kpi_id];
-          console.log(`  ${kpi.name} (${kpi.kpi_id}): ${value}`);
-        });
+        // debug output removed
 
         return dataPoint;
       });
@@ -190,12 +177,8 @@ const Visualizer = () => {
   // Render all KPIs progression chart (vertical layout)
   const renderAllKPIsChart = () => {
     const chartData = getKPIProgressionData();
-    console.log('All KPIs chart data:', chartData);
 
     if (!chartData || chartData.length === 0) {
-      console.log('No chart data available - showing empty state');
-      console.log('Weekly data records:', weeklyData.records.length);
-      console.log('Week range for current period:', getWeekRange(selectedPeriod));
       return (
         <div className="text-center py-12">
           <div className="text-terminal-accent/70 mb-2">No data available</div>
@@ -236,16 +219,12 @@ const Visualizer = () => {
                   color: '#8A8D93',
                   fontSize: '12px'
                 }}
-                labelFormatter={(label) => {
-                  console.log('All KPIs tooltip labelFormatter received:', label, typeof label);
-                  return String(label);
-                }}
+                labelFormatter={(label) => String(label)}
               />
               <Legend />
 
               {/* All KPIs as separate lines */}
               {activeKPIs.map(kpi => {
-                console.log(`Creating line for ${kpi.name} (${kpi.kpi_id}) with color ${kpi.color}`);
                 return (
                   <Line
                     key={kpi.kpi_id}

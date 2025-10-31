@@ -262,3 +262,5 @@ CREATE TRIGGER update_user_kpis_updated_at
 SELECT 'Database setup completed successfully! You can now use the application.' as status;
 
 
+
+
