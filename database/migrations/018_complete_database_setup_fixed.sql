@@ -264,3 +264,4 @@ SELECT 'Database setup completed successfully! You can now use the application.'
 
 
 
+

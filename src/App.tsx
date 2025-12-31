@@ -17,6 +17,7 @@ import ContentWeekly from "./pages/ContentWeekly";
 import ContentInput from "./pages/ContentInput";
 import ContentMetrics from "./pages/ContentMetrics";
 import Profile from "./pages/Profile";
+import Ships from "./pages/Ships";
 import { useState, useEffect } from "react";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import CyberpunkLogin from "@/components/cyberpunk/CyberpunkLogin";
@@ -27,6 +28,7 @@ import { userStorage } from "@/lib/userStorage";
 import { preferencesManager } from "@/lib/userPreferences";
 import { supabase } from "@/lib/supabase";
 import { CustomHeroUIProvider } from "@/components/providers/HeroUIProvider";
+import { useProgressionStore } from "@/stores/progressionStore";
 
 const queryClient = new QueryClient();
 
@@ -35,6 +37,7 @@ const AppContent = () => {
   const { user, profile, loading } = useAuth();
   const [isInitializing, setIsInitializing] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(false);
+  const initializeProgression = useProgressionStore((state) => state.initialize);
 
   useEffect(() => {
     if (user && !isInitializing) {
@@ -45,6 +48,9 @@ const AppContent = () => {
           
           // Initialize default KPIs if this is a new user
           await kpiManager.initializeDefaultKPIs();
+
+          // Initialize progression system
+          await initializeProgression(user.id);
 
           // Load sound preference
           const soundPref = await preferencesManager.shouldEnableSound();
@@ -94,6 +100,7 @@ const AppContent = () => {
           <Route path="roadmap" element={<Roadmap />} />
           <Route path="cash" element={<Cash />} />
           <Route path="profile" element={<Profile />} />
+          <Route path="ships" element={<Ships />} />
           <Route path="content" element={<Content />}>
             <Route index element={<ContentDashboard />} />
             <Route path="dashboard" element={<ContentDashboard />} />

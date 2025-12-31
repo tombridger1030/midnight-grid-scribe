@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Ship, ExternalLink, Github, Twitter, Youtube, Instagram, Plus, Clock, RefreshCw, Wifi, WifiOff, Video } from 'lucide-react';
+import { Ship, ExternalLink, Github, Twitter, Youtube, Instagram, Plus, Clock, RefreshCw, Wifi, WifiOff, Video, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   loadNoctisiumData,
@@ -17,6 +17,8 @@ import {
   testGitHubIntegration
 } from '@/lib/github';
 import { githubIntegration, GitHubCommit } from '@/lib/githubIntegration';
+import { useXPActions } from '@/hooks/useProgression';
+import { XP_REWARDS } from '@/lib/progression';
 
 interface ShipFeedProps {
   className?: string;
@@ -28,6 +30,8 @@ export const ShipFeed: React.FC<ShipFeedProps> = ({ className, maxItems = 10 }) 
   const [githubCommits, setGithubCommits] = useState<GitHubCommit[]>([]);
   const [recentContent, setRecentContent] = useState<ContentListItem[]>([]);
   const [newShipDescription, setNewShipDescription] = useState('');
+  const [xpGained, setXpGained] = useState<number | null>(null);
+  const { onShip } = useXPActions();
   const [newShipUrl, setNewShipUrl] = useState('');
   const [isAddingShip, setIsAddingShip] = useState(false);
   const [timeSinceLastShip, setTimeSinceLastShip] = useState(0);
@@ -118,7 +122,7 @@ export const ShipFeed: React.FC<ShipFeedProps> = ({ className, maxItems = 10 }) 
     };
   }, [maxItems, isGithubSyncing]);
 
-  const handleAddShip = (e: React.FormEvent) => {
+  const handleAddShip = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!newShipDescription.trim()) return;
@@ -134,6 +138,17 @@ export const ShipFeed: React.FC<ShipFeedProps> = ({ className, maxItems = 10 }) 
     setNewShipUrl('');
     setIsAddingShip(false);
     setTimeSinceLastShip(0);
+
+    // Award XP for shipping
+    try {
+      const result = await onShip();
+      if (result.xpGained > 0) {
+        setXpGained(result.xpGained);
+        setTimeout(() => setXpGained(null), 3000); // Clear after 3s
+      }
+    } catch (error) {
+      console.error('Failed to award XP for ship:', error);
+    }
   };
 
   const handleManualGitHubSync = async () => {
@@ -259,6 +274,14 @@ export const ShipFeed: React.FC<ShipFeedProps> = ({ className, maxItems = 10 }) 
 
   return (
     <div className={cn("space-y-4", className)}>
+      {/* XP Gain Notification */}
+      {xpGained !== null && (
+        <div className="flex items-center justify-center gap-2 py-2 px-4 bg-green-500/20 border border-green-500/30 rounded text-green-400 text-sm animate-pulse">
+          <Sparkles size={16} />
+          <span>+{xpGained} XP for shipping!</span>
+        </div>
+      )}
+
       {/* Header with urgency indicator */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">

@@ -13,6 +13,12 @@ export interface UserRank {
   last_assessment: string; // ISO date string
   created_at: string;
   updated_at: string;
+  // Gamification fields
+  character_level?: number;
+  total_stat_xp?: number;
+  current_streak_days?: number;
+  longest_streak_days?: number;
+  critical_hit_count?: number;
 }
 
 export interface RankChange {
@@ -216,6 +222,16 @@ export class RankingManager {
 
   // Calculate RR change based on completion percentage and current rank
   calculateRRChange(completionPercentage: number, currentRank: RankTier): number {
+    return this.calculateRRChangeWithGamification(completionPercentage, currentRank);
+  }
+
+  // Enhanced RR calculation with gamification mechanics
+  calculateRRChangeWithGamification(
+    completionPercentage: number,
+    currentRank: RankTier,
+    isCriticalHit: boolean = false,
+    streakMultiplier: number = 1
+  ): number {
     const rankConfig = RANK_CONFIG[currentRank];
     let baseChange: number;
 
@@ -232,7 +248,7 @@ export class RankingManager {
       // Close to target (40-49%) - small penalty
       baseChange = -10; // -10 RR (not too harsh)
     } else if (completionPercentage >= 30) {
-      // Below target (30-39%) - medium penalty  
+      // Below target (30-39%) - medium penalty
       baseChange = -20; // -20 RR (your 35% example)
     } else if (completionPercentage >= 20) {
       // Poor performance (20-29%) - large penalty
@@ -245,7 +261,17 @@ export class RankingManager {
     // Apply rank multiplier (exponential scaling)
     const adjustedChange = baseChange * rankConfig.rr_multiplier;
 
-    return Math.round(adjustedChange);
+    // Apply critical hit multiplier (1.5x + random bonus up to 0.5x)
+    const criticalMultiplier = isCriticalHit ?
+      1.5 + (Math.random() * 0.5) : 1;
+
+    // Apply streak bonus (10% per streak day, max 100% bonus)
+    const streakBonus = Math.min(streakMultiplier * 0.1, 1);
+    const finalMultiplier = criticalMultiplier * (1 + streakBonus);
+
+    const finalChange = adjustedChange * finalMultiplier;
+
+    return Math.round(finalChange);
   }
 
   // Determine rank based on RR points
@@ -606,6 +632,240 @@ export class RankingManager {
     const daysSinceAssessment = (Date.now() - lastAssessmentDate.getTime()) / (1000 * 60 * 60 * 24);
 
     return daysSinceAssessment >= 7; // Assess if more than 7 days since last assessment
+  }
+
+  // ===== GAMIFICATION METHODS =====
+
+  // Calculate stat XP gains based on KPI completion
+  calculateStatXP(kpiCompletion: {
+    completion: number;
+    category: string;
+  }): Record<string, number> {
+    const statMapping: Record<string, string> = {
+      'discipline': 'constitution',
+      'engineering': 'intelligence',
+      'learning': 'wisdom',
+      'fitness': 'strength',
+      'focus': 'agility',
+      'productivity': 'agility',
+      'health': 'strength',
+      'technical': 'intelligence',
+      'study': 'wisdom',
+      'routine': 'constitution'
+    };
+
+    const xpGains: Record<string, number> = {};
+    const baseXP = Math.round(kpiCompletion.completion * 10);
+
+    // Find matching stat
+    const mappedStat = statMapping[kpiCompletion.category.toLowerCase()];
+    if (mappedStat) {
+      xpGains[mappedStat] = baseXP;
+    } else {
+      // If no specific match, distribute across all stats equally
+      const stats = ['strength', 'intelligence', 'wisdom', 'constitution', 'agility'];
+      const xpPerStat = Math.floor(baseXP / stats.length);
+      stats.forEach(stat => {
+        xpGains[stat] = xpPerStat;
+      });
+    }
+
+    return xpGains;
+  }
+
+  // Check for critical hit (15% chance for good performance)
+  checkForCriticalHit(completionPercentage: number): boolean {
+    // Higher completion = higher critical hit chance
+    let criticalChance = 0;
+
+    if (completionPercentage >= 100) {
+      criticalChance = 0.25; // 25% for perfect completion
+    } else if (completionPercentage >= 90) {
+      criticalChance = 0.20; // 20% for excellent completion
+    } else if (completionPercentage >= 80) {
+      criticalChance = 0.15; // 15% for good completion
+    } else if (completionPercentage >= 70) {
+      criticalChance = 0.10; // 10% for decent completion
+    } else {
+      criticalChance = 0.05; // 5% for poor completion (still possible!)
+    }
+
+    return Math.random() < criticalChance;
+  }
+
+  // Calculate user's current streak
+  async calculateStreak(): Promise<number> {
+    try {
+      // This would integrate with quest system for streak tracking
+      // For now, return a mock calculation
+      const currentRank = await this.getUserRank();
+      return currentRank?.current_streak_days || 0;
+    } catch (error) {
+      console.error('Failed to calculate streak:', error);
+      return 0;
+    }
+  }
+
+  // Check streak bonus multiplier
+  checkStreakBonus(streakDays: number): number {
+    if (streakDays >= 30) return 3; // 3x for 30+ day streak
+    if (streakDays >= 21) return 2.5; // 2.5x for 21+ day streak
+    if (streakDays >= 14) return 2; // 2x for 14+ day streak
+    if (streakDays >= 7) return 1.5; // 1.5x for 7+ day streak
+    if (streakDays >= 3) return 1.2; // 1.2x for 3+ day streak
+    return 1; // No bonus for less than 3 days
+  }
+
+  // Update user's gamification stats after quest completion
+  async updateGamificationStats(
+    questCompletion: {
+      completionPercentage: number;
+      isCriticalHit: boolean;
+      streakDays: number;
+      statXPGains: Record<string, number>;
+    }
+  ): Promise<void> {
+    try {
+      const currentRank = await this.getUserRank();
+      if (!currentRank) return;
+
+      const updates: Partial<UserRank> = {};
+
+      // Update streak
+      const newStreakDays = Math.max(questCompletion.streakDays, currentRank.current_streak_days || 0);
+      updates.current_streak_days = newStreakDays;
+
+      // Update longest streak if current is longer
+      if (newStreakDays > (currentRank.longest_streak_days || 0)) {
+        updates.longest_streak_days = newStreakDays;
+      }
+
+      // Increment critical hit count if applicable
+      if (questCompletion.isCriticalHit) {
+        updates.critical_hit_count = (currentRank.critical_hit_count || 0) + 1;
+      }
+
+      // Calculate total stat XP from this completion
+      const statXPFromCompletion = Object.values(questCompletion.statXPGains).reduce((sum, xp) => sum + xp, 0);
+      updates.total_stat_xp = (currentRank.total_stat_xp || 0) + statXPFromCompletion;
+
+      // Calculate character level (1 level per 500 total stat XP)
+      updates.character_level = Math.floor((updates.total_stat_xp || 0) / 500) + 1;
+
+      // Save updates
+      await userStorage.setUserRank(updates as Omit<UserRank, 'created_at' | 'updated_at'>);
+
+      console.log('✅ Gamification stats updated:', {
+        streak: newStreakDays,
+        totalStatXP: updates.total_stat_xp,
+        characterLevel: updates.character_level,
+        criticalHits: updates.critical_hit_count
+      });
+
+    } catch (error) {
+      console.error('Failed to update gamification stats:', error);
+    }
+  }
+
+  // Get comprehensive gamification status
+  async getGamificationStatus(): Promise<{
+    userRank: UserRank | null;
+    nextRankProgress: number;
+  }> {
+    try {
+      const userRank = await this.getUserRank();
+
+      const nextRankProgress = userRank ?
+        this.getRankProgress(userRank.rr_points, userRank.current_rank) : 0;
+
+      return {
+        userRank,
+        nextRankProgress,
+      };
+
+    } catch (error) {
+      console.error('Failed to get gamification status:', error);
+      throw error;
+    }
+  }
+
+  // Enhanced weekly assessment with gamification integration
+  async assessWeeklyPerformanceWithGamification(weekKey: string): Promise<{
+    assessment: WeeklyAssessment;
+    isCriticalHit: boolean;
+    streakMultiplier: number;
+    statXPGains: Record<string, number>;
+    progressionEvents: string[];
+  }> {
+    try {
+      // Get base assessment
+      const assessment = await this.calculateWeeklyCompletion(weekKey);
+
+      // Check for critical hit
+      const isCriticalHit = this.checkForCriticalHit(assessment.completion_percentage);
+
+      // Calculate current streak
+      const currentStreak = await this.calculateStreak();
+      const streakMultiplier = this.checkStreakBonus(currentStreak);
+
+      // Calculate stat XP gains
+      const statXPGains: Record<string, number> = {};
+      assessment.kpi_breakdown.forEach(kpi => {
+        const xpGains = this.calculateStatXP({
+          completion: kpi.percentage,
+          category: kpi.name.toLowerCase()
+        });
+
+        // Merge XP gains
+        Object.entries(xpGains).forEach(([stat, xp]) => {
+          statXPGains[stat] = (statXPGains[stat] || 0) + xp;
+        });
+      });
+
+      // Calculate enhanced RR change
+      const currentRank = await this.getUserRank();
+      const rrChange = this.calculateRRChangeWithGamification(
+        assessment.completion_percentage,
+        currentRank?.current_rank || 'bronze',
+        isCriticalHit,
+        streakMultiplier
+      );
+
+      // Update assessment with new RR change
+      assessment.rr_change = rrChange;
+
+      // Track progression events
+      const progressionEvents: string[] = [];
+      if (isCriticalHit) {
+        progressionEvents.push('critical_hit');
+      }
+      if (streakMultiplier > 1) {
+        progressionEvents.push(`streak_bonus_${Math.round((streakMultiplier - 1) * 100)}%`);
+      }
+
+      // Note: Stat XP gains are now handled by the simplified progression system
+      // The new system uses a single XP value rather than per-stat XP
+
+      // Update gamification stats
+      await this.updateGamificationStats({
+        completionPercentage: assessment.completion_percentage,
+        isCriticalHit,
+        streakDays: currentStreak,
+        statXPGains
+      });
+
+      return {
+        assessment,
+        isCriticalHit,
+        streakMultiplier,
+        statXPGains,
+        progressionEvents
+      };
+
+    } catch (error) {
+      console.error('Failed to assess weekly performance with gamification:', error);
+      throw error;
+    }
   }
 }
 

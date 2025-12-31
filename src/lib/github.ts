@@ -627,3 +627,239 @@ export async function testGitHubIntegration(): Promise<void> {
 if (typeof window !== 'undefined') {
   (window as any).testGitHubIntegration = testGitHubIntegration;
 }
+
+// ============================================
+// SHIP WIDGET INTEGRATION
+// ============================================
+
+export interface Ship {
+  id: string;
+  type: 'commit' | 'pr' | 'release';
+  title: string;
+  description: string;
+  url: string;
+  timestamp: string;
+  repo: string;
+}
+
+export interface ShipSummary {
+  lastShipTime: Date | null;
+  hoursSinceLastShip: number;
+  streak: number;
+  todayShips: Ship[];
+  recentShips: Ship[]; // Last 7 days
+  isOverdue: boolean; // More than 24h since last ship
+}
+
+// In-memory cache for ship data
+let shipCache: {
+  ships: Ship[];
+  lastFetch: number;
+} | null = null;
+
+const SHIP_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
+
+/**
+ * Fetch recent ships (commits and PRs) from GitHub
+ */
+export async function fetchRecentShips(days: number = 7): Promise<Ship[]> {
+  // Check cache
+  if (shipCache && (Date.now() - shipCache.lastFetch) < SHIP_CACHE_TTL) {
+    return shipCache.ships;
+  }
+
+  if (!isGitHubConfigured()) {
+    console.warn('GitHub not configured for ship tracking');
+    return [];
+  }
+
+  const config = getGitHubConfig();
+  const since = new Date();
+  since.setDate(since.getDate() - days);
+  
+  const allShips: Ship[] = [];
+
+  try {
+    for (const repo of config.repos) {
+      // Fetch commits
+      const commits = await fetchRecentCommits(repo, since);
+      for (const commit of commits) {
+        // Include all commits (not just "significant" ones) for ship tracking
+        allShips.push({
+          id: commit.sha,
+          type: 'commit',
+          title: commit.commit.message.split('\n')[0],
+          description: `${commit.files?.length || 0} files changed`,
+          url: commit.html_url,
+          timestamp: commit.commit.author.date,
+          repo,
+        });
+      }
+
+      // Fetch PRs
+      const prs = await fetchRecentPRs(repo, since);
+      for (const pr of prs) {
+        if (pr.merged_at) {
+          allShips.push({
+            id: `pr-${pr.number}`,
+            type: 'pr',
+            title: pr.title,
+            description: `PR #${pr.number} - ${pr.changed_files || 0} files`,
+            url: pr.html_url,
+            timestamp: pr.merged_at,
+            repo,
+          });
+        }
+      }
+    }
+
+    // Sort by timestamp descending (most recent first)
+    allShips.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+    // Update cache
+    shipCache = {
+      ships: allShips,
+      lastFetch: Date.now(),
+    };
+
+    return allShips;
+  } catch (error) {
+    console.error('Error fetching ships:', error);
+    return shipCache?.ships || [];
+  }
+}
+
+/**
+ * Get the timestamp of the most recent ship
+ */
+export async function getLastShipTime(): Promise<Date | null> {
+  const ships = await fetchRecentShips();
+  if (ships.length === 0) return null;
+  return new Date(ships[0].timestamp);
+}
+
+/**
+ * Get hours since last ship
+ */
+export async function getHoursSinceLastShip(): Promise<number> {
+  const lastShip = await getLastShipTime();
+  if (!lastShip) return Infinity;
+  
+  const now = Date.now();
+  const diff = now - lastShip.getTime();
+  return diff / (1000 * 60 * 60); // Convert to hours
+}
+
+/**
+ * Calculate shipping streak (consecutive days with at least one ship)
+ */
+export async function getShippingStreak(): Promise<number> {
+  const ships = await fetchRecentShips(30); // Look back 30 days for streak
+  if (ships.length === 0) return 0;
+
+  // Group ships by date (local timezone)
+  const shipDates = new Set<string>();
+  for (const ship of ships) {
+    const date = new Date(ship.timestamp);
+    const dateStr = date.toISOString().split('T')[0];
+    shipDates.add(dateStr);
+  }
+
+  // Check consecutive days starting from today
+  let streak = 0;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  // If no ship today, check if we shipped yesterday (streak can continue)
+  const todayStr = today.toISOString().split('T')[0];
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+  // Start checking from today or yesterday
+  let checkDate = new Date(today);
+  if (!shipDates.has(todayStr) && shipDates.has(yesterdayStr)) {
+    // No ship today but shipped yesterday - streak continues from yesterday
+    checkDate = new Date(yesterday);
+  } else if (!shipDates.has(todayStr)) {
+    // No ship today and no ship yesterday - streak is 0
+    return 0;
+  }
+
+  // Count consecutive days with ships
+  while (true) {
+    const dateStr = checkDate.toISOString().split('T')[0];
+    if (shipDates.has(dateStr)) {
+      streak++;
+      checkDate.setDate(checkDate.getDate() - 1);
+    } else {
+      break;
+    }
+  }
+
+  return streak;
+}
+
+/**
+ * Get today's ships
+ */
+export async function getTodayShips(): Promise<Ship[]> {
+  const ships = await fetchRecentShips(1);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  return ships.filter(ship => {
+    const shipDate = new Date(ship.timestamp);
+    return shipDate >= today;
+  });
+}
+
+/**
+ * Get complete ship summary for the widget
+ */
+export async function getShipSummary(): Promise<ShipSummary> {
+  const [ships, streak] = await Promise.all([
+    fetchRecentShips(7),
+    getShippingStreak(),
+  ]);
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  const todayShips = ships.filter(ship => {
+    const shipDate = new Date(ship.timestamp);
+    return shipDate >= today;
+  });
+
+  const lastShipTime = ships.length > 0 ? new Date(ships[0].timestamp) : null;
+  const hoursSinceLastShip = lastShipTime 
+    ? (Date.now() - lastShipTime.getTime()) / (1000 * 60 * 60)
+    : Infinity;
+
+  return {
+    lastShipTime,
+    hoursSinceLastShip,
+    streak,
+    todayShips,
+    recentShips: ships,
+    isOverdue: hoursSinceLastShip > 24,
+  };
+}
+
+/**
+ * Force refresh ship cache
+ */
+export function invalidateShipCache(): void {
+  shipCache = null;
+}
+
+/**
+ * Format hours since ship for display
+ */
+export function formatTimeSinceShip(hours: number): string {
+  if (!isFinite(hours)) return 'Never';
+  if (hours < 1) return '<1h ago';
+  if (hours < 24) return `${Math.floor(hours)}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
