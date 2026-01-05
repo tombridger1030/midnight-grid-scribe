@@ -38,7 +38,7 @@ export interface UserPreferences {
 
 export const DEFAULT_PREFERENCES: UserPreferences = {
   show_content_tab: true,
-  enabled_modules: ['dashboard', 'kpis', 'ships', 'visualizer', 'roadmap', 'cash', 'content'],
+  enabled_modules: ['dashboard', 'kpis', 'ships', 'analytics', 'roadmap', 'cash', 'content'],
   default_view: 'dashboard',
   theme_settings: {
     terminal_style: 'cyberpunk',
@@ -69,7 +69,7 @@ export const AVAILABLE_MODULES = [
   { id: 'dashboard', name: 'Dashboard', icon: 'LayoutDashboard', description: 'Main overview and metrics' },
   { id: 'kpis', name: 'Weekly KPIs', icon: 'BarChart3', description: 'Track weekly performance indicators' },
   { id: 'ships', name: 'Ships', icon: 'Ship', description: 'Track shipped work and commits' },
-  { id: 'visualizer', name: 'Analytics', icon: 'TrendingUp', description: 'Data visualization and trends' },
+  { id: 'analytics', name: 'Analytics', icon: 'TrendingUp', description: 'Comprehensive analytics and insights' },
   { id: 'roadmap', name: 'Roadmap', icon: 'GitBranch', description: 'Goals and milestone tracking' },
   { id: 'cash', name: 'Cash', icon: 'Network', description: 'Financial tracking and metrics' },
   { id: 'content', name: 'Content', icon: 'FileText', description: 'Content creation and management' },

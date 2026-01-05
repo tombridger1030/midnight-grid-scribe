@@ -260,7 +260,6 @@ const Cash: React.FC = () => {
           />
         ) : (
           <InvestmentsTab
-            totalCAD={totalInvestmentsCAD}
             hideBalances={hideBalances}
           />
         )}

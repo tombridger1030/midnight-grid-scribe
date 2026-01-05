@@ -2,11 +2,12 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import TerminalLayout from "@/components/TerminalLayout";
 import Index from "./pages/Index";
 import Dashboard from "./pages/Dashboard";
 import Visualizer from "./pages/Visualizer";
+import Analytics from "./pages/Analytics";
 import Roadmap from "./pages/Roadmap";
 import Cash from "./pages/Cash";
 import NotFound from "./pages/NotFound";
@@ -16,7 +17,8 @@ import ContentDashboard from "./pages/ContentDashboard";
 import ContentWeekly from "./pages/ContentWeekly";
 import ContentInput from "./pages/ContentInput";
 import ContentMetrics from "./pages/ContentMetrics";
-import Profile from "./pages/Profile";
+import Settings from "./pages/Settings";
+import KPIManage from "./pages/KPIManage";
 import Ships from "./pages/Ships";
 import { useState, useEffect } from "react";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
@@ -97,9 +99,12 @@ const AppContent = () => {
           <Route path="kpis" element={<Index />} />
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="visualizer" element={<Visualizer />} />
+          <Route path="analytics" element={<Analytics />} />
           <Route path="roadmap" element={<Roadmap />} />
           <Route path="cash" element={<Cash />} />
-          <Route path="profile" element={<Profile />} />
+          <Route path="settings" element={<Settings />} />
+          <Route path="kpis/manage" element={<KPIManage />} />
+          <Route path="profile" element={<Navigate to="/settings" replace />} />
           <Route path="ships" element={<Ships />} />
           <Route path="content" element={<Content />}>
             <Route index element={<ContentDashboard />} />

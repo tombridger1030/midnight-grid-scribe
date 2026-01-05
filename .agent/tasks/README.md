@@ -14,6 +14,7 @@ Each feature should have its own markdown file containing:
 ## Current Features
 
 ### Core Features
+- [Weekly KPIs Revamp](./weekly-kpis-revamp.md) - Streamlined weekly tracking with multi-type training and books ✅
 - [Metrics Input System](./metrics-input.md) - Daily data entry interface
 - [Data Visualization](./data-visualization.md) - Charts and analytics
 - [Sprint Management](./sprint-management.md) - 21/7 day cycle tracking

@@ -14,6 +14,7 @@ import {
   getGitHubSyncStatus,
   triggerManualSync,
   isGitHubConfigured,
+  isGitHubSyncConfigured,
   testGitHubIntegration
 } from '@/lib/github';
 import { githubIntegration, GitHubCommit } from '@/lib/githubIntegration';
@@ -152,7 +153,7 @@ export const ShipFeed: React.FC<ShipFeedProps> = ({ className, maxItems = 10 }) 
   };
 
   const handleManualGitHubSync = async () => {
-    if (!isGitHubConfigured() || isGithubSyncing) return;
+    if (!isGitHubSyncConfigured() || isGithubSyncing) return;
     
     setIsGithubSyncing(true);
     setGithubSyncResult(null);

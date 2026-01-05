@@ -113,7 +113,7 @@ export const ShipWidget: React.FC<ShipWidgetProps> = ({ className }) => {
     return (
       <div className={cn('relative flex items-center', className)}>
         <Link
-          to="/profile"
+          to="/settings"
           className={cn(
             'flex items-center gap-2 px-3 py-1.5 rounded',
             'bg-surface-tertiary/50 hover:bg-surface-tertiary',
@@ -266,7 +266,7 @@ export const ShipWidget: React.FC<ShipWidgetProps> = ({ className }) => {
             {summary ? `${summary.recentShips.length} ships this week` : 'Loading...'}
           </span>
           <Link
-            to="/profile"
+            to="/settings"
             className="text-xs text-neon-cyan hover:text-neon-cyan/80 flex items-center gap-1"
           >
             <Settings size={12} />

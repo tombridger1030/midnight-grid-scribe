@@ -116,6 +116,8 @@ export class UserStorage {
         .upsert({
           user_id: this.userId,
           ...kpiData
+        }, {
+          onConflict: 'user_id,kpi_id'
         })
         .select()
         .single();
@@ -220,26 +222,35 @@ export class UserStorage {
 
   async deleteUserKPI(kpiId: string) {
     if (!this.userId) {
-      
-      return false;
+      console.error('Cannot delete KPI: No user ID set');
+      throw new Error('Cannot delete KPI: Not authenticated');
     }
 
+    console.log('userStorage.deleteUserKPI called with:', { kpiId, userId: this.userId });
+
     try {
-      const { error } = await supabase
+      const { data, error, count } = await supabase
         .from('user_kpis')
         .delete()
         .eq('id', kpiId)
-        .eq('user_id', this.userId);
+        .eq('user_id', this.userId)
+        .select();
+
+      console.log('Delete response:', { data, error, count });
 
       if (error) {
         console.error('Error deleting user KPI:', error);
-        return false;
+        throw new Error(`Database error: ${error.message}`);
+      }
+
+      if (!data || data.length === 0) {
+        console.warn('No rows deleted - KPI may not exist or user mismatch');
       }
 
       return true;
     } catch (error) {
       console.error('Error deleting user KPI:', error);
-      return false;
+      throw error;
     }
   }
 

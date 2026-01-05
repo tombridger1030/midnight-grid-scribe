@@ -1,8 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit, Trash2, Save, X, Target, Hash, Type, Palette, ArrowUp, ArrowDown } from 'lucide-react';
+import { Plus, Edit, Trash2, Save, X, Target, Hash, Type, Palette, ArrowUp, ArrowDown, Link, Github, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { kpiManager, ConfigurableKPI } from '@/lib/configurableKpis';
+import { kpiManager, ConfigurableKPI, AutoSyncSource } from '@/lib/configurableKpis';
 import { useToast } from '@/components/ui/use-toast';
+
+const AUTO_SYNC_OPTIONS: { value: AutoSyncSource; label: string; icon: React.ReactNode; description: string }[] = [
+  { value: null, label: 'None', icon: null, description: 'Manual entry only' },
+  { value: 'github_prs', label: 'GitHub PRs', icon: <Github size={14} />, description: 'Auto-count PRs created' },
+  { value: 'deep_work_timer', label: 'Deep Work Timer', icon: <Clock size={14} />, description: 'Auto-sync from timer' },
+];
 
 interface KPIManagementProps {
   onClose?: () => void;
@@ -40,7 +46,8 @@ const KPIManagement: React.FC<KPIManagementProps> = ({ onClose }) => {
     min_target: undefined as number | undefined,
     unit: '',
     category: 'fitness' as ConfigurableKPI['category'],
-    color: '#5FE3B3'
+    color: '#5FE3B3',
+    auto_sync_source: null as AutoSyncSource
   });
 
   useEffect(() => {
@@ -98,7 +105,8 @@ const KPIManagement: React.FC<KPIManagementProps> = ({ onClose }) => {
       min_target: undefined,
       unit: '',
       category: 'fitness',
-      color: '#5FE3B3'
+      color: '#5FE3B3',
+      auto_sync_source: null
     });
     setIsCreating(true);
     setEditingKPI(null);
@@ -111,7 +119,8 @@ const KPIManagement: React.FC<KPIManagementProps> = ({ onClose }) => {
       min_target: kpi.min_target,
       unit: kpi.unit,
       category: kpi.category,
-      color: kpi.color
+      color: kpi.color,
+      auto_sync_source: kpi.auto_sync_source || null
     });
     setEditingKPI(kpi);
     setIsCreating(false);
@@ -126,7 +135,8 @@ const KPIManagement: React.FC<KPIManagementProps> = ({ onClose }) => {
       min_target: undefined,
       unit: '',
       category: 'fitness',
-      color: '#5FE3B3'
+      color: '#5FE3B3',
+      auto_sync_source: null
     });
   };
 
@@ -151,6 +161,7 @@ const KPIManagement: React.FC<KPIManagementProps> = ({ onClose }) => {
           unit: formData.unit,
           category: formData.category,
           color: formData.color,
+          auto_sync_source: formData.auto_sync_source,
           is_active: true,
           sort_order: kpis.length + 1
         });
@@ -167,7 +178,8 @@ const KPIManagement: React.FC<KPIManagementProps> = ({ onClose }) => {
           min_target: formData.min_target,
           unit: formData.unit,
           category: formData.category,
-          color: formData.color
+          color: formData.color,
+          auto_sync_source: formData.auto_sync_source
         });
 
         toast({
@@ -193,8 +205,15 @@ const KPIManagement: React.FC<KPIManagementProps> = ({ onClose }) => {
       return;
     }
 
+    console.log('Attempting to delete KPI:', { id: kpi.id, kpi_id: kpi.kpi_id, name: kpi.name });
+
     try {
-      await kpiManager.permanentlyDeleteKPI(kpi.id);
+      const result = await kpiManager.permanentlyDeleteKPI(kpi.id);
+      console.log('Delete result:', result);
+      
+      // Force a small delay to let the database sync
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
       await loadKPIs();
 
       toast({
@@ -205,7 +224,7 @@ const KPIManagement: React.FC<KPIManagementProps> = ({ onClose }) => {
       console.error('Failed to delete KPI:', error);
       toast({
         title: "Error deleting KPI",
-        description: "Failed to delete KPI. Please try again.",
+        description: error instanceof Error ? error.message : "Failed to delete KPI. Please try again.",
         variant: "destructive",
       });
     }
@@ -420,6 +439,39 @@ const KPIManagement: React.FC<KPIManagementProps> = ({ onClose }) => {
                   </div>
                 </div>
               </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-xs text-gray-400 mb-1">
+                  <Link size={12} className="inline mr-1" />
+                  Auto-Sync Source
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {AUTO_SYNC_OPTIONS.map(option => (
+                    <button
+                      key={option.value || 'none'}
+                      type="button"
+                      onClick={() => setFormData(prev => ({ ...prev, auto_sync_source: option.value }))}
+                      className={cn(
+                        "flex items-center gap-2 px-3 py-2 rounded border text-sm transition-all",
+                        formData.auto_sync_source === option.value
+                          ? "border-accent-cyan bg-accent-cyan/10 text-accent-cyan"
+                          : "border-gray-600 text-gray-400 hover:border-gray-500"
+                      )}
+                    >
+                      {option.icon}
+                      <div className="text-left">
+                        <div className="font-medium">{option.label}</div>
+                        <div className="text-[10px] opacity-70">{option.description}</div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+                {formData.auto_sync_source === 'github_prs' && (
+                  <p className="text-xs text-gray-500 mt-2">
+                    Requires GitHub token in Profile &gt; Integrations
+                  </p>
+                )}
+              </div>
             </div>
 
             <div className="flex gap-2">
@@ -469,7 +521,16 @@ const KPIManagement: React.FC<KPIManagementProps> = ({ onClose }) => {
                     style={{ backgroundColor: kpi.color, borderColor: kpi.color }}
                   />
                   <div>
-                    <h4 className="font-medium text-sm">{kpi.name}</h4>
+                    <h4 className="font-medium text-sm flex items-center gap-2">
+                      {kpi.name}
+                      {kpi.auto_sync_source && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent-cyan/20 text-accent-cyan flex items-center gap-1">
+                          {kpi.auto_sync_source === 'github_prs' && <Github size={10} />}
+                          {kpi.auto_sync_source === 'deep_work_timer' && <Clock size={10} />}
+                          Auto-sync
+                        </span>
+                      )}
+                    </h4>
                     <div className="text-xs text-gray-400">
                       Target: {kpi.target} {kpi.unit}
                       {kpi.min_target && ` (min: ${kpi.min_target})`}

@@ -1,6 +1,8 @@
 import { userStorage } from './userStorage';
 import { supabase } from './supabase';
 
+export type AutoSyncSource = 'github_prs' | 'deep_work_timer' | null;
+
 export interface ConfigurableKPI {
   id: string;
   kpi_id: string;
@@ -14,6 +16,7 @@ export interface ConfigurableKPI {
   is_average?: boolean; // If true, calculates average of days with data instead of sum
   reverse_scoring?: boolean; // If true, lower values are better (e.g., screen time). If false, higher values are better
   equal_is_better?: boolean; // If true, being exactly at target is best, scores decrease as you move away in either direction
+  auto_sync_source?: AutoSyncSource; // External data source for auto-sync
   sort_order: number;
   weight?: number; // Weight for weekly completion contribution (default 1)
   created_at?: string;
@@ -163,6 +166,7 @@ export class ConfigurableKPIManager {
         is_average: kpi.is_average || false,
         reverse_scoring: kpi.reverse_scoring || false,
         equal_is_better: kpi.equal_is_better || false,
+        auto_sync_source: kpi.auto_sync_source || null,
         sort_order: kpi.sort_order,
         weight: (typeof weightOverlay[kpi.kpi_id] === 'number')
           ? Number(weightOverlay[kpi.kpi_id])
@@ -294,6 +298,7 @@ export class ConfigurableKPIManager {
         'is_average',
         'reverse_scoring',
         'equal_is_better',
+        'auto_sync_source',
         'weight'
       ] as const;
 
@@ -311,9 +316,17 @@ export class ConfigurableKPIManager {
   }
 
   // Permanently delete a KPI and all its data
-  async permanentlyDeleteKPI(kpiId: string): Promise<void> {
+  async permanentlyDeleteKPI(kpiId: string): Promise<boolean> {
     try {
-      await userStorage.deleteUserKPI(kpiId);
+      console.log('ConfigurableKPIManager: deleting KPI with id:', kpiId);
+      const result = await userStorage.deleteUserKPI(kpiId);
+      console.log('ConfigurableKPIManager: delete result:', result);
+      
+      if (!result) {
+        throw new Error('Failed to delete KPI from database');
+      }
+      
+      return result;
     } catch (error) {
       console.error('Failed to permanently delete KPI:', error);
       throw error;

@@ -81,17 +81,35 @@ interface GitHubConfig {
 }
 
 /**
- * Get GitHub configuration from environment variables
+ * Get GitHub configuration from localStorage (Settings UI) or environment variables
+ * Priority: localStorage > environment variables
  */
 export function getGitHubConfig(): GitHubConfig {
-  const token = import.meta.env.VITE_GITHUB_TOKEN;
-  const username = import.meta.env.VITE_GITHUB_USERNAME;
-  const repos = import.meta.env.VITE_GITHUB_REPOS?.split(',').map((r: string) => r.trim()).filter(Boolean) || [];
-  const enabled = import.meta.env.VITE_GITHUB_SYNC_ENABLED === 'true';
+  // Priority 1: User-saved settings via Settings UI (stored in localStorage)
+  const localToken = localStorage.getItem('github_api_token');
+  const localUsername = localStorage.getItem('github_username');
+  
+  // Priority 2: Environment variables (for dev/deployment config)
+  const envToken = import.meta.env.VITE_GITHUB_TOKEN;
+  const envUsername = import.meta.env.VITE_GITHUB_USERNAME;
+  const envRepos = import.meta.env.VITE_GITHUB_REPOS?.split(',').map((r: string) => r.trim()).filter(Boolean) || [];
+  const envEnabled = import.meta.env.VITE_GITHUB_SYNC_ENABLED === 'true';
+
+  // Use localStorage values if available, otherwise fall back to env vars
+  const token = localToken || envToken;
+  const username = localUsername || envUsername;
+  
+  // Repos from env vars (could add UI for this later)
+  const repos = envRepos;
+  
+  // Enabled if: we have a valid token (from either source)
+  // Token from localStorage auto-enables; env token requires VITE_GITHUB_SYNC_ENABLED=true
+  const enabled = !!token && (!!localToken || envEnabled);
 
   console.log('🔧 GitHub Config:', {
     hasToken: !!token,
     tokenPrefix: token ? token.substring(0, 7) + '...' : 'none',
+    tokenSource: localToken ? 'localStorage' : (envToken ? 'env' : 'none'),
     username,
     repos,
     enabled
@@ -101,9 +119,19 @@ export function getGitHubConfig(): GitHubConfig {
 }
 
 /**
- * Check if GitHub integration is properly configured
+ * Check if GitHub integration is properly configured (basic: token + username)
+ * This is used to show "connected" status in the UI
  */
 export function isGitHubConfigured(): boolean {
+  const config = getGitHubConfig();
+  return !!(config.token && config.username && config.enabled);
+}
+
+/**
+ * Check if GitHub sync features are fully configured (token + username + repos)
+ * This is required for fetching commits, PRs, etc.
+ */
+export function isGitHubSyncConfigured(): boolean {
   const config = getGitHubConfig();
   return !!(config.token && config.username && config.repos.length > 0 && config.enabled);
 }

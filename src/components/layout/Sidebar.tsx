@@ -37,6 +37,7 @@ interface SidebarProps {
 const iconMap: Record<string, LucideIcon> = {
   dashboard: LayoutDashboard,
   kpis: BarChart3,
+  analytics: TrendingUp,
   visualizer: TrendingUp,
   roadmap: GitBranch,
   cash: Network,
@@ -48,6 +49,7 @@ const iconMap: Record<string, LucideIcon> = {
 const pathMap: Record<string, string> = {
   dashboard: '/',
   kpis: '/kpis',
+  analytics: '/analytics',
   visualizer: '/visualizer',
   roadmap: '/roadmap',
   cash: '/cash',
@@ -227,13 +229,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ expanded, className }) => {
       {/* Bottom Section - Settings */}
       <div className="py-4 px-2 border-t border-line">
         <Link
-          to="/profile"
+          to="/settings"
           className={cn(
             'flex items-center gap-3 px-3 py-2.5 rounded-md',
             'transition-all duration-200',
             'text-content-secondary hover:text-content-primary hover:bg-surface-hover',
             'relative group',
-            isActive('/profile') && 'bg-neon-cyan/10 text-neon-cyan'
+            isActive('/settings') && 'bg-neon-cyan/10 text-neon-cyan'
           )}
         >
           <Settings size={20} className="shrink-0" />
