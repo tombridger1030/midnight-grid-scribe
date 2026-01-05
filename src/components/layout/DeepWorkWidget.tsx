@@ -3,22 +3,26 @@
  * Displays deep work progress and timer in the header
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { motion } from 'framer-motion';
-import { Play, Square, Clock, ChevronDown } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { deepWorkService, DeepWorkSession } from '@/lib/deepWorkService';
-import { kpiManager } from '@/lib/configurableKpis';
-import { TaskSelector } from './TaskSelector';
-import { ExpandablePanel } from './ExpandablePanel';
+import React, { useState, useEffect, useCallback } from "react";
+import { motion } from "framer-motion";
+import { Play, Square, Clock, ChevronDown } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { deepWorkService, DeepWorkSession } from "@/lib/deepWorkService";
+import { kpiManager } from "@/lib/configurableKpis";
+import { TaskSelector, SessionConfig } from "./TaskSelector";
+import { ExpandablePanel } from "./ExpandablePanel";
 
 interface DeepWorkWidgetProps {
   className?: string;
 }
 
-export const DeepWorkWidget: React.FC<DeepWorkWidgetProps> = ({ className }) => {
+export const DeepWorkWidget: React.FC<DeepWorkWidgetProps> = ({
+  className,
+}) => {
   // State
-  const [activeSession, setActiveSession] = useState<DeepWorkSession | null>(null);
+  const [activeSession, setActiveSession] = useState<DeepWorkSession | null>(
+    null,
+  );
   const [todayTotalSeconds, setTodayTotalSeconds] = useState(0);
   const [dailyTargetHours, setDailyTargetHours] = useState(8);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -48,7 +52,7 @@ export const DeepWorkWidget: React.FC<DeepWorkWidgetProps> = ({ className }) => 
 
       // Load weekly target from KPIs
       const kpis = await kpiManager.getActiveKPIs();
-      const deepWorkKpi = kpis.find(k => k.kpi_id === 'deepWorkHours');
+      const deepWorkKpi = kpis.find((k) => k.kpi_id === "deepWorkHours");
       if (deepWorkKpi) {
         setDailyTargetHours(deepWorkKpi.target / 7);
       }
@@ -62,7 +66,7 @@ export const DeepWorkWidget: React.FC<DeepWorkWidgetProps> = ({ className }) => 
         dailyTargetHours: summary.dailyTargetHours,
       });
     } catch (error) {
-      console.error('Failed to load deep work data:', error);
+      console.error("Failed to load deep work data:", error);
     }
   }, []);
 
@@ -76,7 +80,7 @@ export const DeepWorkWidget: React.FC<DeepWorkWidgetProps> = ({ className }) => 
 
     if (activeSession?.is_active) {
       const startTime = new Date(activeSession.start_time).getTime();
-      
+
       // Update immediately
       setElapsedSeconds(Math.floor((Date.now() - startTime) / 1000));
 
@@ -100,33 +104,45 @@ export const DeepWorkWidget: React.FC<DeepWorkWidgetProps> = ({ className }) => 
       loadData();
     };
 
-    window.addEventListener('deepWorkAutoStopped', handleAutoStop);
-    return () => window.removeEventListener('deepWorkAutoStopped', handleAutoStop);
+    window.addEventListener("deepWorkAutoStopped", handleAutoStop);
+    return () =>
+      window.removeEventListener("deepWorkAutoStopped", handleAutoStop);
   }, [loadData]);
 
   // Start session
-  const handleStartSession = async (taskName: string) => {
+  const handleStartSession = async (config: string | SessionConfig) => {
     setShowTaskSelector(false);
     try {
-      const session = await deepWorkService.startSession(taskName);
+      // Handle both legacy string and new SessionConfig
+      const taskName = typeof config === "string" ? config : config.taskName;
+      const activityType =
+        typeof config === "string" ? "work" : config.activityType;
+      const activityLabel =
+        typeof config === "string" ? undefined : config.activityLabel;
+
+      const session = await deepWorkService.startSession(
+        taskName,
+        activityType,
+        activityLabel,
+      );
       if (session) {
         setActiveSession(session);
       }
     } catch (error) {
-      console.error('Failed to start session:', error);
+      console.error("Failed to start session:", error);
     }
   };
 
   // Stop session
   const handleStopSession = async () => {
     if (!activeSession) return;
-    
+
     try {
       await deepWorkService.stopSession(activeSession.id);
       setActiveSession(null);
       loadData(); // Refresh totals
     } catch (error) {
-      console.error('Failed to stop session:', error);
+      console.error("Failed to stop session:", error);
     }
   };
 
@@ -142,9 +158,9 @@ export const DeepWorkWidget: React.FC<DeepWorkWidgetProps> = ({ className }) => 
     const secs = seconds % 60;
 
     if (hours > 0) {
-      return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+      return `${hours}:${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
     }
-    return `${minutes}:${secs.toString().padStart(2, '0')}`;
+    return `${minutes}:${secs.toString().padStart(2, "0")}`;
   };
 
   // Calculate progress
@@ -152,7 +168,7 @@ export const DeepWorkWidget: React.FC<DeepWorkWidgetProps> = ({ className }) => 
   const progressPercent = Math.min(100, (todayHours / dailyTargetHours) * 100);
 
   return (
-    <div className={cn('relative flex items-center', className)}>
+    <div className={cn("relative flex items-center", className)}>
       {activeSession?.is_active ? (
         // Active Session Display
         <div className="flex items-center gap-3">
@@ -167,9 +183,9 @@ export const DeepWorkWidget: React.FC<DeepWorkWidgetProps> = ({ className }) => 
           <button
             onClick={() => setShowHistoryPanel(!showHistoryPanel)}
             className={cn(
-              'flex items-center gap-2 px-3 py-1.5 rounded',
-              'bg-surface-tertiary/50 hover:bg-surface-tertiary',
-              'transition-colors'
+              "flex items-center gap-2 px-3 py-1.5 rounded",
+              "bg-surface-tertiary/50 hover:bg-surface-tertiary",
+              "transition-colors",
             )}
           >
             <span className="font-mono text-sm font-semibold text-content-primary">
@@ -186,10 +202,10 @@ export const DeepWorkWidget: React.FC<DeepWorkWidgetProps> = ({ className }) => 
           <button
             onClick={handleStopSession}
             className={cn(
-              'p-1.5 rounded',
-              'bg-danger/10 text-danger',
-              'hover:bg-danger/20',
-              'transition-colors'
+              "p-1.5 rounded",
+              "bg-danger/10 text-danger",
+              "hover:bg-danger/20",
+              "transition-colors",
             )}
             title="Stop session"
           >
@@ -202,9 +218,9 @@ export const DeepWorkWidget: React.FC<DeepWorkWidgetProps> = ({ className }) => 
           <button
             onClick={() => setShowHistoryPanel(!showHistoryPanel)}
             className={cn(
-              'flex items-center gap-2 px-3 py-1.5 rounded',
-              'bg-surface-tertiary/50 hover:bg-surface-tertiary',
-              'transition-colors group'
+              "flex items-center gap-2 px-3 py-1.5 rounded",
+              "bg-surface-tertiary/50 hover:bg-surface-tertiary",
+              "transition-colors group",
             )}
           >
             <Clock size={14} className="text-neon-cyan" />
@@ -214,12 +230,12 @@ export const DeepWorkWidget: React.FC<DeepWorkWidgetProps> = ({ className }) => 
             <span className="text-xs text-content-muted">
               / {dailyTargetHours.toFixed(1)}h
             </span>
-            <ChevronDown 
-              size={12} 
+            <ChevronDown
+              size={12}
               className={cn(
-                'text-content-muted transition-transform',
-                showHistoryPanel && 'rotate-180'
-              )} 
+                "text-content-muted transition-transform",
+                showHistoryPanel && "rotate-180",
+              )}
             />
           </button>
 
@@ -227,10 +243,10 @@ export const DeepWorkWidget: React.FC<DeepWorkWidgetProps> = ({ className }) => 
           <button
             onClick={() => setShowTaskSelector(true)}
             className={cn(
-              'flex items-center gap-1.5 px-3 py-1.5 rounded',
-              'bg-neon-cyan text-black',
-              'hover:bg-neon-cyan/90 hover:shadow-glow-cyan',
-              'transition-all text-sm font-medium'
+              "flex items-center gap-1.5 px-3 py-1.5 rounded",
+              "bg-neon-cyan text-black",
+              "hover:bg-neon-cyan/90 hover:shadow-glow-cyan",
+              "transition-all text-sm font-medium",
             )}
           >
             <Play size={14} />
@@ -266,10 +282,10 @@ export const DeepWorkWidget: React.FC<DeepWorkWidgetProps> = ({ className }) => 
             <motion.div
               initial={{ width: 0 }}
               animate={{ width: `${progressPercent}%` }}
-              transition={{ duration: 0.5, ease: 'easeOut' }}
+              transition={{ duration: 0.5, ease: "easeOut" }}
               className={cn(
-                'h-full rounded-full',
-                progressPercent >= 100 ? 'bg-success' : 'bg-neon-cyan'
+                "h-full rounded-full",
+                progressPercent >= 100 ? "bg-success" : "bg-neon-cyan",
               )}
             />
           </div>
@@ -283,9 +299,9 @@ export const DeepWorkWidget: React.FC<DeepWorkWidgetProps> = ({ className }) => 
               <div
                 key={session.id}
                 className={cn(
-                  'flex items-center justify-between p-2 rounded',
-                  'bg-surface-tertiary/50',
-                  session.is_active && 'ring-1 ring-neon-cyan'
+                  "flex items-center justify-between p-2 rounded",
+                  "bg-surface-tertiary/50",
+                  session.is_active && "ring-1 ring-neon-cyan",
                 )}
               >
                 <div className="flex-1 min-w-0">
@@ -293,25 +309,28 @@ export const DeepWorkWidget: React.FC<DeepWorkWidgetProps> = ({ className }) => 
                     {session.task_name}
                   </div>
                   <div className="text-xs text-content-muted">
-                    {new Date(session.start_time).toLocaleTimeString([], { 
-                      hour: '2-digit', 
-                      minute: '2-digit' 
+                    {new Date(session.start_time).toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
                     })}
                     {session.end_time && (
-                      <> - {new Date(session.end_time).toLocaleTimeString([], { 
-                        hour: '2-digit', 
-                        minute: '2-digit' 
-                      })}</>
+                      <>
+                        {" "}
+                        -{" "}
+                        {new Date(session.end_time).toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </>
                     )}
                   </div>
                 </div>
                 <div className="text-sm font-mono text-content-secondary">
-                  {session.duration_seconds 
+                  {session.duration_seconds
                     ? deepWorkService.formatDuration(session.duration_seconds)
-                    : session.is_active 
+                    : session.is_active
                       ? formatTimer(elapsedSeconds)
-                      : '-'
-                  }
+                      : "-"}
                 </div>
               </div>
             ))}
@@ -328,7 +347,8 @@ export const DeepWorkWidget: React.FC<DeepWorkWidgetProps> = ({ className }) => 
             <div className="text-xs text-content-muted mb-1">This week</div>
             <div className="flex items-center justify-between">
               <span className="text-sm text-content-primary">
-                {weekSummary.totalHours.toFixed(1)}h / {weekSummary.targetHours}h
+                {weekSummary.totalHours.toFixed(1)}h / {weekSummary.targetHours}
+                h
               </span>
               <span className="text-xs text-content-muted">
                 Need {weekSummary.dailyTargetHours.toFixed(1)}h/day

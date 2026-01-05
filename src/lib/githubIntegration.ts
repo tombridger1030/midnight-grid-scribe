@@ -55,7 +55,17 @@ class GitHubIntegration {
     });
 
     if (!response.ok) {
-      throw new Error(`GitHub API error: ${response.statusText}`);
+      // Try to get error details from response body
+      let errorMessage = response.statusText || `HTTP ${response.status}`;
+      try {
+        const errorBody = await response.json();
+        if (errorBody.message) {
+          errorMessage = errorBody.message;
+        }
+      } catch {
+        // Ignore JSON parse errors
+      }
+      throw new Error(`GitHub API error: ${errorMessage}`);
     }
 
     return response.json();
@@ -96,7 +106,12 @@ class GitHubIntegration {
             });
           }
         } catch (error) {
-          console.warn(`Failed to fetch commits for ${repo.full_name}:`, error);
+          // This can happen for empty repos or repos without access - silently skip
+          // Only log for debugging if not a common "no commits" case
+          const errorMsg = error instanceof Error ? error.message : String(error);
+          if (!errorMsg.includes('Git Repository is empty') && !errorMsg.includes('404')) {
+            console.warn(`Skipping commits for ${repo.full_name}: ${errorMsg}`);
+          }
           // Continue with other repos
         }
       }

@@ -11,6 +11,7 @@ import { kpiManager } from '@/lib/configurableKpis';
 import { loadWeeklyKPIs, getCurrentWeek, getRecentWeeks, formatWeekKey } from '@/lib/weeklyKpi';
 import { rankingManager, RANK_CONFIG, RankTier } from '@/lib/rankingSystem';
 import { useProgressionStore } from '@/stores/progressionStore';
+import { REALTIME_EVENTS } from '@/hooks/useRealtimeSync';
 
 // Types
 export type Rank = 'bronze' | 'silver' | 'gold' | 'platinum' | 'diamond';
@@ -242,6 +243,22 @@ export function useDashboardData() {
 
   useEffect(() => {
     loadData();
+  }, [loadData]);
+
+  // Listen for real-time KPI updates
+  useEffect(() => {
+    const handleKPIUpdate = () => {
+      console.log('[Dashboard] KPI update detected, refreshing data...');
+      loadData();
+    };
+
+    window.addEventListener(REALTIME_EVENTS.KPI_UPDATED, handleKPIUpdate);
+    window.addEventListener(REALTIME_EVENTS.PROGRESSION_UPDATED, handleKPIUpdate);
+
+    return () => {
+      window.removeEventListener(REALTIME_EVENTS.KPI_UPDATED, handleKPIUpdate);
+      window.removeEventListener(REALTIME_EVENTS.PROGRESSION_UPDATED, handleKPIUpdate);
+    };
   }, [loadData]);
 
   // Refresh function

@@ -1,47 +1,47 @@
 /**
  * TerminalLayout Component
  * Main application layout with header and sidebar
- * 
+ *
  * Redesigned to be clean and functional:
  * - Single-row header with essential widgets
  * - Collapsible sidebar with navigation
  * - Mobile overlay for sidebar
  */
 
-import React, { useState, useEffect } from 'react';
-import { Outlet, useLocation } from 'react-router-dom';
-import { AnimatePresence, motion } from 'framer-motion';
-import { cn } from '@/lib/utils';
-import { useAuth } from '@/contexts/AuthContext';
-import { Header, Sidebar } from './layout';
+import React, { useState, useEffect } from "react";
+import { Outlet, useLocation } from "react-router-dom";
+import { AnimatePresence, motion } from "framer-motion";
+import { cn } from "@/lib/utils";
+import { useAuth } from "@/contexts/AuthContext";
+import { Header, Sidebar } from "./layout";
 
 // Storage key for sidebar state
-const SIDEBAR_STORAGE_KEY = 'noctisium:sidebar:expanded';
+const SIDEBAR_STORAGE_KEY = "noctisium:sidebar:expanded";
 
 const TerminalLayout: React.FC = () => {
   const { user } = useAuth();
   const location = useLocation();
-  
+
   // Sidebar state - default to expanded, persisted in localStorage
   const [sidebarExpanded, setSidebarExpanded] = useState(() => {
     const stored = localStorage.getItem(SIDEBAR_STORAGE_KEY);
-    return stored !== null ? stored === 'true' : true; // Default expanded
+    return stored !== null ? stored === "true" : true; // Default expanded
   });
-  
+
   // Mobile menu state
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  
+
   // Check if we're on mobile
   const [isMobile, setIsMobile] = useState(false);
-  
+
   useEffect(() => {
     const checkMobile = () => {
       setIsMobile(window.innerWidth < 768);
     };
-    
+
     checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
   }, []);
 
   // Persist sidebar state
@@ -75,9 +75,7 @@ const TerminalLayout: React.FC = () => {
       {/* Main Content Area */}
       <div className="flex flex-1 min-h-0">
         {/* Desktop Sidebar */}
-        {!isMobile && (
-          <Sidebar expanded={sidebarExpanded} />
-        )}
+        {!isMobile && <Sidebar expanded={sidebarExpanded} />}
 
         {/* Mobile Sidebar Overlay */}
         <AnimatePresence>
@@ -92,13 +90,13 @@ const TerminalLayout: React.FC = () => {
                 className="fixed inset-0 bg-black/60 z-40"
                 onClick={() => setMobileMenuOpen(false)}
               />
-              
+
               {/* Sidebar */}
               <motion.div
                 initial={{ x: -280 }}
                 animate={{ x: 0 }}
                 exit={{ x: -280 }}
-                transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                transition={{ type: "spring", stiffness: 300, damping: 30 }}
                 className="fixed left-0 top-14 bottom-0 z-50"
               >
                 <Sidebar expanded={true} className="h-full" />
@@ -108,7 +106,7 @@ const TerminalLayout: React.FC = () => {
         </AnimatePresence>
 
         {/* Main Content */}
-        <main className="flex-1 overflow-y-auto bg-surface">
+        <main className="flex-1 overflow-y-auto bg-surface px-4 py-6">
           <Outlet />
         </main>
       </div>

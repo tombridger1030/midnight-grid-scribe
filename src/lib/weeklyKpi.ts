@@ -346,6 +346,75 @@ export const loadWeeklyKPIs = (): WeeklyKPIData => {
   return { records: [] };
 };
 
+/**
+ * Sync localStorage with Supabase on app startup
+ * Loads from Supabase (source of truth) and updates localStorage cache
+ * Should be called once when user logs in
+ */
+export const syncWeeklyKPIsWithSupabase = async (): Promise<WeeklyKPIData> => {
+  const userId = userStorage.getCurrentUserId();
+  if (!userId) {
+    return loadWeeklyKPIs();
+  }
+
+  try {
+    // Load from Supabase (the actual function is defined below)
+    const supabaseData = await loadWeeklyKPIsFromSupabaseInternal(userId);
+    
+    if (supabaseData && supabaseData.records.length > 0) {
+      // Sync to localStorage for offline access
+      localStorage.setItem('noctisium-weekly-kpis', JSON.stringify(supabaseData));
+      console.log('[WeeklyKPI] Synced from Supabase:', supabaseData.records.length, 'records');
+      return supabaseData;
+    }
+    
+    // No Supabase data - check if we have localStorage data to migrate
+    const localData = loadWeeklyKPIs();
+    if (localData.records.length > 0) {
+      console.log('[WeeklyKPI] Migrating localStorage to Supabase:', localData.records.length, 'records');
+      await saveWeeklyKPIsToSupabase(localData, userId);
+      return localData;
+    }
+    
+    return { records: [] };
+  } catch (error) {
+    console.error('[WeeklyKPI] Sync failed, using localStorage:', error);
+    return loadWeeklyKPIs();
+  }
+};
+
+// Internal helper - the main export is below with userId parameter
+const loadWeeklyKPIsFromSupabaseInternal = async (userId: string): Promise<WeeklyKPIData | null> => {
+  try {
+    const { data, error } = await supabase
+      .from('weekly_kpis')
+      .select('*')
+      .eq('user_id', userId)
+      .order('week_key', { ascending: true });
+
+    if (error) {
+      console.error('Error loading weekly KPIs from Supabase:', error);
+      return null;
+    }
+
+    const records: WeeklyKPIRecord[] = (data || []).map(row => ({
+      weekKey: row.week_key,
+      values: (row.data && typeof row.data === 'object' && !Array.isArray(row.data) && row.data.values) 
+        ? row.data.values 
+        : (row.data || {}),
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      daily: (row.data && row.data.__daily) ? row.data.__daily : undefined,
+      dailyByDate: (row.data && row.data.__dailyByDate) ? row.data.__dailyByDate : undefined
+    }));
+
+    return { records };
+  } catch (error) {
+    console.error('Failed to load weekly KPIs from Supabase:', error);
+    return null;
+  }
+};
+
 export const saveWeeklyKPIs = async (data: WeeklyKPIData): Promise<void> => {
   try {
     // Save to localStorage immediately

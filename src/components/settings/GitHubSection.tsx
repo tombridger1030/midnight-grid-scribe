@@ -3,40 +3,50 @@
  * GitHub integration settings and connection testing
  */
 
-import React, { useState, useEffect } from 'react';
-import { Github, Save, Loader2, CheckCircle2, ExternalLink } from 'lucide-react';
-import { useAuth } from '@/contexts/AuthContext';
-import { userStorage } from '@/lib/userStorage';
-import { SettingsSection } from './SettingsSection';
-import { cn } from '@/lib/utils';
-import { toast } from 'sonner';
+import React, { useState, useEffect } from "react";
+import {
+  Github,
+  Save,
+  Loader2,
+  CheckCircle2,
+  ExternalLink,
+  XCircle,
+} from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { userStorage } from "@/lib/userStorage";
+import { SettingsSection } from "./SettingsSection";
+import { cn } from "@/lib/utils";
+import { toast } from "sonner";
+import { testGitHubConnectionWithPRs, PRStatus } from "@/lib/github";
 
 export const GitHubSection: React.FC = () => {
   const { user } = useAuth();
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
+  const [prStatus, setPrStatus] = useState<PRStatus[]>([]);
+  const [showPrStatus, setShowPrStatus] = useState(false);
   const [formData, setFormData] = useState({
-    apiToken: '',
-    username: '',
+    apiToken: "",
+    username: "",
   });
 
   // Load GitHub settings
   useEffect(() => {
     const loadSettings = async () => {
       if (!user) return;
-      
+
       try {
         const settings = await userStorage.getGithubSettings();
         if (settings) {
           setFormData({
-            apiToken: settings.api_token || '',
-            username: settings.username || '',
+            apiToken: settings.api_token || "",
+            username: settings.username || "",
           });
           setIsConnected(!!settings.api_token);
         }
       } catch (error) {
-        console.error('Failed to load GitHub settings:', error);
+        console.error("Failed to load GitHub settings:", error);
       }
     };
 
@@ -45,37 +55,48 @@ export const GitHubSection: React.FC = () => {
 
   const handleTestConnection = async () => {
     if (!formData.apiToken) {
-      toast.error('Please enter a GitHub API token');
+      toast.error("Please enter a GitHub API token");
       return;
     }
 
     setTesting(true);
+    setShowPrStatus(false);
 
     try {
-      const response = await fetch('https://api.github.com/user', {
-        headers: {
-          Authorization: `Bearer ${formData.apiToken}`,
-          Accept: 'application/vnd.github.v3+json',
-        },
-      });
+      // First, save token temporarily for the test
+      localStorage.setItem("github_api_token", formData.apiToken);
+      if (formData.username) {
+        localStorage.setItem("github_username", formData.username);
+      }
 
-      if (response.ok) {
-        const data = await response.json();
-        toast.success(`Connected as ${data.login}`);
+      // Use the enhanced test function
+      const result = await testGitHubConnectionWithPRs();
+
+      if (result.success) {
+        toast.success(`Connected as ${result.username}`);
         setIsConnected(true);
 
         // Auto-fill username if not set
-        if (!formData.username) {
-          setFormData((prev) => ({ ...prev, username: data.login }));
+        if (!formData.username && result.username) {
+          setFormData((prev) => ({ ...prev, username: result.username }));
+          localStorage.setItem("github_username", result.username);
+        }
+
+        // Show PR status if available
+        if (result.prs && result.prs.length > 0) {
+          setPrStatus(result.prs);
+          setShowPrStatus(true);
         }
       } else {
-        toast.error('Invalid GitHub token');
+        toast.error(result.error || "Connection failed");
         setIsConnected(false);
+        setShowPrStatus(false);
       }
     } catch (error) {
-      console.error('GitHub connection test failed:', error);
-      toast.error('Failed to connect to GitHub');
+      console.error("GitHub connection test failed:", error);
+      toast.error("Failed to connect to GitHub");
       setIsConnected(false);
+      setShowPrStatus(false);
     } finally {
       setTesting(false);
     }
@@ -85,8 +106,8 @@ export const GitHubSection: React.FC = () => {
     // Validate token format
     if (
       formData.apiToken &&
-      !formData.apiToken.startsWith('ghp_') &&
-      !formData.apiToken.startsWith('github_pat_')
+      !formData.apiToken.startsWith("ghp_") &&
+      !formData.apiToken.startsWith("github_pat_")
     ) {
       toast.warning('GitHub token should start with "ghp_" or "github_pat_"');
     }
@@ -96,21 +117,21 @@ export const GitHubSection: React.FC = () => {
     try {
       const success = await userStorage.saveGithubSettings(
         formData.apiToken,
-        formData.username
+        formData.username,
       );
 
       if (success) {
         const message = formData.apiToken
-          ? `GitHub settings saved${formData.username ? ` for ${formData.username}` : ''}`
-          : 'GitHub settings cleared';
+          ? `GitHub settings saved${formData.username ? ` for ${formData.username}` : ""}`
+          : "GitHub settings cleared";
         toast.success(message);
         setIsConnected(!!formData.apiToken);
       } else {
-        throw new Error('Failed to save GitHub settings');
+        throw new Error("Failed to save GitHub settings");
       }
     } catch (error) {
-      console.error('GitHub save error:', error);
-      toast.error('Failed to save GitHub settings');
+      console.error("GitHub save error:", error);
+      toast.error("Failed to save GitHub settings");
     } finally {
       setSaving(false);
     }
@@ -124,7 +145,7 @@ export const GitHubSection: React.FC = () => {
           <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-neon-green/10 border border-neon-green/20">
             <CheckCircle2 size={16} className="text-neon-green" />
             <span className="text-sm text-neon-green">
-              Connected{formData.username ? ` as ${formData.username}` : ''}
+              Connected{formData.username ? ` as ${formData.username}` : ""}
             </span>
           </div>
         )}
@@ -146,15 +167,15 @@ export const GitHubSection: React.FC = () => {
             }
             placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
             className={cn(
-              'w-full px-3 py-2 rounded-md text-sm font-mono',
-              'bg-surface border border-line',
-              'text-content-primary placeholder:text-content-muted',
-              'focus:outline-none focus:border-terminal-accent',
-              'transition-colors duration-200'
+              "w-full px-3 py-2 rounded-md text-sm font-mono",
+              "bg-surface border border-line",
+              "text-content-primary placeholder:text-content-muted",
+              "focus:outline-none focus:border-terminal-accent",
+              "transition-colors duration-200",
             )}
           />
           <p className="text-xs text-content-muted">
-            Create a token at{' '}
+            Create a token at{" "}
             <a
               href="https://github.com/settings/tokens"
               target="_blank"
@@ -163,8 +184,12 @@ export const GitHubSection: React.FC = () => {
             >
               github.com/settings/tokens
               <ExternalLink size={10} />
-            </a>
-            {' '}with <code className="px-1 py-0.5 bg-surface-tertiary rounded text-xs">repo</code> scope
+            </a>{" "}
+            with{" "}
+            <code className="px-1 py-0.5 bg-surface-tertiary rounded text-xs">
+              repo
+            </code>{" "}
+            scope
           </p>
         </div>
 
@@ -185,11 +210,11 @@ export const GitHubSection: React.FC = () => {
             }
             placeholder="your-github-username"
             className={cn(
-              'w-full px-3 py-2 rounded-md text-sm',
-              'bg-surface border border-line',
-              'text-content-primary placeholder:text-content-muted',
-              'focus:outline-none focus:border-terminal-accent',
-              'transition-colors duration-200'
+              "w-full px-3 py-2 rounded-md text-sm",
+              "bg-surface border border-line",
+              "text-content-primary placeholder:text-content-muted",
+              "focus:outline-none focus:border-terminal-accent",
+              "transition-colors duration-200",
             )}
           />
         </div>
@@ -200,12 +225,12 @@ export const GitHubSection: React.FC = () => {
             onClick={handleTestConnection}
             disabled={testing || !formData.apiToken}
             className={cn(
-              'flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium',
-              'border border-line',
-              'transition-all duration-200',
+              "flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium",
+              "border border-line",
+              "transition-all duration-200",
               formData.apiToken
-                ? 'text-content-primary hover:bg-surface-hover hover:border-terminal-accent/50'
-                : 'text-content-muted cursor-not-allowed'
+                ? "text-content-primary hover:bg-surface-hover hover:border-terminal-accent/50"
+                : "text-content-muted cursor-not-allowed",
             )}
           >
             {testing ? (
@@ -213,18 +238,18 @@ export const GitHubSection: React.FC = () => {
             ) : (
               <Github size={16} />
             )}
-            {testing ? 'Testing...' : 'Test Connection'}
+            {testing ? "Testing..." : "Test Connection"}
           </button>
 
           <button
             onClick={handleSave}
             disabled={saving}
             className={cn(
-              'flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium',
-              'bg-terminal-accent text-black',
-              'hover:bg-terminal-accent/90',
-              'transition-all duration-200',
-              'disabled:opacity-50 disabled:cursor-not-allowed'
+              "flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium",
+              "bg-terminal-accent text-black",
+              "hover:bg-terminal-accent/90",
+              "transition-all duration-200",
+              "disabled:opacity-50 disabled:cursor-not-allowed",
             )}
           >
             {saving ? (
@@ -232,9 +257,52 @@ export const GitHubSection: React.FC = () => {
             ) : (
               <Save size={16} />
             )}
-            {saving ? 'Saving...' : 'Save Settings'}
+            {saving ? "Saving..." : "Save Settings"}
           </button>
         </div>
+
+        {/* PR Status Display */}
+        {showPrStatus && prStatus.length > 0 && (
+          <div className="mt-4 p-3 rounded-md bg-surface-tertiary border border-line/50">
+            <h4 className="text-sm font-medium text-content-primary mb-3">
+              Recent Pull Requests
+            </h4>
+            <div className="space-y-2">
+              {prStatus.map((pr) => (
+                <div
+                  key={`${pr.repo}-${pr.number}`}
+                  className="flex items-center gap-3 p-2 rounded bg-surface border border-line/50"
+                >
+                  <a
+                    href={pr.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 flex-1 min-w-0 group"
+                  >
+                    <span
+                      className={cn(
+                        "px-2 py-0.5 rounded text-xs font-medium shrink-0",
+                        pr.state === "open"
+                          ? "bg-green-500/10 text-green-400"
+                          : pr.state === "merged"
+                            ? "bg-purple-500/10 text-purple-400"
+                            : "bg-red-500/10 text-red-400",
+                      )}
+                    >
+                      {pr.state}
+                    </span>
+                    <span className="text-xs text-content-muted shrink-0">
+                      {pr.repo}#{pr.number}
+                    </span>
+                    <span className="text-sm text-content-primary truncate group-hover:text-terminal-accent">
+                      {pr.title}
+                    </span>
+                  </a>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Info Box */}
         <div className="mt-4 p-3 rounded-md bg-surface-tertiary border border-line/50">

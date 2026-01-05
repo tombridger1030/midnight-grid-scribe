@@ -1,20 +1,20 @@
 /**
  * Dashboard Page
- * 
+ *
  * Minimal, focused dashboard showing:
  * - Hero: This week's percentage
  * - Rank bar (Valorant-style)
  * - Stats line (level, streak, XP)
  * - Rolling 4-week average
  * - Year streak visualization
- * 
+ *
  * Click interactions open detail modals.
  */
 
-import React, { useState } from 'react';
-import { motion } from 'framer-motion';
-import { useDashboardData } from '@/hooks/useDashboardData';
-import { AchievementToast } from '@/components/progression';
+import React, { useState } from "react";
+import { motion } from "framer-motion";
+import { useDashboardData } from "@/hooks/useDashboardData";
+import { AchievementToast } from "@/components/progression";
 import {
   WeekProgress,
   RankBar,
@@ -23,11 +23,11 @@ import {
   MonthProgress,
   YearStreak,
   WeekBreakdown,
-} from '@/components/dashboard';
+} from "@/components/dashboard";
 
 const Dashboard: React.FC = () => {
   const { data, isLoading, error } = useDashboardData();
-  
+
   // Modal states
   const [showWeekBreakdown, setShowWeekBreakdown] = useState(false);
   const [showRankHistory, setShowRankHistory] = useState(false);
@@ -50,7 +50,7 @@ const Dashboard: React.FC = () => {
     return (
       <div className="min-h-full flex items-center justify-center">
         <div className="text-red-400">
-          {error?.message || 'Failed to load dashboard data'}
+          {error?.message || "Failed to load dashboard data"}
         </div>
       </div>
     );
@@ -79,7 +79,7 @@ const Dashboard: React.FC = () => {
       />
 
       {/* Main Content */}
-      <div className="max-w-xl mx-auto px-6 py-12">
+      <div className="max-w-xl mx-auto">
         {/* Hero: This Week's Progress */}
         <WeekProgress
           percentage={data.currentWeekPercentage}

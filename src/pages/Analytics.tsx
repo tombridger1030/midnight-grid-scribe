@@ -1,6 +1,6 @@
 /**
  * Analytics Page
- * 
+ *
  * Comprehensive analytics suite with 5 tabs:
  * - Overview: Quick snapshot of performance
  * - Trends: Historical analysis and trajectories
@@ -9,48 +9,50 @@
  * - Insights: AI-powered observations and recommendations
  */
 
-import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  LayoutDashboard, 
-  TrendingUp, 
-  Grid3X3, 
-  Target, 
+import React, { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  LayoutDashboard,
+  TrendingUp,
+  Grid3X3,
+  Target,
   Lightbulb,
-  RefreshCw 
-} from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { useAnalytics, AnalyticsPeriod } from '@/hooks/useAnalytics';
+  RefreshCw,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { useAnalytics, AnalyticsPeriod } from "@/hooks/useAnalytics";
 
 // Tab components
-import { OverviewTab } from '@/components/analytics/overview';
-import { TrendsTab } from '@/components/analytics/trends';
-import { PatternsTab } from '@/components/analytics/patterns';
-import { GoalsTab } from '@/components/analytics/goals';
-import { InsightsTab } from '@/components/analytics/insights';
+import { OverviewTab } from "@/components/analytics/overview";
+import { TrendsTab } from "@/components/analytics/trends";
+import { PatternsTab } from "@/components/analytics/patterns";
+import { GoalsTab } from "@/components/analytics/goals";
+import { InsightsTab } from "@/components/analytics/insights";
 
 // Tab configuration
 const TABS = [
-  { id: 'overview', label: 'Overview', icon: LayoutDashboard },
-  { id: 'trends', label: 'Trends', icon: TrendingUp },
-  { id: 'patterns', label: 'Patterns', icon: Grid3X3 },
-  { id: 'goals', label: 'Goals', icon: Target },
-  { id: 'insights', label: 'Insights', icon: Lightbulb },
+  { id: "overview", label: "Overview", icon: LayoutDashboard },
+  { id: "trends", label: "Trends", icon: TrendingUp },
+  { id: "patterns", label: "Patterns", icon: Grid3X3 },
+  { id: "goals", label: "Goals", icon: Target },
+  { id: "insights", label: "Insights", icon: Lightbulb },
 ] as const;
 
-type TabId = typeof TABS[number]['id'];
+type TabId = (typeof TABS)[number]["id"];
 
 const Analytics: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<TabId>('overview');
-  const [period, setPeriod] = useState<AnalyticsPeriod>('all');
-  
+  const [activeTab, setActiveTab] = useState<TabId>("overview");
+  const [period, setPeriod] = useState<AnalyticsPeriod>("all");
+
   const { data, isLoading, error, activeKPIs } = useAnalytics(period);
 
   if (error) {
     return (
       <div className="min-h-full flex items-center justify-center p-6">
         <div className="text-center">
-          <div className="text-[#FF3366] text-lg mb-2">Failed to load analytics</div>
+          <div className="text-[#FF3366] text-lg mb-2">
+            Failed to load analytics
+          </div>
           <div className="text-terminal-accent/60 text-sm">{error.message}</div>
         </div>
       </div>
@@ -59,7 +61,7 @@ const Analytics: React.FC = () => {
 
   return (
     <div className="min-h-full bg-[#0A0A0A]">
-      <div className="max-w-7xl mx-auto px-6 py-8">
+      <div className="max-w-7xl mx-auto">
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: -10 }}
@@ -67,11 +69,13 @@ const Analytics: React.FC = () => {
           className="mb-8"
         >
           <div className="flex items-center justify-between mb-2">
-            <h1 className="text-2xl font-bold text-terminal-accent">Analytics</h1>
+            <h1 className="text-2xl font-bold text-terminal-accent">
+              Analytics
+            </h1>
             {isLoading && (
               <motion.div
                 animate={{ rotate: 360 }}
-                transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+                transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
               >
                 <RefreshCw size={20} className="text-terminal-accent/40" />
               </motion.div>
@@ -92,7 +96,7 @@ const Analytics: React.FC = () => {
           {TABS.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
-            
+
             return (
               <button
                 key={tab.id}
@@ -101,9 +105,13 @@ const Analytics: React.FC = () => {
                   "flex items-center gap-2 px-4 py-2.5 rounded-lg transition-all duration-200",
                   isActive
                     ? "bg-terminal-accent text-black font-medium shadow-lg"
-                    : "text-terminal-accent/60 hover:text-terminal-accent hover:bg-surface-hover"
+                    : "text-terminal-accent/60 hover:text-terminal-accent hover:bg-surface-hover",
                 )}
-                style={isActive ? { boxShadow: '0 0 20px rgba(0, 240, 255, 0.3)' } : {}}
+                style={
+                  isActive
+                    ? { boxShadow: "0 0 20px rgba(0, 240, 255, 0.3)" }
+                    : {}
+                }
               >
                 <Icon size={18} />
                 <span className="text-sm">{tab.label}</span>
@@ -125,24 +133,22 @@ const Analytics: React.FC = () => {
               <LoadingSkeleton />
             ) : data ? (
               <>
-                {activeTab === 'overview' && (
+                {activeTab === "overview" && (
                   <OverviewTab data={data.overview} />
                 )}
-                {activeTab === 'trends' && (
-                  <TrendsTab 
-                    data={data.trends} 
-                    period={period} 
+                {activeTab === "trends" && (
+                  <TrendsTab
+                    data={data.trends}
+                    period={period}
                     onPeriodChange={setPeriod}
                     kpis={activeKPIs}
                   />
                 )}
-                {activeTab === 'patterns' && (
+                {activeTab === "patterns" && (
                   <PatternsTab data={data.patterns} kpis={activeKPIs} />
                 )}
-                {activeTab === 'goals' && (
-                  <GoalsTab data={data.goals} />
-                )}
-                {activeTab === 'insights' && (
+                {activeTab === "goals" && <GoalsTab data={data.goals} />}
+                {activeTab === "insights" && (
                   <InsightsTab data={data.insights} />
                 )}
               </>
@@ -183,10 +189,12 @@ const LoadingSkeleton: React.FC = () => (
 const EmptyState: React.FC = () => (
   <div className="flex flex-col items-center justify-center py-20">
     <div className="text-6xl mb-4">📊</div>
-    <h3 className="text-xl font-semibold text-terminal-accent mb-2">No Data Yet</h3>
+    <h3 className="text-xl font-semibold text-terminal-accent mb-2">
+      No Data Yet
+    </h3>
     <p className="text-terminal-accent/60 text-center max-w-md">
-      Start tracking your weekly KPIs to see analytics here. 
-      The more data you have, the better insights you'll get.
+      Start tracking your weekly KPIs to see analytics here. The more data you
+      have, the better insights you'll get.
     </p>
   </div>
 );

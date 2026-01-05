@@ -133,27 +133,77 @@ src/
 ### Client-Side State
 - **Zustand Stores**: Feature-specific state management
   - `skillProgressionStore`: Skill progression state
+  - `progressionStore`: User XP and level progression
 - **React Context**: Global state (Date, Auth)
 - **TanStack Query**: Server state caching and synchronization
+
+### Real-Time Synchronization
+- **Supabase Real-Time**: `useRealtimeSync` hook subscribes to database changes
+- **Event System**: Custom events for cross-component updates (`REALTIME_EVENTS`)
+- **Auto-Sync**: External data sources (GitHub, Deep Work timer) sync automatically
 
 ### Data Flow
 1. **User Interaction** → Component Event Handlers
 2. **State Updates** → Local state or API calls
 3. **API Calls** → Supabase queries/mutations
-4. **Database Updates** → Real-time subscriptions
-5. **UI Re-render** → Automatic via state changes
+4. **Database Updates** → Real-time subscriptions via `useRealtimeSync`
+5. **Event Dispatch** → Custom events trigger related component updates
+6. **UI Re-render** → Automatic via state changes and event listeners
+
+### Live Update Architecture
+```
+Database Change (weekly_kpis, goals_v2, etc.)
+       │
+       ▼
+Supabase Real-Time Channel (useRealtimeSync)
+       │
+       ├─► React Query Cache Invalidation
+       │
+       └─► Custom Event Dispatch (REALTIME_EVENTS)
+              │
+              ├─► Dashboard refresh (useDashboardData)
+              ├─► Analytics refresh (useAnalytics)
+              └─► Goals refresh (useGoals)
+```
 
 ## Integration Points
 
 ### External Services
 - **Supabase**: Database, auth, and real-time features
-- **GitHub API**: Integration for development metrics (via `lib/github.ts`)
+- **GitHub API**: Integration for development metrics (PRs and commits via `lib/github.ts`, auto-sync via `hooks/useAutoSync.ts`)
 
 ### Internal Integrations
 - **Storage Layer**: Abstracted storage (`lib/storage.ts`, `lib/userStorage.ts`)
 - **KPI System**: Configurable metrics management (`lib/configurableKpis.ts`)
+- **Real-Time Sync**: Live updates across components (`hooks/useRealtimeSync.ts`)
+- **Auto-Sync**: External data sources synced to KPIs (`hooks/useAutoSync.ts`)
 - **Date Utilities**: Consistent date handling (`lib/dateUtils.ts`)
 - **Chart Utilities**: Data visualization helpers (`lib/chartUtils.ts`)
+
+### KPI to Analytics Data Flow
+```
+KPIs (useWeeklyKPIs)
+       │
+       ├─► Supabase weekly_kpis table
+       │         │
+       │         ▼
+       │   Real-Time Subscription
+       │         │
+       │         ▼
+       ├─► Event: REALTIME_EVENTS.KPI_UPDATED
+       │         │
+       │         ├─► Dashboard (useDashboardData)
+       │         ├─► Analytics (useAnalytics)
+       │         └─► Goals/Roadmap (useGoals)
+       │
+       └─► localStorage (cache/offline)
+```
+
+### GitHub KPI Integration
+- **PRs Created**: Auto-synced from GitHub Search API (`github_prs`)
+- **Commits Created**: Auto-synced from GitHub Search API (`github_commits`)
+- **Config Storage**: `user_configs` table with `github_settings` key
+- **Sync Trigger**: On component mount and week navigation
 
 ## Routing Structure
 

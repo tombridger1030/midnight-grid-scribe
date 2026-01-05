@@ -1,7 +1,7 @@
 import { userStorage } from './userStorage';
 import { supabase } from './supabase';
 
-export type AutoSyncSource = 'github_prs' | 'deep_work_timer' | null;
+export type AutoSyncSource = 'github_prs' | 'github_commits' | 'deep_work_timer' | null;
 
 export interface ConfigurableKPI {
   id: string;

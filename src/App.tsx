@@ -20,6 +20,7 @@ import ContentMetrics from "./pages/ContentMetrics";
 import Settings from "./pages/Settings";
 import KPIManage from "./pages/KPIManage";
 import Ships from "./pages/Ships";
+import DailyReview from "./pages/DailyReview";
 import { useState, useEffect } from "react";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import CyberpunkLogin from "@/components/cyberpunk/CyberpunkLogin";
@@ -31,6 +32,8 @@ import { preferencesManager } from "@/lib/userPreferences";
 import { supabase } from "@/lib/supabase";
 import { CustomHeroUIProvider } from "@/components/providers/HeroUIProvider";
 import { useProgressionStore } from "@/stores/progressionStore";
+import { useRealtimeSync } from "@/hooks/useRealtimeSync";
+import { syncWeeklyKPIsWithSupabase } from "@/lib/weeklyKpi";
 
 const queryClient = new QueryClient();
 
@@ -39,17 +42,27 @@ const AppContent = () => {
   const { user, profile, loading } = useAuth();
   const [isInitializing, setIsInitializing] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(false);
-  const initializeProgression = useProgressionStore((state) => state.initialize);
+  const initializeProgression = useProgressionStore(
+    (state) => state.initialize,
+  );
+
+  // Enable real-time sync for live updates across the app
+  useRealtimeSync({ enabled: !!user });
 
   useEffect(() => {
     if (user && !isInitializing) {
       const initializeUser = async () => {
         setIsInitializing(true);
         try {
-          // Note: userStorage.setUserId is now handled in AuthContext to prevent race conditions
-          
+          // CRITICAL: Ensure userStorage has the user ID before any other initialization
+          // This fixes race condition where AuthContext's dynamic import hasn't completed
+          userStorage.setUserId(user.id);
+
           // Initialize default KPIs if this is a new user
           await kpiManager.initializeDefaultKPIs();
+
+          // Sync weekly KPIs from Supabase to localStorage (ensures source of truth is up to date)
+          await syncWeeklyKPIsWithSupabase();
 
           // Initialize progression system
           await initializeProgression(user.id);
@@ -58,7 +71,7 @@ const AppContent = () => {
           const soundPref = await preferencesManager.shouldEnableSound();
           setSoundEnabled(soundPref);
         } catch (error) {
-          console.error('Failed to initialize user:', error);
+          console.error("Failed to initialize user:", error);
         } finally {
           setIsInitializing(false);
         }
@@ -74,7 +87,9 @@ const AppContent = () => {
         <MatrixBackground opacity={0.05} />
         <div className="text-center relative z-10">
           <div className="text-xl mb-2">
-            {loading ? 'Connecting to neural network...' : 'Initializing user profile...'}
+            {loading
+              ? "Connecting to neural network..."
+              : "Initializing user profile..."}
           </div>
           <div className="text-sm opacity-70">Please wait</div>
         </div>
@@ -95,28 +110,32 @@ const AppContent = () => {
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<TerminalLayout />}>
-          <Route index element={<Dashboard />} />
-          <Route path="kpis" element={<Index />} />
-          <Route path="dashboard" element={<Dashboard />} />
-          <Route path="visualizer" element={<Visualizer />} />
-          <Route path="analytics" element={<Analytics />} />
-          <Route path="roadmap" element={<Roadmap />} />
-          <Route path="cash" element={<Cash />} />
-          <Route path="settings" element={<Settings />} />
-          <Route path="kpis/manage" element={<KPIManage />} />
-          <Route path="profile" element={<Navigate to="/settings" replace />} />
-          <Route path="ships" element={<Ships />} />
-          <Route path="content" element={<Content />}>
-            <Route index element={<ContentDashboard />} />
-            <Route path="dashboard" element={<ContentDashboard />} />
-            <Route path="weekly" element={<ContentWeekly />} />
-            <Route path="input" element={<ContentInput />} />
-            <Route path="metrics" element={<ContentMetrics />} />
+            <Route index element={<Dashboard />} />
+            <Route path="kpis" element={<Index />} />
+            <Route path="dashboard" element={<Dashboard />} />
+            <Route path="visualizer" element={<Visualizer />} />
+            <Route path="analytics" element={<Analytics />} />
+            <Route path="roadmap" element={<Roadmap />} />
+            <Route path="cash" element={<Cash />} />
+            <Route path="settings" element={<Settings />} />
+            <Route path="kpis/manage" element={<KPIManage />} />
+            <Route
+              path="profile"
+              element={<Navigate to="/settings" replace />}
+            />
+            <Route path="ships" element={<Ships />} />
+            <Route path="daily-review" element={<DailyReview />} />
+            <Route path="content" element={<Content />}>
+              <Route index element={<ContentDashboard />} />
+              <Route path="dashboard" element={<ContentDashboard />} />
+              <Route path="weekly" element={<ContentWeekly />} />
+              <Route path="input" element={<ContentInput />} />
+              <Route path="metrics" element={<ContentMetrics />} />
+            </Route>
           </Route>
-        </Route>
-        <Route path="*" element={<NotFound />} />
-      </Routes>
-    </BrowserRouter>
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </BrowserRouter>
     </>
   );
 };

@@ -12,6 +12,7 @@ import { useGoals, GoalWithProgress } from './useGoals';
 import { kpiManager, ConfigurableKPI } from '@/lib/configurableKpis';
 import { loadWeeklyKPIs, getRecentWeeks, getCurrentWeek } from '@/lib/weeklyKpi';
 import { rankingManager } from '@/lib/rankingSystem';
+import { REALTIME_EVENTS } from '@/hooks/useRealtimeSync';
 import {
   calculateMean,
   calculateTrend,
@@ -163,32 +164,47 @@ export function useAnalytics(period: AnalyticsPeriod = 'all') {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
-  // Load base data
-  useEffect(() => {
-    const loadData = async () => {
-      if (!user?.id) return;
-      
-      try {
-        setIsLoading(true);
-        
-        // Load KPIs
-        const kpis = await kpiManager.getActiveKPIs();
-        setActiveKPIs(kpis);
-        
-        // Load all weekly data
-        const weeklyData = loadWeeklyKPIs();
-        setWeeklyRecords(weeklyData.records || []);
-        
-      } catch (err) {
-        console.error('Failed to load analytics data:', err);
-        setError(err instanceof Error ? err : new Error('Failed to load analytics data'));
-      } finally {
-        setIsLoading(false);
-      }
-    };
+  // Load analytics data function
+  const loadAnalyticsData = useCallback(async () => {
+    if (!user?.id) return;
     
-    loadData();
+    try {
+      setIsLoading(true);
+      
+      // Load KPIs
+      const kpis = await kpiManager.getActiveKPIs();
+      setActiveKPIs(kpis);
+      
+      // Load all weekly data
+      const weeklyData = loadWeeklyKPIs();
+      setWeeklyRecords(weeklyData.records || []);
+      
+    } catch (err) {
+      console.error('Failed to load analytics data:', err);
+      setError(err instanceof Error ? err : new Error('Failed to load analytics data'));
+    } finally {
+      setIsLoading(false);
+    }
   }, [user?.id]);
+
+  // Load base data on mount
+  useEffect(() => {
+    loadAnalyticsData();
+  }, [loadAnalyticsData]);
+
+  // Listen for real-time KPI updates
+  useEffect(() => {
+    const handleKPIUpdate = () => {
+      console.log('[Analytics] KPI update detected, refreshing data...');
+      loadAnalyticsData();
+    };
+
+    window.addEventListener(REALTIME_EVENTS.KPI_UPDATED, handleKPIUpdate);
+
+    return () => {
+      window.removeEventListener(REALTIME_EVENTS.KPI_UPDATED, handleKPIUpdate);
+    };
+  }, [loadAnalyticsData]);
 
   // Get filtered weeks based on period
   const getWeeksForPeriod = useCallback((p: AnalyticsPeriod): number => {

@@ -6,7 +6,7 @@
  */
 
 export type KPIType = 'counter' | 'hours' | 'percentage' | 'training' | 'reading';
-export type AutoSyncSource = 'github_prs' | 'deep_work_timer' | 'youtube' | 'instagram' | 'twitter' | null;
+export type AutoSyncSource = 'github_prs' | 'github_commits' | 'deep_work_timer' | 'youtube' | 'instagram' | 'twitter' | null;
 
 export interface DefaultKPI {
   kpi_id: string;

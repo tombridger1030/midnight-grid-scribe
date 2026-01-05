@@ -10,6 +10,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { DEFAULT_KPIS, KPIType, AutoSyncSource } from '@/lib/kpiDefaults';
 import { getCurrentWeek, getWeekDates, formatWeekKey } from '@/lib/weeklyKpi';
+import { REALTIME_EVENTS } from '@/hooks/useRealtimeSync';
 
 export interface KPIConfig {
   id: string;
@@ -201,6 +202,20 @@ export function useWeeklyKPIs(initialWeekKey?: string): UseWeeklyKPIsReturn {
     }
   }, [weekKey]);
 
+  // Listen for KPI definition changes
+  useEffect(() => {
+    const handleKPIUpdate = () => {
+      console.log('[useWeeklyKPIs] KPI update event detected, reloading KPI configs...');
+      loadKPIConfigs().then(setKpis);
+    };
+
+    window.addEventListener(REALTIME_EVENTS.KPI_UPDATED, handleKPIUpdate);
+    
+    return () => {
+      window.removeEventListener(REALTIME_EVENTS.KPI_UPDATED, handleKPIUpdate);
+    };
+  }, [loadKPIConfigs]);
+
   // Update a KPI value
   const updateValue = useCallback(async (kpiId: string, value: number) => {
     if (!user?.id) return;
@@ -220,6 +235,11 @@ export function useWeeklyKPIs(initialWeekKey?: string): UseWeeklyKPIsReturn {
         }, { onConflict: 'user_id,week_key' });
 
       if (upsertError) throw upsertError;
+      
+      // Dispatch event for other components to refresh (for non-React-Query consumers)
+      window.dispatchEvent(new CustomEvent(REALTIME_EVENTS.KPI_UPDATED, {
+        detail: { weekKey, kpiId, value }
+      }));
     } catch (err) {
       console.error('Failed to update KPI value:', err);
       // Revert on error

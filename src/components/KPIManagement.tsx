@@ -3,10 +3,12 @@ import { Plus, Edit, Trash2, Save, X, Target, Hash, Type, Palette, ArrowUp, Arro
 import { cn } from '@/lib/utils';
 import { kpiManager, ConfigurableKPI, AutoSyncSource } from '@/lib/configurableKpis';
 import { useToast } from '@/components/ui/use-toast';
+import { REALTIME_EVENTS } from '@/hooks/useRealtimeSync';
 
 const AUTO_SYNC_OPTIONS: { value: AutoSyncSource; label: string; icon: React.ReactNode; description: string }[] = [
   { value: null, label: 'None', icon: null, description: 'Manual entry only' },
   { value: 'github_prs', label: 'GitHub PRs', icon: <Github size={14} />, description: 'Auto-count PRs created' },
+  { value: 'github_commits', label: 'GitHub Commits', icon: <Github size={14} />, description: 'Auto-count commits' },
   { value: 'deep_work_timer', label: 'Deep Work Timer', icon: <Clock size={14} />, description: 'Auto-sync from timer' },
 ];
 
@@ -190,6 +192,9 @@ const KPIManagement: React.FC<KPIManagementProps> = ({ onClose }) => {
 
       await loadKPIs();
       cancelEditing();
+      
+      // Dispatch event to notify other components
+      window.dispatchEvent(new CustomEvent(REALTIME_EVENTS.KPI_UPDATED));
     } catch (error) {
       console.error('Failed to save KPI:', error);
       toast({
@@ -220,6 +225,9 @@ const KPIManagement: React.FC<KPIManagementProps> = ({ onClose }) => {
         title: "KPI Deleted",
         description: `${kpi.name} has been deleted successfully.`,
       });
+      
+      // Dispatch event to notify other components
+      window.dispatchEvent(new CustomEvent(REALTIME_EVENTS.KPI_UPDATED));
     } catch (error) {
       console.error('Failed to delete KPI:', error);
       toast({
@@ -241,6 +249,9 @@ const KPIManagement: React.FC<KPIManagementProps> = ({ onClose }) => {
         title: kpi.is_active ? "KPI Disabled" : "KPI Enabled",
         description: `${kpi.name} has been ${kpi.is_active ? 'disabled' : 'enabled'}.`,
       });
+      
+      // Dispatch event to notify other components
+      window.dispatchEvent(new CustomEvent(REALTIME_EVENTS.KPI_UPDATED));
     } catch (error) {
       console.error('Failed to toggle KPI:', error);
       toast({

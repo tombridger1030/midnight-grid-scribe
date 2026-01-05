@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { GoalStatus } from '@/components/roadmap/StatusIndicator';
+import { REALTIME_EVENTS } from '@/hooks/useRealtimeSync';
 
 // Types (frontend uses camelCase)
 export interface Goal {
@@ -409,6 +410,24 @@ export const useGoals = () => {
   // Initial fetch
   useEffect(() => {
     fetchGoals();
+  }, [fetchGoals]);
+
+  // Listen for real-time KPI updates to refresh goal progress
+  useEffect(() => {
+    const handleKPIUpdate = () => {
+      console.log('[Goals] KPI update detected, refreshing goal progress...');
+      fetchGoals();
+    };
+
+    window.addEventListener(REALTIME_EVENTS.KPI_UPDATED, handleKPIUpdate);
+    window.addEventListener(REALTIME_EVENTS.GOAL_UPDATED, handleKPIUpdate);
+    window.addEventListener(REALTIME_EVENTS.CONTENT_UPDATED, handleKPIUpdate);
+
+    return () => {
+      window.removeEventListener(REALTIME_EVENTS.KPI_UPDATED, handleKPIUpdate);
+      window.removeEventListener(REALTIME_EVENTS.GOAL_UPDATED, handleKPIUpdate);
+      window.removeEventListener(REALTIME_EVENTS.CONTENT_UPDATED, handleKPIUpdate);
+    };
   }, [fetchGoals]);
 
   return {

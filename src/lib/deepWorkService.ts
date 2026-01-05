@@ -3,11 +3,13 @@
  * Manages deep work sessions in Supabase
  */
 
-import { supabase } from './supabase';
+import { supabase } from "./supabase";
 
 // Constants
 const MAX_SESSION_DURATION_SECONDS = 4 * 60 * 60; // 4 hours in seconds
 const MAX_SESSION_DURATION_MS = MAX_SESSION_DURATION_SECONDS * 1000;
+
+export type ActivityType = "work" | "personal";
 
 export interface DeepWorkSession {
   id: string;
@@ -18,6 +20,8 @@ export interface DeepWorkSession {
   duration_seconds: number | null;
   is_active: boolean;
   auto_stopped: boolean;
+  activity_type: ActivityType;
+  activity_label: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -45,34 +49,42 @@ class DeepWorkService {
   /**
    * Start a new deep work session
    */
-  async startSession(taskName: string): Promise<DeepWorkSession | null> {
-    const { data: { user } } = await supabase.auth.getUser();
+  async startSession(
+    taskName: string,
+    activityType: ActivityType = "work",
+    activityLabel?: string,
+  ): Promise<DeepWorkSession | null> {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     if (!user) {
-      console.error('No authenticated user');
+      console.error("No authenticated user");
       return null;
     }
 
     // Check for existing active session
     const activeSession = await this.getActiveSession();
     if (activeSession) {
-      console.warn('Active session already exists');
+      console.warn("Active session already exists");
       return activeSession;
     }
 
     const { data, error } = await supabase
-      .from('deep_work_sessions')
+      .from("deep_work_sessions")
       .insert({
         user_id: user.id,
         task_name: taskName.trim(),
         start_time: new Date().toISOString(),
         is_active: true,
         auto_stopped: false,
+        activity_type: activityType,
+        activity_label: activityLabel?.trim() || null,
       })
       .select()
       .single();
 
     if (error) {
-      console.error('Error starting session:', error);
+      console.error("Error starting session:", error);
       return null;
     }
 
@@ -86,32 +98,34 @@ class DeepWorkService {
    * Stop an active session
    */
   async stopSession(sessionId?: string): Promise<DeepWorkSession | null> {
-    const session = sessionId 
+    const session = sessionId
       ? await this.getSessionById(sessionId)
       : await this.getActiveSession();
 
     if (!session) {
-      console.warn('No session to stop');
+      console.warn("No session to stop");
       return null;
     }
 
     const endTime = new Date().toISOString();
     const startTime = new Date(session.start_time);
-    const durationSeconds = Math.floor((new Date(endTime).getTime() - startTime.getTime()) / 1000);
+    const durationSeconds = Math.floor(
+      (new Date(endTime).getTime() - startTime.getTime()) / 1000,
+    );
 
     const { data, error } = await supabase
-      .from('deep_work_sessions')
+      .from("deep_work_sessions")
       .update({
         end_time: endTime,
         duration_seconds: durationSeconds,
         is_active: false,
       })
-      .eq('id', session.id)
+      .eq("id", session.id)
       .select()
       .single();
 
     if (error) {
-      console.error('Error stopping session:', error);
+      console.error("Error stopping session:", error);
       return null;
     }
 
@@ -123,25 +137,25 @@ class DeepWorkService {
    */
   async autoStopSession(sessionId: string): Promise<DeepWorkSession | null> {
     const session = await this.getSessionById(sessionId);
-    
+
     if (!session || !session.is_active) {
       return null;
     }
 
     const { data, error } = await supabase
-      .from('deep_work_sessions')
+      .from("deep_work_sessions")
       .update({
         end_time: new Date().toISOString(),
         duration_seconds: MAX_SESSION_DURATION_SECONDS,
         is_active: false,
         auto_stopped: true,
       })
-      .eq('id', sessionId)
+      .eq("id", sessionId)
       .select()
       .single();
 
     if (error) {
-      console.error('Error auto-stopping session:', error);
+      console.error("Error auto-stopping session:", error);
       return null;
     }
 
@@ -153,13 +167,13 @@ class DeepWorkService {
    */
   async getSessionById(sessionId: string): Promise<DeepWorkSession | null> {
     const { data, error } = await supabase
-      .from('deep_work_sessions')
-      .select('*')
-      .eq('id', sessionId)
+      .from("deep_work_sessions")
+      .select("*")
+      .eq("id", sessionId)
       .single();
 
     if (error) {
-      console.error('Error fetching session:', error);
+      console.error("Error fetching session:", error);
       return null;
     }
 
@@ -170,20 +184,22 @@ class DeepWorkService {
    * Get current active session for the user
    */
   async getActiveSession(): Promise<DeepWorkSession | null> {
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     if (!user) return null;
 
     const { data, error } = await supabase
-      .from('deep_work_sessions')
-      .select('*')
-      .eq('user_id', user.id)
-      .eq('is_active', true)
-      .order('start_time', { ascending: false })
+      .from("deep_work_sessions")
+      .select("*")
+      .eq("user_id", user.id)
+      .eq("is_active", true)
+      .order("start_time", { ascending: false })
       .limit(1)
       .maybeSingle();
 
     if (error) {
-      console.error('Error fetching active session:', error);
+      console.error("Error fetching active session:", error);
       return null;
     }
 
@@ -204,7 +220,9 @@ class DeepWorkService {
    * Get today's sessions
    */
   async getTodaySessions(): Promise<DeepWorkSession[]> {
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     if (!user) return [];
 
     const today = new Date();
@@ -213,15 +231,15 @@ class DeepWorkService {
     tomorrow.setDate(tomorrow.getDate() + 1);
 
     const { data, error } = await supabase
-      .from('deep_work_sessions')
-      .select('*')
-      .eq('user_id', user.id)
-      .gte('start_time', today.toISOString())
-      .lt('start_time', tomorrow.toISOString())
-      .order('start_time', { ascending: false });
+      .from("deep_work_sessions")
+      .select("*")
+      .eq("user_id", user.id)
+      .gte("start_time", today.toISOString())
+      .lt("start_time", tomorrow.toISOString())
+      .order("start_time", { ascending: false });
 
     if (error) {
-      console.error('Error fetching today sessions:', error);
+      console.error("Error fetching today sessions:", error);
       return [];
     }
 
@@ -233,7 +251,7 @@ class DeepWorkService {
    */
   async getTodayTotalSeconds(): Promise<number> {
     const sessions = await this.getTodaySessions();
-    
+
     let total = 0;
     const now = Date.now();
 
@@ -255,7 +273,9 @@ class DeepWorkService {
    * Get this week's sessions
    */
   async getWeekSessions(): Promise<DeepWorkSession[]> {
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     if (!user) return [];
 
     // Get start of week (Monday)
@@ -267,14 +287,14 @@ class DeepWorkService {
     weekStart.setHours(0, 0, 0, 0);
 
     const { data, error } = await supabase
-      .from('deep_work_sessions')
-      .select('*')
-      .eq('user_id', user.id)
-      .gte('start_time', weekStart.toISOString())
-      .order('start_time', { ascending: false });
+      .from("deep_work_sessions")
+      .select("*")
+      .eq("user_id", user.id)
+      .gte("start_time", weekStart.toISOString())
+      .order("start_time", { ascending: false });
 
     if (error) {
-      console.error('Error fetching week sessions:', error);
+      console.error("Error fetching week sessions:", error);
       return [];
     }
 
@@ -286,7 +306,7 @@ class DeepWorkService {
    */
   async getWeekTotalSeconds(): Promise<number> {
     const sessions = await this.getWeekSessions();
-    
+
     let total = 0;
     const now = Date.now();
 
@@ -307,18 +327,20 @@ class DeepWorkService {
    * Get recent unique task names for quick selection
    */
   async getRecentTasks(limit: number = 5): Promise<string[]> {
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     if (!user) return [];
 
     const { data, error } = await supabase
-      .from('deep_work_sessions')
-      .select('task_name')
-      .eq('user_id', user.id)
-      .order('start_time', { ascending: false })
+      .from("deep_work_sessions")
+      .select("task_name")
+      .eq("user_id", user.id)
+      .order("start_time", { ascending: false })
       .limit(50); // Fetch more to get unique values
 
     if (error) {
-      console.error('Error fetching recent tasks:', error);
+      console.error("Error fetching recent tasks:", error);
       return [];
     }
 
@@ -347,10 +369,12 @@ class DeepWorkService {
     const dayEnd = new Date(dayStart);
     dayEnd.setDate(dayEnd.getDate() + 1);
 
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     if (!user) {
       return {
-        date: dayStart.toISOString().split('T')[0],
+        date: dayStart.toISOString().split("T")[0],
         totalSeconds: 0,
         totalHours: 0,
         sessions: [],
@@ -358,17 +382,17 @@ class DeepWorkService {
     }
 
     const { data, error } = await supabase
-      .from('deep_work_sessions')
-      .select('*')
-      .eq('user_id', user.id)
-      .gte('start_time', dayStart.toISOString())
-      .lt('start_time', dayEnd.toISOString())
-      .order('start_time', { ascending: true });
+      .from("deep_work_sessions")
+      .select("*")
+      .eq("user_id", user.id)
+      .gte("start_time", dayStart.toISOString())
+      .lt("start_time", dayEnd.toISOString())
+      .order("start_time", { ascending: true });
 
     if (error) {
-      console.error('Error fetching daily summary:', error);
+      console.error("Error fetching daily summary:", error);
       return {
-        date: dayStart.toISOString().split('T')[0],
+        date: dayStart.toISOString().split("T")[0],
         totalSeconds: 0,
         totalHours: 0,
         sessions: [],
@@ -390,7 +414,7 @@ class DeepWorkService {
     }
 
     return {
-      date: dayStart.toISOString().split('T')[0],
+      date: dayStart.toISOString().split("T")[0],
       totalSeconds,
       totalHours: totalSeconds / 3600,
       sessions,
@@ -400,9 +424,11 @@ class DeepWorkService {
   /**
    * Get weekly summary with target comparison
    */
-  async getWeeklySummary(weeklyTargetHours: number = 40): Promise<WeeklyDeepWorkSummary> {
+  async getWeeklySummary(
+    weeklyTargetHours: number = 40,
+  ): Promise<WeeklyDeepWorkSummary> {
     const sessions = await this.getWeekSessions();
-    
+
     // Calculate week boundaries
     const now = new Date();
     const dayOfWeek = now.getDay();
@@ -416,7 +442,7 @@ class DeepWorkService {
     // Group sessions by day
     const dailyMap = new Map<string, DeepWorkSession[]>();
     for (const session of sessions) {
-      const dateKey = new Date(session.start_time).toISOString().split('T')[0];
+      const dateKey = new Date(session.start_time).toISOString().split("T")[0];
       if (!dailyMap.has(dateKey)) {
         dailyMap.set(dateKey, []);
       }
@@ -451,11 +477,12 @@ class DeepWorkService {
     // Calculate remaining time needed
     const totalHours = totalSeconds / 3600;
     const remainingHours = Math.max(0, weeklyTargetHours - totalHours);
-    
+
     // Days remaining in week
     const today = now.getDay();
     const daysRemaining = today === 0 ? 1 : 7 - today + 1; // Include today
-    const dailyTargetHours = daysRemaining > 0 ? remainingHours / daysRemaining : 0;
+    const dailyTargetHours =
+      daysRemaining > 0 ? remainingHours / daysRemaining : 0;
 
     // Are we on track? (have we done enough for days elapsed?)
     const daysElapsed = diff + 1;
@@ -477,7 +504,7 @@ class DeepWorkService {
 
   /**
    * Schedule auto-stop for a session
-   * Note: This only works while the app is open. 
+   * Note: This only works while the app is open.
    * The getActiveSession method also checks and auto-stops stale sessions.
    */
   private scheduleAutoStop(sessionId: string, delayMs: number): void {
@@ -486,9 +513,11 @@ class DeepWorkService {
       if (session?.is_active) {
         await this.autoStopSession(sessionId);
         // Dispatch event for UI to update
-        window.dispatchEvent(new CustomEvent('deepWorkAutoStopped', { 
-          detail: { sessionId } 
-        }));
+        window.dispatchEvent(
+          new CustomEvent("deepWorkAutoStopped", {
+            detail: { sessionId },
+          }),
+        );
       }
     }, delayMs);
   }
@@ -515,9 +544,144 @@ class DeepWorkService {
     const secs = seconds % 60;
 
     if (hours > 0) {
-      return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+      return `${hours}:${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
     }
-    return `${minutes}:${secs.toString().padStart(2, '0')}`;
+    return `${minutes}:${secs.toString().padStart(2, "0")}`;
+  }
+
+  /**
+   * Get daily schedule with work/personal breakdown for timeline view
+   */
+  async getDailySchedule(date?: Date): Promise<{
+    date: string;
+    workHours: number;
+    personalHours: number;
+    totalHours: number;
+    sessions: Array<{
+      id: string;
+      taskName: string;
+      startTime: string;
+      endTime: string | null;
+      duration: number;
+      durationFormatted: string;
+      activityType: ActivityType;
+      activityLabel: string | null;
+      isActive: boolean;
+    }>;
+  }> {
+    const targetDate = date || new Date();
+    const dayStart = new Date(targetDate);
+    dayStart.setHours(0, 0, 0, 0);
+    const dayEnd = new Date(dayStart);
+    dayEnd.setDate(dayEnd.getDate() + 1);
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      return {
+        date: dayStart.toISOString().split("T")[0],
+        workHours: 0,
+        personalHours: 0,
+        totalHours: 0,
+        sessions: [],
+      };
+    }
+
+    const { data, error } = await supabase
+      .from("deep_work_sessions")
+      .select("*")
+      .eq("user_id", user.id)
+      .gte("start_time", dayStart.toISOString())
+      .lt("start_time", dayEnd.toISOString())
+      .order("start_time", { ascending: true });
+
+    if (error) {
+      console.error("Error fetching daily schedule:", error);
+      return {
+        date: dayStart.toISOString().split("T")[0],
+        workHours: 0,
+        personalHours: 0,
+        totalHours: 0,
+        sessions: [],
+      };
+    }
+
+    const sessions = data || [];
+    const now = Date.now();
+    let workSeconds = 0;
+    let personalSeconds = 0;
+
+    const formattedSessions = sessions.map((session) => {
+      let duration = session.duration_seconds || 0;
+      if (session.is_active && !duration) {
+        const startTime = new Date(session.start_time).getTime();
+        duration = Math.floor((now - startTime) / 1000);
+      }
+
+      if (session.activity_type === "work") {
+        workSeconds += duration;
+      } else {
+        personalSeconds += duration;
+      }
+
+      return {
+        id: session.id,
+        taskName: session.task_name,
+        startTime: session.start_time,
+        endTime: session.end_time,
+        duration,
+        durationFormatted: this.formatDuration(duration),
+        activityType: session.activity_type as ActivityType,
+        activityLabel: session.activity_label,
+        isActive: session.is_active,
+      };
+    });
+
+    return {
+      date: dayStart.toISOString().split("T")[0],
+      workHours: workSeconds / 3600,
+      personalHours: personalSeconds / 3600,
+      totalHours: (workSeconds + personalSeconds) / 3600,
+      sessions: formattedSessions,
+    };
+  }
+
+  /**
+   * Get recent unique activity labels for autocomplete
+   */
+  async getRecentActivityLabels(limit: number = 10): Promise<string[]> {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return [];
+
+    const { data, error } = await supabase
+      .from("deep_work_sessions")
+      .select("activity_label")
+      .eq("user_id", user.id)
+      .not("activity_label", "is", null)
+      .order("start_time", { ascending: false })
+      .limit(50);
+
+    if (error) {
+      console.error("Error fetching recent activity labels:", error);
+      return [];
+    }
+
+    // Get unique labels, maintaining recency order
+    const seen = new Set<string>();
+    const uniqueLabels: string[] = [];
+
+    for (const row of data || []) {
+      if (row.activity_label && !seen.has(row.activity_label)) {
+        seen.add(row.activity_label);
+        uniqueLabels.push(row.activity_label);
+        if (uniqueLabels.length >= limit) break;
+      }
+    }
+
+    return uniqueLabels;
   }
 }
 

@@ -35,7 +35,7 @@ const emptyDay: DailySleep = {
   sleep_time: null,
   wake_time: null,
   hours: 0,
-  quality: 0,
+  quality: 3, // Default to middle value (1-5 scale, database constraint)
 };
 
 // Calculate hours between sleep and wake times
@@ -130,6 +130,11 @@ export function useSleep(weekKey: string): UseSleepReturn {
     setWeekData(prev => ({ ...prev, [date]: updated }));
 
     try {
+      // Quality must be 1-5 per database constraint, or null if not set
+      const qualityValue = updated.quality >= 1 && updated.quality <= 5 
+        ? updated.quality 
+        : null;
+      
       const { error: upsertError } = await supabase
         .from('daily_sleep')
         .upsert({
@@ -138,7 +143,7 @@ export function useSleep(weekKey: string): UseSleepReturn {
           sleep_time: updated.sleep_time,
           wake_time: updated.wake_time,
           hours: updated.hours,
-          quality: updated.quality,
+          quality: qualityValue,
         }, { onConflict: 'user_id,date' });
 
       if (upsertError) throw upsertError;
