@@ -21,7 +21,9 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
-import { getWeekKey, loadWeeklyKPIsWithSync } from "@/lib/weeklyKpi";
+import { useNavigate } from "react-router-dom";
+import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/contexts/AuthContext";
 import { REALTIME_EVENTS } from "@/hooks/useRealtimeSync";
 
 interface ChecklistItem {
@@ -75,6 +77,8 @@ export const DailyChecklist: React.FC<DailyChecklistProps> = ({
   className,
   onItemComplete,
 }) => {
+  const { user } = useAuth();
+  const navigate = useNavigate();
   const [items, setItems] = useState<ChecklistItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -90,127 +94,166 @@ export const DailyChecklist: React.FC<DailyChecklistProps> = ({
         name: "Deep Work Sessions",
         category: "deep work",
         isComplete: false,
-        onClick: () => {
-          document.getElementById("daily-schedule")?.scrollIntoView({
-            behavior: "smooth",
-          });
-        },
+        onClick: () => navigate("/kpis#deep-work-kpi"),
       },
       {
         id: "nutrition",
         name: "Nutrition Logged",
         category: "health",
         isComplete: false,
-        onClick: () => {
-          document.getElementById("nutrition-kpi")?.scrollIntoView({
-            behavior: "smooth",
-          });
-        },
+        onClick: () => navigate("/kpis#nutrition-kpi"),
       },
       {
         id: "sleep",
         name: "Sleep Logged",
         category: "health",
         isComplete: false,
-        onClick: () => {
-          document.getElementById("sleep-kpi")?.scrollIntoView({
-            behavior: "smooth",
-          });
-        },
+        onClick: () => navigate("/kpis#sleep-kpi"),
       },
       {
         id: "weight",
         name: "Weight Logged",
         category: "health",
         isComplete: false,
-        onClick: () => {
-          document.getElementById("weight-kpi")?.scrollIntoView({
-            behavior: "smooth",
-          });
-        },
+        onClick: () => navigate("/kpis#weight-kpi"),
       },
       {
         id: "training",
         name: "Training Sessions",
         category: "fitness",
         isComplete: false,
-        onClick: () => {
-          document.getElementById("training-kpi")?.scrollIntoView({
-            behavior: "smooth",
-          });
-        },
+        onClick: () => navigate("/kpis#training-kpi"),
       },
       {
         id: "reading",
         name: "Reading Progress",
         category: "learning",
         isComplete: false,
-        onClick: () => {
-          document.getElementById("reading-kpi")?.scrollIntoView({
-            behavior: "smooth",
-          });
-        },
+        onClick: () => navigate("/kpis#reading-kpi"),
       },
       {
         id: "expenses",
         name: "Expenses Logged",
         category: "finance",
         isComplete: false,
-        onClick: () => {
-          document.getElementById("expenses-section")?.scrollIntoView({
-            behavior: "smooth",
-          });
-        },
+        onClick: () => navigate("/cash"),
       },
     ];
 
+    if (!user) {
+      setItems(checklistItems);
+      setIsLoading(false);
+      return;
+    }
+
     try {
-      // 1. Load weekly KPI data with Supabase sync
-      const weeklyKpiData = await loadWeeklyKPIsWithSync();
-      const weekKey = getWeekKey(date);
-      const record = weeklyKpiData.records?.find((r) => r.weekKey === weekKey);
+      // Query all data sources in parallel
+      const [
+        nutritionResult,
+        sleepResult,
+        weightResult,
+        trainingResult,
+        readingResult,
+        deepWorkResult,
+      ] = await Promise.all([
+        // Nutrition
+        supabase
+          .from("daily_nutrition")
+          .select(
+            "breakfast_calories, lunch_calories, dinner_calories, snacks_calories",
+          )
+          .eq("user_id", user.id)
+          .eq("date", dateStr)
+          .maybeSingle(),
+        // Sleep
+        supabase
+          .from("daily_sleep")
+          .select("hours")
+          .eq("user_id", user.id)
+          .eq("date", dateStr)
+          .maybeSingle(),
+        // Weight
+        supabase
+          .from("daily_weight")
+          .select("weight_lbs")
+          .eq("user_id", user.id)
+          .eq("date", dateStr)
+          .maybeSingle(),
+        // Training
+        supabase
+          .from("training_sessions")
+          .select("id")
+          .eq("user_id", user.id)
+          .eq("date", dateStr),
+        // Reading
+        supabase
+          .from("book_progress")
+          .select("pages_read")
+          .eq("user_id", user.id)
+          .eq("date", dateStr),
+        // Deep Work
+        supabase
+          .from("deep_work_sessions")
+          .select("id")
+          .eq("user_id", user.id)
+          .gte("start_time", new Date(dateStr + "T00:00:00").toISOString())
+          .lt("start_time", new Date(dateStr + "T23:59:59").toISOString()),
+      ]);
 
-      if (record?.values) {
-        const values = record.values;
+      // Check Nutrition
+      const nutritionData = nutritionResult.data;
+      const hasNutrition =
+        nutritionData &&
+        (nutritionData.breakfast_calories || 0) +
+          (nutritionData.lunch_calories || 0) +
+          (nutritionData.dinner_calories || 0) +
+          (nutritionData.snacks_calories || 0) >
+          0;
+      checklistItems[1].isComplete = !!hasNutrition;
 
-        // Deep Work: check if any hours logged
-        const deepWorkValue = values.deepWorkHours || 0;
-        checklistItems[0].isComplete = deepWorkValue > 0;
-        checklistItems[0].value = `${deepWorkValue.toFixed(1)}h`;
+      // Check Sleep
+      const sleepData = sleepResult.data;
+      const hasSleep = sleepData && sleepData.hours > 0;
+      checklistItems[2].isComplete = !!hasSleep;
 
-        // Training: check if sessions logged
-        const trainingValue = values.strengthSessions || 0;
-        checklistItems[4].isComplete = trainingValue > 0;
-        checklistItems[4].value = `${trainingValue} session${trainingValue !== 1 ? "s" : ""}`;
+      // Check Weight
+      const weightData = weightResult.data;
+      const hasWeight = weightData && weightData.weight_lbs > 0;
+      checklistItems[3].isComplete = !!hasWeight;
 
-        // Reading: check if pages logged
-        const readingValue = values.pagesRead || 0;
-        checklistItems[5].isComplete = readingValue > 0;
-        checklistItems[5].value = `${readingValue} page${readingValue !== 1 ? "s" : ""}`;
+      // Check Training
+      const trainingSessions = trainingResult.data || [];
+      const hasTraining = trainingSessions.length > 0;
+      checklistItems[4].isComplete = hasTraining;
+      if (hasTraining) {
+        checklistItems[4].value = `${trainingSessions.length} session${trainingSessions.length !== 1 ? "s" : ""}`;
       }
 
-      // 2. Check daily data for health metrics (from dailyByDate)
-      if (record?.dailyByDate) {
-        const dailyData = record.dailyByDate[dateStr];
-
-        if (dailyData) {
-          // Nutrition: check if any meals logged
-          const hasNutrition =
-            (dailyData.avg_calories || 0) > 0 ||
-            (dailyData.avg_protein || 0) > 0;
-          checklistItems[1].isComplete = hasNutrition;
-
-          // Sleep: check if sleep logged
-          const hasSleep = (dailyData.sleepTarget || 0) > 0;
-          checklistItems[2].isComplete = hasSleep;
-
-          // Weight: check if weight logged
-          const hasWeight = (dailyData.weightTarget || 0) > 0;
-          checklistItems[3].isComplete = hasWeight;
-        }
+      // Check Reading
+      const readingProgress = readingResult.data || [];
+      const totalPagesRead = (readingProgress as any[]).reduce(
+        (sum: number, r: any) => sum + (r.pages_read || 0),
+        0,
+      );
+      const hasReading = totalPagesRead > 0;
+      checklistItems[5].isComplete = hasReading;
+      if (hasReading) {
+        checklistItems[5].value = `${totalPagesRead} page${totalPagesRead !== 1 ? "s" : ""}`;
       }
 
-      // 3. Check expenses from cash storage
+      // Check Deep Work
+      const deepWorkSessions = deepWorkResult.data || [];
+      const hasDeepWork = deepWorkSessions.length > 0;
+      checklistItems[0].isComplete = hasDeepWork;
+      if (hasDeepWork) {
+        const totalHours = (deepWorkSessions as any[]).reduce(
+          (sum: number, s: any) => sum + (s.duration_minutes || 0) / 60,
+          0,
+        );
+        checklistItems[0].value = `${totalHours.toFixed(1)}h`;
+      }
+
+      // Check Expenses from localStorage
       const cashData = localStorage.getItem("noctisium-cash-data");
       if (cashData) {
         const parsed = JSON.parse(cashData);
@@ -239,7 +282,7 @@ export const DailyChecklist: React.FC<DailyChecklistProps> = ({
 
   useEffect(() => {
     loadCompletionStatus();
-  }, [date]);
+  }, [date, user]);
 
   // Listen for KPI update events to refresh the checklist
   useEffect(() => {
@@ -249,7 +292,6 @@ export const DailyChecklist: React.FC<DailyChecklistProps> = ({
     };
 
     window.addEventListener(REALTIME_EVENTS.KPI_UPDATED, handleKPIUpdate);
-
     return () => {
       window.removeEventListener(REALTIME_EVENTS.KPI_UPDATED, handleKPIUpdate);
     };

@@ -154,14 +154,22 @@ export function useWeight(weekKey: string): UseWeightReturn {
   );
 
   // Calculate weekly stats
+  // Get chronological entries for start/end/trend
+  const chronologicalEntries = Object.entries(weekData)
+    .filter(([_, d]) => d.weight_lbs > 0)
+    .sort(([aDate], [bDate]) => aDate.localeCompare(bDate));
+
   const weightArray = Object.values(weekData)
     .map((d) => d.weight_lbs)
-    .filter((w) => w > 0)
-    .sort((a, b) => a - b);
+    .filter((w) => w > 0);
 
-  const startWeight = weightArray.length > 0 ? weightArray[0] : 0;
+  // startWeight = first chronological entry, endWeight = last chronological entry
+  const startWeight =
+    chronologicalEntries.length > 0 ? chronologicalEntries[0][1].weight_lbs : 0;
   const endWeight =
-    weightArray.length > 0 ? weightArray[weightArray.length - 1] : 0;
+    chronologicalEntries.length > 0
+      ? chronologicalEntries[chronologicalEntries.length - 1][1].weight_lbs
+      : 0;
   const weightChange = endWeight - startWeight;
 
   let trend: "up" | "down" | "neutral" = "neutral";

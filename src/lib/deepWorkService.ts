@@ -955,6 +955,53 @@ class DeepWorkService {
   }
 
   /**
+   * Update all session properties (task name, category, times, notes)
+   */
+  async updateSession(
+    sessionId: string,
+    updates: {
+      taskName?: string;
+      categoryId?: string;
+      startTime?: Date;
+      endTime?: Date;
+      notes?: string;
+    },
+  ): Promise<DeepWorkSession | null> {
+    const updateData: any = {};
+
+    if (updates.taskName !== undefined) updateData.task_name = updates.taskName;
+    if (updates.categoryId !== undefined)
+      updateData.activity_type = updates.categoryId;
+    if (updates.notes !== undefined) updateData.notes = updates.notes;
+
+    if (updates.startTime && updates.endTime) {
+      if (updates.endTime <= updates.startTime) {
+        console.error("End time must be after start time");
+        return null;
+      }
+      updateData.start_time = updates.startTime.toISOString();
+      updateData.end_time = updates.endTime.toISOString();
+      updateData.duration_seconds = Math.floor(
+        (updates.endTime.getTime() - updates.startTime.getTime()) / 1000,
+      );
+    }
+
+    const { data, error } = await supabase
+      .from("deep_work_sessions")
+      .update(updateData)
+      .eq("id", sessionId)
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Error updating session:", error);
+      return null;
+    }
+
+    return data;
+  }
+
+  /**
    * Delete a session
    */
   async deleteSession(sessionId: string): Promise<boolean> {

@@ -26,29 +26,8 @@ import { NutritionKPI } from "./NutritionKPI";
 import { SleepKPI } from "./SleepKPI";
 import { WeightKPI } from "./WeightKPI";
 import { WeeklyHistory } from "./WeeklyHistory";
-import {
-  getCurrentWeek,
-  getRecentWeeks,
-  loadWeeklyKPIs,
-} from "@/lib/weeklyKpi";
 import { DEFAULT_KPIS } from "@/lib/kpiDefaults";
-
-// Local storage keys for targets
-const NUTRITION_TARGETS_KEY = "noctisium-nutrition-targets";
-const SLEEP_TARGET_KEY = "noctisium-sleep-target";
-const WEIGHT_TARGET_KEY = "noctisium-weight-target";
-
-interface NutritionTargets {
-  calories: number;
-  protein: number;
-}
-
-const DEFAULT_NUTRITION_TARGETS: NutritionTargets = {
-  calories: 1900,
-  protein: 150,
-};
-const DEFAULT_SLEEP_TARGET = 7;
-const DEFAULT_WEIGHT_TARGET = 180;
+import { getRecentWeeks, loadWeeklyKPIs } from "@/lib/weeklyKpi";
 
 interface WeeklyKPIsProps {
   className?: string;
@@ -143,55 +122,16 @@ export const WeeklyKPIs: React.FC<WeeklyKPIsProps> = ({ className }) => {
     isLoading: weightLoading,
   } = useWeight(weekKey);
 
-  // Nutrition and Sleep targets (persisted in localStorage)
-  const [nutritionTargets, setNutritionTargets] = useState<NutritionTargets>(
-    () => {
-      try {
-        const stored = localStorage.getItem(NUTRITION_TARGETS_KEY);
-        return stored ? JSON.parse(stored) : DEFAULT_NUTRITION_TARGETS;
-      } catch {
-        return DEFAULT_NUTRITION_TARGETS;
-      }
-    },
-  );
+  // Read targets from KPIs array (database-backed)
+  const avgCaloriesKpi = kpis.find((k) => k.kpi_id === "avg_calories");
+  const avgProteinKpi = kpis.find((k) => k.kpi_id === "avg_protein");
+  const sleepTargetKpi = kpis.find((k) => k.kpi_id === "sleepTarget");
+  const weightTargetKpi = kpis.find((k) => k.kpi_id === "weightTarget");
 
-  const [sleepTarget, setSleepTarget] = useState<number>(() => {
-    try {
-      const stored = localStorage.getItem(SLEEP_TARGET_KEY);
-      return stored ? parseFloat(stored) : DEFAULT_SLEEP_TARGET;
-    } catch {
-      return DEFAULT_SLEEP_TARGET;
-    }
-  });
-
-  const [weightTarget, setWeightTarget] = useState<number>(() => {
-    try {
-      const stored = localStorage.getItem(WEIGHT_TARGET_KEY);
-      return stored ? parseFloat(stored) : DEFAULT_WEIGHT_TARGET;
-    } catch {
-      return DEFAULT_WEIGHT_TARGET;
-    }
-  });
-
-  // Save targets to localStorage when changed
-  const handleUpdateNutritionTargets = useCallback(
-    (calories: number, protein: number) => {
-      const newTargets = { calories, protein };
-      setNutritionTargets(newTargets);
-      localStorage.setItem(NUTRITION_TARGETS_KEY, JSON.stringify(newTargets));
-    },
-    [],
-  );
-
-  const handleUpdateSleepTarget = useCallback((hours: number) => {
-    setSleepTarget(hours);
-    localStorage.setItem(SLEEP_TARGET_KEY, hours.toString());
-  }, []);
-
-  const handleUpdateWeightTarget = useCallback((target: number) => {
-    setWeightTarget(target);
-    localStorage.setItem(WEIGHT_TARGET_KEY, target.toString());
-  }, []);
+  const targetCalories = avgCaloriesKpi?.target ?? 1900;
+  const targetProtein = avgProteinKpi?.target ?? 150;
+  const targetSleep = sleepTargetKpi?.target ?? 7;
+  const targetWeight = weightTargetKpi?.target ?? 180;
 
   // Auto-sync data
   const { kpiValueMapping, isSyncing, syncNow } = useAutoSync(weekKey);
@@ -251,6 +191,30 @@ export const WeeklyKPIs: React.FC<WeeklyKPIsProps> = ({ className }) => {
       };
     });
   }, [kpis, weekKey]);
+
+  // Handle hash scroll for anchor navigation from Daily Checklist
+  useEffect(() => {
+    const handleHashScroll = () => {
+      const hash = window.location.hash.slice(1); // Remove # from hash
+      if (hash) {
+        // Wait for component to render then scroll
+        setTimeout(() => {
+          const element = document.getElementById(hash);
+          if (element) {
+            element.scrollIntoView({ behavior: "smooth", block: "center" });
+          }
+        }, 100);
+      }
+    };
+
+    handleHashScroll();
+
+    // Listen for hash changes
+    window.addEventListener("hashchange", handleHashScroll);
+    return () => {
+      window.removeEventListener("hashchange", handleHashScroll);
+    };
+  }, []);
 
   // Get progress color using design tokens
   const getProgressColor = useCallback((percentage: number): string => {
@@ -436,6 +400,7 @@ export const WeeklyKPIs: React.FC<WeeklyKPIsProps> = ({ className }) => {
         {simpleKpis.map((kpi, index) => (
           <motion.div
             key={kpi.kpi_id}
+            id={kpi.kpi_id === "deepWorkHours" ? "deep-work-kpi" : undefined}
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: index * 0.05, duration: 0.3 }}
@@ -459,7 +424,7 @@ export const WeeklyKPIs: React.FC<WeeklyKPIsProps> = ({ className }) => {
 
       {/* Training KPI - Always rendered */}
       {trainingKpi && (
-        <motion.div variants={itemVariants}>
+        <motion.div variants={itemVariants} id="training-kpi">
           <TrainingKPI
             target={trainingKpi.target}
             sessions={sessions}
@@ -476,7 +441,7 @@ export const WeeklyKPIs: React.FC<WeeklyKPIsProps> = ({ className }) => {
 
       {/* Reading KPI - Always rendered */}
       {readingKpi && (
-        <motion.div variants={itemVariants}>
+        <motion.div variants={itemVariants} id="reading-kpi">
           <ReadingKPI
             target={readingKpi.target}
             activeBooks={activeBooks}
@@ -494,43 +459,40 @@ export const WeeklyKPIs: React.FC<WeeklyKPIsProps> = ({ className }) => {
       )}
 
       {/* Nutrition KPI */}
-      <motion.div variants={itemVariants}>
+      <motion.div variants={itemVariants} id="nutrition-kpi">
         <NutritionKPI
           weekData={nutritionData}
           weeklyTotals={nutritionTotals}
           dailyAverage={nutritionAverage}
           daysTracked={nutritionDaysTracked}
-          targetCalories={nutritionTargets.calories}
-          targetProtein={nutritionTargets.protein}
+          targetCalories={targetCalories}
+          targetProtein={targetProtein}
           onUpdateMeal={updateMeal}
-          onUpdateTargets={handleUpdateNutritionTargets}
           weekDates={weekDates}
         />
       </motion.div>
 
       {/* Sleep KPI */}
-      <motion.div variants={itemVariants}>
+      <motion.div variants={itemVariants} id="sleep-kpi">
         <SleepKPI
           weekData={sleepData}
           weeklyTotal={sleepTotal}
           dailyAverage={sleepAverage}
           daysTracked={sleepDaysTracked}
-          targetHours={sleepTarget}
+          targetSleep={targetSleep}
           onUpdateDay={updateSleep}
-          onUpdateTarget={handleUpdateSleepTarget}
           weekDates={weekDates}
         />
       </motion.div>
 
       {/* Weight KPI */}
-      <motion.div variants={itemVariants}>
+      <motion.div variants={itemVariants} id="weight-kpi">
         <WeightKPI
           weekData={weightData}
           weeklyStats={weightStats}
           daysTracked={weightDaysTracked}
-          targetLbs={weightTarget}
+          targetWeight={targetWeight}
           onUpdateDay={updateWeight}
-          onUpdateTarget={handleUpdateWeightTarget}
           weekDates={weekDates}
         />
       </motion.div>

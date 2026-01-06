@@ -32,7 +32,6 @@ interface WeightKPIProps {
   daysTracked: number;
   targetLbs: number;
   onUpdateDay: (date: string, data: Partial<DailyWeight>) => void;
-  onUpdateTarget?: (target: number) => void;
   weekDates: { start: Date; end: Date };
 }
 
@@ -44,12 +43,9 @@ export const WeightKPI: React.FC<WeightKPIProps> = ({
   daysTracked,
   targetLbs,
   onUpdateDay,
-  onUpdateTarget,
   weekDates,
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(true);
-  const [isEditingTarget, setIsEditingTarget] = useState(false);
-  const [editTargetValue, setEditTargetValue] = useState(targetLbs.toString());
 
   // Generate all 7 days of the week
   const weekDays = useMemo(() => {
@@ -136,12 +132,6 @@ export const WeightKPI: React.FC<WeightKPIProps> = ({
   const handleWeightChange = (date: string, value: string) => {
     const weight = parseFloat(value) || 0;
     onUpdateDay(date, { weight_lbs: weight });
-  };
-
-  const handleSaveTarget = () => {
-    const target = parseFloat(editTargetValue) || 180;
-    onUpdateTarget?.(target);
-    setIsEditingTarget(false);
   };
 
   return (
@@ -277,7 +267,7 @@ export const WeightKPI: React.FC<WeightKPIProps> = ({
                     10
                   }
                   x2="100"
-                  y1={
+                  y2={
                     100 -
                     ((targetLbs - weeklyStats.minWeight) /
                       (weeklyStats.maxWeight - weeklyStats.minWeight || 1)) *
@@ -386,61 +376,12 @@ export const WeightKPI: React.FC<WeightKPIProps> = ({
                 </div>
               </div>
 
-              {/* Target display/edit */}
-              <div className="flex items-center gap-2">
-                {isEditingTarget ? (
-                  <div className="flex items-center gap-1">
-                    <input
-                      type="number"
-                      step="0.5"
-                      min="50"
-                      max="400"
-                      value={editTargetValue}
-                      onChange={(e) => setEditTargetValue(e.target.value)}
-                      onClick={(e) => e.stopPropagation()}
-                      className="w-16 px-1 py-0.5 text-xs rounded font-mono text-center"
-                      style={{
-                        backgroundColor: colors.background.elevated,
-                        border: `1px solid ${WEIGHT_COLOR}`,
-                        color: colors.text.primary,
-                      }}
-                    />
-                    <span
-                      className="text-xs"
-                      style={{ color: colors.text.muted }}
-                    >
-                      lbs
-                    </span>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleSaveTarget();
-                      }}
-                      className="px-2 py-0.5 rounded text-[10px]"
-                      style={{
-                        backgroundColor: WEIGHT_COLOR,
-                        color: colors.background.primary,
-                      }}
-                    >
-                      Save
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setEditTargetValue(targetLbs.toString());
-                      setIsEditingTarget(true);
-                    }}
-                    className="flex items-center gap-1 text-xs hover:opacity-80 transition-opacity"
-                    style={{ color: colors.text.muted }}
-                  >
-                    <span>Target:</span>
-                    <span className="font-mono" style={{ color: WEIGHT_COLOR }}>
-                      {targetLbs}lbs
-                    </span>
-                  </button>
-                )}
+              {/* Target display (read-only) */}
+              <div className="text-xs" style={{ color: colors.text.muted }}>
+                Target:{" "}
+                <span className="font-mono" style={{ color: WEIGHT_COLOR }}>
+                  {targetLbs}lbs
+                </span>
               </div>
             </div>
 

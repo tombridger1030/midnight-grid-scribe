@@ -1,24 +1,23 @@
 /**
  * SleepKPI Component
- * 
+ *
  * Tracks daily sleep with 7-day grid view.
  * Shows sleep time, wake time, and hours per day.
  */
 
-import React, { useMemo, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Moon, Sun, Clock, ChevronDown, ChevronUp } from 'lucide-react';
-import { colors } from '@/styles/design-tokens';
-import { DailySleep } from '@/hooks/useSleep';
+import React, { useMemo, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Moon, Sun, Clock, ChevronDown, ChevronUp } from "lucide-react";
+import { colors } from "@/styles/design-tokens";
+import { DailySleep } from "@/hooks/useSleep";
 
 interface SleepKPIProps {
   weekData: Record<string, DailySleep>;
   weeklyTotal: number;
   dailyAverage: number;
   daysTracked: number;
-  targetHours: number;
+  targetSleep: number;
   onUpdateDay: (date: string, data: Partial<DailySleep>) => void;
-  onUpdateTarget?: (hours: number) => void;
   weekDates: { start: Date; end: Date };
 }
 
@@ -27,41 +26,37 @@ export const SleepKPI: React.FC<SleepKPIProps> = ({
   weeklyTotal,
   dailyAverage,
   daysTracked,
-  targetHours,
+  targetSleep,
   onUpdateDay,
-  onUpdateTarget,
   weekDates,
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(true);
-  const [isEditingTarget, setIsEditingTarget] = useState(false);
-  const [editTargetValue, setEditTargetValue] = useState(targetHours.toString());
   // Generate all 7 days of the week
   const weekDays = useMemo(() => {
     const days: string[] = [];
     const current = new Date(weekDates.start);
     while (current <= weekDates.end) {
-      days.push(current.toISOString().split('T')[0]);
+      days.push(current.toISOString().split("T")[0]);
       current.setDate(current.getDate() + 1);
     }
     return days;
   }, [weekDates]);
 
   // Calculate progress
-  const progress = targetHours > 0 
-    ? Math.min(100, (dailyAverage / targetHours) * 100) 
-    : 0;
-  const isOnTarget = dailyAverage >= targetHours;
+  const progress =
+    targetSleep > 0 ? Math.min(100, (dailyAverage / targetSleep) * 100) : 0;
+  const isOnTarget = dailyAverage >= targetSleep;
 
   // Format day name
   const formatDayName = (date: string) => {
-    const d = new Date(date + 'T00:00:00');
+    const d = new Date(date + "T00:00:00");
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const dateObj = new Date(date + 'T00:00:00');
+    const dateObj = new Date(date + "T00:00:00");
     dateObj.setHours(0, 0, 0, 0);
-    
-    if (dateObj.getTime() === today.getTime()) return 'Today';
-    return d.toLocaleDateString(undefined, { weekday: 'short' });
+
+    if (dateObj.getTime() === today.getTime()) return "Today";
+    return d.toLocaleDateString(undefined, { weekday: "short" });
   };
 
   // Get bar height percentage based on hours (max 12 hours)
@@ -71,13 +66,17 @@ export const SleepKPI: React.FC<SleepKPIProps> = ({
 
   // Get color based on hours
   const getBarColor = (hours: number) => {
-    if (hours >= targetHours) return colors.success.DEFAULT;
-    if (hours >= targetHours - 1) return colors.warning.DEFAULT;
+    if (hours >= targetSleep) return colors.success.DEFAULT;
+    if (hours >= targetSleep - 1) return colors.warning.DEFAULT;
     if (hours > 0) return colors.danger.DEFAULT;
     return colors.border.DEFAULT;
   };
 
-  const handleTimeChange = (date: string, field: 'sleep_time' | 'wake_time', value: string) => {
+  const handleTimeChange = (
+    date: string,
+    field: "sleep_time" | "wake_time",
+    value: string,
+  ) => {
     onUpdateDay(date, { [field]: value || null });
   };
 
@@ -86,19 +85,15 @@ export const SleepKPI: React.FC<SleepKPIProps> = ({
     onUpdateDay(date, { hours });
   };
 
-  const handleSaveTarget = () => {
-    const hours = parseFloat(editTargetValue) || 7;
-    onUpdateTarget?.(hours);
-    setIsEditingTarget(false);
-  };
-
   return (
-    <motion.div 
+    <motion.div
       className="p-4 rounded-lg"
       style={{
         backgroundColor: colors.background.secondary,
-        border: `1px solid ${isOnTarget ? colors.success.DEFAULT + '50' : colors.border.accent}`,
-        boxShadow: isOnTarget ? `0 0 20px ${colors.success.DEFAULT}25` : undefined,
+        border: `1px solid ${isOnTarget ? colors.success.DEFAULT + "50" : colors.border.accent}`,
+        boxShadow: isOnTarget
+          ? `0 0 20px ${colors.success.DEFAULT}25`
+          : undefined,
       }}
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
@@ -110,9 +105,9 @@ export const SleepKPI: React.FC<SleepKPIProps> = ({
         className="w-full flex items-center justify-between mb-4 cursor-pointer"
       >
         <div className="flex items-center gap-3">
-          <div 
+          <div
             className="w-8 h-8 rounded-md flex items-center justify-center"
-            style={{ 
+            style={{
               backgroundColor: `${colors.primary.DEFAULT}20`,
               border: `1px solid ${colors.primary.DEFAULT}40`,
             }}
@@ -120,13 +115,17 @@ export const SleepKPI: React.FC<SleepKPIProps> = ({
             <Moon size={16} style={{ color: colors.primary.DEFAULT }} />
           </div>
           <div className="text-left">
-            <span 
+            <span
               className="font-semibold text-sm"
-              style={{ color: isOnTarget ? colors.success.DEFAULT : colors.primary.DEFAULT }}
+              style={{
+                color: isOnTarget
+                  ? colors.success.DEFAULT
+                  : colors.primary.DEFAULT,
+              }}
             >
               Sleep
             </span>
-            <div 
+            <div
               className="text-xs font-mono"
               style={{ color: colors.text.muted }}
             >
@@ -136,11 +135,15 @@ export const SleepKPI: React.FC<SleepKPIProps> = ({
         </div>
         <div className="flex items-center gap-2">
           <div className="text-right">
-            <div 
+            <div
               className="text-lg font-bold font-mono"
-              style={{ 
-                color: isOnTarget ? colors.success.DEFAULT : colors.primary.DEFAULT,
-                textShadow: isOnTarget ? `0 0 10px ${colors.success.DEFAULT}` : undefined,
+              style={{
+                color: isOnTarget
+                  ? colors.success.DEFAULT
+                  : colors.primary.DEFAULT,
+                textShadow: isOnTarget
+                  ? `0 0 10px ${colors.success.DEFAULT}`
+                  : undefined,
               }}
             >
               {Math.round(progress)}%
@@ -155,7 +158,7 @@ export const SleepKPI: React.FC<SleepKPIProps> = ({
       </button>
 
       {/* Progress bar - always visible */}
-      <div 
+      <div
         className="h-2 rounded-full overflow-hidden mb-4"
         style={{ backgroundColor: `${colors.primary.DEFAULT}15` }}
       >
@@ -164,9 +167,13 @@ export const SleepKPI: React.FC<SleepKPIProps> = ({
           initial={{ width: 0 }}
           animate={{ width: `${progress}%` }}
           transition={{ duration: 0.6, ease: [0, 0, 0.2, 1] }}
-          style={{ 
-            backgroundColor: isOnTarget ? colors.success.DEFAULT : colors.primary.DEFAULT,
-            boxShadow: isOnTarget ? `0 0 10px ${colors.success.DEFAULT}` : undefined,
+          style={{
+            backgroundColor: isOnTarget
+              ? colors.success.DEFAULT
+              : colors.primary.DEFAULT,
+            boxShadow: isOnTarget
+              ? `0 0 10px ${colors.success.DEFAULT}`
+              : undefined,
           }}
         />
       </div>
@@ -176,13 +183,13 @@ export const SleepKPI: React.FC<SleepKPIProps> = ({
         {!isCollapsed && (
           <motion.div
             initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
+            animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
             transition={{ duration: 0.2 }}
             className="overflow-hidden"
           >
             {/* 7-Day Visual Bar Chart */}
-            <div 
+            <div
               className="h-32 flex items-end justify-between gap-2 mb-4 p-3 rounded-md"
               style={{ backgroundColor: colors.background.tertiary }}
             >
@@ -193,33 +200,35 @@ export const SleepKPI: React.FC<SleepKPIProps> = ({
                 const barColor = getBarColor(hours);
 
                 return (
-                  <div 
-                    key={date} 
+                  <div
+                    key={date}
                     className="flex-1 flex flex-col items-center gap-1"
                   >
                     {/* Hour label */}
-                    <span 
+                    <span
                       className="text-[10px] font-mono"
-                      style={{ color: hours > 0 ? barColor : colors.text.disabled }}
+                      style={{
+                        color: hours > 0 ? barColor : colors.text.disabled,
+                      }}
                     >
-                      {hours > 0 ? hours.toFixed(1) : '-'}
+                      {hours > 0 ? hours.toFixed(1) : "-"}
                     </span>
-                    
+
                     {/* Bar */}
                     <motion.div
                       className="w-full rounded-t-sm"
                       initial={{ height: 0 }}
                       animate={{ height: `${barHeight}%` }}
                       transition={{ duration: 0.4, delay: index * 0.05 }}
-                      style={{ 
+                      style={{
                         backgroundColor: barColor,
-                        minHeight: hours > 0 ? '4px' : '2px',
+                        minHeight: hours > 0 ? "4px" : "2px",
                         opacity: hours > 0 ? 1 : 0.3,
                       }}
                     />
-                    
+
                     {/* Day label */}
-                    <span 
+                    <span
                       className="text-[10px] font-mono"
                       style={{ color: colors.text.muted }}
                     >
@@ -230,63 +239,19 @@ export const SleepKPI: React.FC<SleepKPIProps> = ({
               })}
             </div>
 
-            {/* Target line indicator with editable target */}
-            <div 
+            {/* Target line indicator (read-only - edit in KPI Management) */}
+            <div
               className="flex items-center gap-2 mb-4 text-xs"
               style={{ color: colors.text.muted }}
             >
-              <div 
+              <div
                 className="h-0.5 flex-1"
-                style={{ backgroundColor: colors.success.DEFAULT + '50' }}
+                style={{ backgroundColor: colors.success.DEFAULT + "50" }}
               />
-              {isEditingTarget ? (
-                <div className="flex items-center gap-1">
-                  <input
-                    type="number"
-                    step="0.5"
-                    min="1"
-                    max="12"
-                    value={editTargetValue}
-                    onChange={(e) => setEditTargetValue(e.target.value)}
-                    onClick={(e) => e.stopPropagation()}
-                    className="w-12 px-1 py-0.5 text-xs rounded font-mono text-center"
-                    style={{
-                      backgroundColor: colors.background.elevated,
-                      border: `1px solid ${colors.primary.DEFAULT}`,
-                      color: colors.text.primary,
-                    }}
-                  />
-                  <span>h target</span>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleSaveTarget();
-                    }}
-                    className="px-2 py-0.5 rounded text-[10px]"
-                    style={{ 
-                      backgroundColor: colors.primary.DEFAULT,
-                      color: colors.background.primary,
-                    }}
-                  >
-                    Save
-                  </button>
-                </div>
-              ) : (
-                <span 
-                  className="cursor-pointer hover:text-primary-400"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setEditTargetValue(targetHours.toString());
-                    setIsEditingTarget(true);
-                  }}
-                  title="Click to edit target"
-                >
-                  {targetHours}h target
-                </span>
-              )}
-              <div 
+              <span className="font-mono">{targetSleep}h target</span>
+              <div
                 className="h-0.5 flex-1"
-                style={{ backgroundColor: colors.success.DEFAULT + '50' }}
+                style={{ backgroundColor: colors.success.DEFAULT + "50" }}
               />
             </div>
 
@@ -294,21 +259,31 @@ export const SleepKPI: React.FC<SleepKPIProps> = ({
             <div className="space-y-2">
               {weekDays.map((date) => {
                 const dayData = weekData[date];
-                const isToday = new Date(date + 'T00:00:00').toDateString() === new Date().toDateString();
+                const isToday =
+                  new Date(date + "T00:00:00").toDateString() ===
+                  new Date().toDateString();
 
                 return (
-                  <div 
+                  <div
                     key={date}
                     className="flex items-center gap-2 p-2 rounded-md"
-                    style={{ 
-                      backgroundColor: isToday ? colors.background.tertiary : 'transparent',
-                      border: isToday ? `1px solid ${colors.primary.DEFAULT}30` : undefined,
+                    style={{
+                      backgroundColor: isToday
+                        ? colors.background.tertiary
+                        : "transparent",
+                      border: isToday
+                        ? `1px solid ${colors.primary.DEFAULT}30`
+                        : undefined,
                     }}
                   >
                     {/* Day name */}
-                    <span 
+                    <span
                       className="text-xs font-mono w-12"
-                      style={{ color: isToday ? colors.primary.DEFAULT : colors.text.muted }}
+                      style={{
+                        color: isToday
+                          ? colors.primary.DEFAULT
+                          : colors.text.muted,
+                      }}
                     >
                       {formatDayName(date)}
                     </span>
@@ -318,8 +293,10 @@ export const SleepKPI: React.FC<SleepKPIProps> = ({
                       <Moon size={12} style={{ color: colors.text.muted }} />
                       <input
                         type="time"
-                        value={dayData?.sleep_time || ''}
-                        onChange={(e) => handleTimeChange(date, 'sleep_time', e.target.value)}
+                        value={dayData?.sleep_time || ""}
+                        onChange={(e) =>
+                          handleTimeChange(date, "sleep_time", e.target.value)
+                        }
                         onClick={(e) => e.stopPropagation()}
                         className="w-24 px-1.5 py-1 rounded text-xs font-mono"
                         style={{
@@ -332,11 +309,16 @@ export const SleepKPI: React.FC<SleepKPIProps> = ({
 
                     {/* Wake time */}
                     <div className="flex items-center gap-1">
-                      <Sun size={12} style={{ color: colors.warning.DEFAULT }} />
+                      <Sun
+                        size={12}
+                        style={{ color: colors.warning.DEFAULT }}
+                      />
                       <input
                         type="time"
-                        value={dayData?.wake_time || ''}
-                        onChange={(e) => handleTimeChange(date, 'wake_time', e.target.value)}
+                        value={dayData?.wake_time || ""}
+                        onChange={(e) =>
+                          handleTimeChange(date, "wake_time", e.target.value)
+                        }
                         onClick={(e) => e.stopPropagation()}
                         className="w-24 px-1.5 py-1 rounded text-xs font-mono"
                         style={{
@@ -356,8 +338,10 @@ export const SleepKPI: React.FC<SleepKPIProps> = ({
                         min="0"
                         max="24"
                         placeholder="hrs"
-                        value={dayData?.hours || ''}
-                        onChange={(e) => handleHoursChange(date, e.target.value)}
+                        value={dayData?.hours || ""}
+                        onChange={(e) =>
+                          handleHoursChange(date, e.target.value)
+                        }
                         onClick={(e) => e.stopPropagation()}
                         className="w-14 px-1.5 py-1 rounded text-xs font-mono text-center"
                         style={{
@@ -373,19 +357,23 @@ export const SleepKPI: React.FC<SleepKPIProps> = ({
             </div>
 
             {/* Weekly Summary */}
-            <div 
+            <div
               className="mt-4 pt-3 flex justify-between items-center"
               style={{ borderTop: `1px solid ${colors.border.DEFAULT}` }}
             >
-              <span 
+              <span
                 className="text-xs font-medium"
                 style={{ color: colors.text.muted }}
               >
                 Weekly Total
               </span>
-              <span 
+              <span
                 className="text-sm font-mono font-medium"
-                style={{ color: isOnTarget ? colors.success.DEFAULT : colors.primary.DEFAULT }}
+                style={{
+                  color: isOnTarget
+                    ? colors.success.DEFAULT
+                    : colors.primary.DEFAULT,
+                }}
               >
                 {weeklyTotal.toFixed(1)} hours
               </span>

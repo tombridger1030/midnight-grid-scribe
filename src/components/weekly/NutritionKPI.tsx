@@ -45,7 +45,6 @@ interface NutritionKPIProps {
   targetCalories: number;
   targetProtein: number;
   onUpdateMeal: (date: string, meal: MealType, data: MealData) => void;
-  onUpdateTargets?: (calories: number, protein: number) => void;
   weekDates: { start: Date; end: Date };
 }
 
@@ -64,14 +63,10 @@ export const NutritionKPI: React.FC<NutritionKPIProps> = ({
   targetCalories,
   targetProtein,
   onUpdateMeal,
-  onUpdateTargets,
   weekDates,
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(true);
   const [expandedDay, setExpandedDay] = useState<string | null>(null);
-  const [isEditingTargets, setIsEditingTargets] = useState(false);
-  const [editCalories, setEditCalories] = useState(targetCalories.toString());
-  const [editProtein, setEditProtein] = useState(targetProtein.toString());
 
   // AI Input state
   const [showAIInput, setShowAIInput] = useState(false);
@@ -285,13 +280,6 @@ export const NutritionKPI: React.FC<NutritionKPIProps> = ({
     onUpdateMeal(date, meal, { ...currentMeal, [field]: value });
   };
 
-  const handleSaveTargets = () => {
-    const cal = parseInt(editCalories) || 1900;
-    const prot = parseInt(editProtein) || 150;
-    onUpdateTargets?.(cal, prot);
-    setIsEditingTargets(false);
-  };
-
   // Handle AI analysis - now shows confirmation screen
   const handleAIAnalyze = async () => {
     if (aiInputMode !== "photo_ocr" && !aiInputText.trim()) {
@@ -497,7 +485,7 @@ export const NutritionKPI: React.FC<NutritionKPIProps> = ({
             transition={{ duration: 0.2 }}
             className="overflow-hidden"
           >
-            {/* Daily Averages with Editable Targets */}
+            {/* Daily Averages with Target Display (read-only) */}
             <div className="grid grid-cols-2 gap-3 mb-4">
               {/* Calories */}
               <div
@@ -520,34 +508,12 @@ export const NutritionKPI: React.FC<NutritionKPIProps> = ({
                   >
                     {dailyAverage.calories}
                   </span>
-                  {isEditingTargets ? (
-                    <input
-                      type="number"
-                      value={editCalories}
-                      onChange={(e) => setEditCalories(e.target.value)}
-                      onClick={(e) => e.stopPropagation()}
-                      className="w-16 px-1 py-0.5 text-xs rounded font-mono"
-                      style={{
-                        backgroundColor: colors.background.elevated,
-                        border: `1px solid ${colors.warning.DEFAULT}`,
-                        color: colors.text.primary,
-                      }}
-                    />
-                  ) : (
-                    <span
-                      className="text-xs cursor-pointer hover:text-warning-400"
-                      style={{ color: colors.text.muted }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setEditCalories(targetCalories.toString());
-                        setEditProtein(targetProtein.toString());
-                        setIsEditingTargets(true);
-                      }}
-                      title="Click to edit target"
-                    >
-                      /{targetCalories}
-                    </span>
-                  )}
+                  <span
+                    className="text-xs"
+                    style={{ color: colors.text.muted }}
+                  >
+                    /{targetCalories}
+                  </span>
                 </div>
                 <div
                   className="h-1.5 rounded-full mt-2 overflow-hidden"
@@ -584,34 +550,12 @@ export const NutritionKPI: React.FC<NutritionKPIProps> = ({
                   >
                     {dailyAverage.protein}g
                   </span>
-                  {isEditingTargets ? (
-                    <input
-                      type="number"
-                      value={editProtein}
-                      onChange={(e) => setEditProtein(e.target.value)}
-                      onClick={(e) => e.stopPropagation()}
-                      className="w-16 px-1 py-0.5 text-xs rounded font-mono"
-                      style={{
-                        backgroundColor: colors.background.elevated,
-                        border: `1px solid ${colors.warning.DEFAULT}`,
-                        color: colors.text.primary,
-                      }}
-                    />
-                  ) : (
-                    <span
-                      className="text-xs cursor-pointer hover:text-warning-400"
-                      style={{ color: colors.text.muted }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setEditCalories(targetCalories.toString());
-                        setEditProtein(targetProtein.toString());
-                        setIsEditingTargets(true);
-                      }}
-                      title="Click to edit target"
-                    >
-                      /{targetProtein}g
-                    </span>
-                  )}
+                  <span
+                    className="text-xs"
+                    style={{ color: colors.text.muted }}
+                  >
+                    /{targetProtein}g
+                  </span>
                 </div>
                 <div
                   className="h-1.5 rounded-full mt-2 overflow-hidden"
@@ -627,38 +571,6 @@ export const NutritionKPI: React.FC<NutritionKPIProps> = ({
                 </div>
               </div>
             </div>
-
-            {/* Save targets button */}
-            {isEditingTargets && (
-              <div className="flex justify-end gap-2 mb-4">
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setIsEditingTargets(false);
-                  }}
-                  className="px-3 py-1 text-xs rounded"
-                  style={{
-                    color: colors.text.muted,
-                    border: `1px solid ${colors.border.DEFAULT}`,
-                  }}
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleSaveTargets();
-                  }}
-                  className="px-3 py-1 text-xs rounded"
-                  style={{
-                    backgroundColor: colors.warning.DEFAULT,
-                    color: colors.background.primary,
-                  }}
-                >
-                  Save Targets
-                </button>
-              </div>
-            )}
 
             {/* AI Input Section */}
             <div className="mb-4">

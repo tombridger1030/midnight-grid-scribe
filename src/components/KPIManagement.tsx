@@ -1,15 +1,54 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, Edit, Trash2, Save, X, Target, Hash, Type, Palette, ArrowUp, ArrowDown, Link, Github, Clock } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { kpiManager, ConfigurableKPI, AutoSyncSource } from '@/lib/configurableKpis';
-import { useToast } from '@/components/ui/use-toast';
-import { REALTIME_EVENTS } from '@/hooks/useRealtimeSync';
+import React, { useState, useEffect } from "react";
+import {
+  Plus,
+  Edit,
+  Trash2,
+  Save,
+  X,
+  Target,
+  Hash,
+  Type,
+  Palette,
+  ArrowUp,
+  ArrowDown,
+  Link,
+  Github,
+  Clock,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import {
+  kpiManager,
+  ConfigurableKPI,
+  AutoSyncSource,
+} from "@/lib/configurableKpis";
+import { useToast } from "@/components/ui/use-toast";
+import { REALTIME_EVENTS } from "@/hooks/useRealtimeSync";
 
-const AUTO_SYNC_OPTIONS: { value: AutoSyncSource; label: string; icon: React.ReactNode; description: string }[] = [
-  { value: null, label: 'None', icon: null, description: 'Manual entry only' },
-  { value: 'github_prs', label: 'GitHub PRs', icon: <Github size={14} />, description: 'Auto-count PRs created' },
-  { value: 'github_commits', label: 'GitHub Commits', icon: <Github size={14} />, description: 'Auto-count commits' },
-  { value: 'deep_work_timer', label: 'Deep Work Timer', icon: <Clock size={14} />, description: 'Auto-sync from timer' },
+const AUTO_SYNC_OPTIONS: {
+  value: AutoSyncSource;
+  label: string;
+  icon: React.ReactNode;
+  description: string;
+}[] = [
+  { value: null, label: "None", icon: null, description: "Manual entry only" },
+  {
+    value: "github_prs",
+    label: "GitHub PRs",
+    icon: <Github size={14} />,
+    description: "Auto-count PRs created",
+  },
+  {
+    value: "github_commits",
+    label: "GitHub Commits",
+    icon: <Github size={14} />,
+    description: "Auto-count commits",
+  },
+  {
+    value: "deep_work_timer",
+    label: "Deep Work Timer",
+    icon: <Clock size={14} />,
+    description: "Auto-sync from timer",
+  },
 ];
 
 interface KPIManagementProps {
@@ -17,19 +56,31 @@ interface KPIManagementProps {
 }
 
 const DEFAULT_CATEGORY_OPTIONS = [
-  { value: 'discipline', label: 'Discipline', color: '#06B6D4' },
-  { value: 'engineering', label: 'Engineering', color: '#EC4899' },
-  { value: 'learning', label: 'Learning', color: '#8B5CF6' },
-  { value: 'fitness', label: 'Fitness', color: '#FF073A' },
-  { value: 'health', label: 'Health', color: '#4ADE80' },
-  { value: 'productivity', label: 'Productivity', color: '#5FE3B3' },
-  { value: 'social', label: 'Social', color: '#F59E0B' }
+  { value: "discipline", label: "Discipline", color: "#06B6D4" },
+  { value: "engineering", label: "Engineering", color: "#EC4899" },
+  { value: "learning", label: "Learning", color: "#8B5CF6" },
+  { value: "fitness", label: "Fitness", color: "#FF073A" },
+  { value: "health", label: "Health", color: "#4ADE80" },
+  { value: "productivity", label: "Productivity", color: "#5FE3B3" },
+  { value: "social", label: "Social", color: "#F59E0B" },
 ];
 
 const COLOR_PRESETS = [
-  '#FF073A', '#53B4FF', '#5FE3B3', '#FFD700', '#FF6B35',
-  '#4ADE80', '#8B5CF6', '#F59E0B', '#EC4899', '#06B6D4',
-  '#64748B', '#DC2626', '#059669', '#7C2D12', '#1E293B'
+  "#FF073A",
+  "#53B4FF",
+  "#5FE3B3",
+  "#FFD700",
+  "#FF6B35",
+  "#4ADE80",
+  "#8B5CF6",
+  "#F59E0B",
+  "#EC4899",
+  "#06B6D4",
+  "#64748B",
+  "#DC2626",
+  "#059669",
+  "#7C2D12",
+  "#1E293B",
 ];
 
 const KPIManagement: React.FC<KPIManagementProps> = ({ onClose }) => {
@@ -38,18 +89,18 @@ const KPIManagement: React.FC<KPIManagementProps> = ({ onClose }) => {
   const [isCreating, setIsCreating] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [customCategories, setCustomCategories] = useState<string[]>([]);
-  const [newCategory, setNewCategory] = useState('');
+  const [newCategory, setNewCategory] = useState("");
   const [showNewCategory, setShowNewCategory] = useState(false);
   const { toast } = useToast();
 
   const [formData, setFormData] = useState({
-    name: '',
+    name: "",
     target: 1,
     min_target: undefined as number | undefined,
-    unit: '',
-    category: 'fitness' as ConfigurableKPI['category'],
-    color: '#5FE3B3',
-    auto_sync_source: null as AutoSyncSource
+    unit: "",
+    category: "fitness" as ConfigurableKPI["category"],
+    color: "#5FE3B3",
+    auto_sync_source: null as AutoSyncSource,
   });
 
   useEffect(() => {
@@ -64,15 +115,17 @@ const KPIManagement: React.FC<KPIManagementProps> = ({ onClose }) => {
 
       // Extract custom categories from KPIs
       const categories = new Set<string>();
-      userKPIs.forEach(kpi => {
-        const isDefaultCategory = DEFAULT_CATEGORY_OPTIONS.some(opt => opt.value === kpi.category);
+      userKPIs.forEach((kpi) => {
+        const isDefaultCategory = DEFAULT_CATEGORY_OPTIONS.some(
+          (opt) => opt.value === kpi.category,
+        );
         if (!isDefaultCategory) {
           categories.add(kpi.category);
         }
       });
       setCustomCategories(Array.from(categories));
     } catch (error) {
-      console.error('Failed to load KPIs:', error);
+      console.error("Failed to load KPIs:", error);
       toast({
         title: "Error loading KPIs",
         description: "Failed to load your KPIs. Please try again.",
@@ -85,30 +138,33 @@ const KPIManagement: React.FC<KPIManagementProps> = ({ onClose }) => {
 
   // Get all available categories (default + custom)
   const getAllCategories = () => {
-    const defaultCats = DEFAULT_CATEGORY_OPTIONS.map(opt => opt.value);
+    const defaultCats = DEFAULT_CATEGORY_OPTIONS.map((opt) => opt.value);
     return [...defaultCats, ...customCategories];
   };
 
   // Add new custom category
   const addCustomCategory = () => {
-    if (newCategory.trim() && !getAllCategories().includes(newCategory.trim().toLowerCase())) {
+    if (
+      newCategory.trim() &&
+      !getAllCategories().includes(newCategory.trim().toLowerCase())
+    ) {
       const category = newCategory.trim().toLowerCase();
-      setCustomCategories(prev => [...prev, category]);
-      setFormData(prev => ({ ...prev, category: category as any }));
-      setNewCategory('');
+      setCustomCategories((prev) => [...prev, category]);
+      setFormData((prev) => ({ ...prev, category: category as any }));
+      setNewCategory("");
       setShowNewCategory(false);
     }
   };
 
   const startCreating = () => {
     setFormData({
-      name: '',
+      name: "",
       target: 1,
       min_target: undefined,
-      unit: '',
-      category: 'fitness',
-      color: '#5FE3B3',
-      auto_sync_source: null
+      unit: "",
+      category: "fitness",
+      color: "#5FE3B3",
+      auto_sync_source: null,
     });
     setIsCreating(true);
     setEditingKPI(null);
@@ -122,7 +178,7 @@ const KPIManagement: React.FC<KPIManagementProps> = ({ onClose }) => {
       unit: kpi.unit,
       category: kpi.category,
       color: kpi.color,
-      auto_sync_source: kpi.auto_sync_source || null
+      auto_sync_source: kpi.auto_sync_source || null,
     });
     setEditingKPI(kpi);
     setIsCreating(false);
@@ -132,13 +188,13 @@ const KPIManagement: React.FC<KPIManagementProps> = ({ onClose }) => {
     setEditingKPI(null);
     setIsCreating(false);
     setFormData({
-      name: '',
+      name: "",
       target: 1,
       min_target: undefined,
-      unit: '',
-      category: 'fitness',
-      color: '#5FE3B3',
-      auto_sync_source: null
+      unit: "",
+      category: "fitness",
+      color: "#5FE3B3",
+      auto_sync_source: null,
     });
   };
 
@@ -156,7 +212,7 @@ const KPIManagement: React.FC<KPIManagementProps> = ({ onClose }) => {
       if (isCreating) {
         // Create new KPI
         await kpiManager.createKPI({
-          kpi_id: formData.name.toLowerCase().replace(/\s+/g, ''),
+          kpi_id: formData.name.toLowerCase().replace(/\s+/g, ""),
           name: formData.name,
           target: formData.target,
           min_target: formData.min_target,
@@ -165,7 +221,7 @@ const KPIManagement: React.FC<KPIManagementProps> = ({ onClose }) => {
           color: formData.color,
           auto_sync_source: formData.auto_sync_source,
           is_active: true,
-          sort_order: kpis.length + 1
+          sort_order: kpis.length + 1,
         });
 
         toast({
@@ -174,14 +230,14 @@ const KPIManagement: React.FC<KPIManagementProps> = ({ onClose }) => {
         });
       } else if (editingKPI) {
         // Update existing KPI
-        await kpiManager.updateKPI(editingKPI.id, {
+        await kpiManager.updateKPI(editingKPI.kpi_id, {
           name: formData.name,
           target: formData.target,
           min_target: formData.min_target,
           unit: formData.unit,
           category: formData.category,
           color: formData.color,
-          auto_sync_source: formData.auto_sync_source
+          auto_sync_source: formData.auto_sync_source,
         });
 
         toast({
@@ -192,11 +248,11 @@ const KPIManagement: React.FC<KPIManagementProps> = ({ onClose }) => {
 
       await loadKPIs();
       cancelEditing();
-      
+
       // Dispatch event to notify other components
       window.dispatchEvent(new CustomEvent(REALTIME_EVENTS.KPI_UPDATED));
     } catch (error) {
-      console.error('Failed to save KPI:', error);
+      console.error("Failed to save KPI:", error);
       toast({
         title: "Error saving KPI",
         description: "Failed to save KPI. Please try again.",
@@ -206,33 +262,37 @@ const KPIManagement: React.FC<KPIManagementProps> = ({ onClose }) => {
   };
 
   const deleteKPI = async (kpi: ConfigurableKPI) => {
-    if (!confirm(`Are you sure you want to delete "${kpi.name}"? This will remove all historical data for this KPI.`)) {
+    if (
+      !confirm(
+        `Are you sure you want to delete "${kpi.name}"? This will remove all historical data for this KPI.`,
+      )
+    ) {
       return;
     }
 
-    console.log('Attempting to delete KPI:', { id: kpi.id, kpi_id: kpi.kpi_id, name: kpi.name });
-
     try {
-      const result = await kpiManager.permanentlyDeleteKPI(kpi.id);
-      console.log('Delete result:', result);
-      
+      const result = await kpiManager.permanentlyDeleteKPI(kpi.kpi_id);
+
       // Force a small delay to let the database sync
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
       await loadKPIs();
 
       toast({
         title: "KPI Deleted",
         description: `${kpi.name} has been deleted successfully.`,
       });
-      
+
       // Dispatch event to notify other components
       window.dispatchEvent(new CustomEvent(REALTIME_EVENTS.KPI_UPDATED));
     } catch (error) {
-      console.error('Failed to delete KPI:', error);
+      console.error("Failed to delete KPI:", error);
       toast({
         title: "Error deleting KPI",
-        description: error instanceof Error ? error.message : "Failed to delete KPI. Please try again.",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Failed to delete KPI. Please try again.",
         variant: "destructive",
       });
     }
@@ -240,20 +300,20 @@ const KPIManagement: React.FC<KPIManagementProps> = ({ onClose }) => {
 
   const toggleKPIActive = async (kpi: ConfigurableKPI) => {
     try {
-      await kpiManager.updateKPI(kpi.id, {
-        is_active: !kpi.is_active
+      await kpiManager.updateKPI(kpi.kpi_id, {
+        is_active: !kpi.is_active,
       });
       await loadKPIs();
 
       toast({
         title: kpi.is_active ? "KPI Disabled" : "KPI Enabled",
-        description: `${kpi.name} has been ${kpi.is_active ? 'disabled' : 'enabled'}.`,
+        description: `${kpi.name} has been ${kpi.is_active ? "disabled" : "enabled"}.`,
       });
-      
+
       // Dispatch event to notify other components
       window.dispatchEvent(new CustomEvent(REALTIME_EVENTS.KPI_UPDATED));
     } catch (error) {
-      console.error('Failed to toggle KPI:', error);
+      console.error("Failed to toggle KPI:", error);
       toast({
         title: "Error updating KPI",
         description: "Failed to update KPI status. Please try again.",
@@ -262,18 +322,19 @@ const KPIManagement: React.FC<KPIManagementProps> = ({ onClose }) => {
     }
   };
 
-  const moveKPI = async (kpi: ConfigurableKPI, direction: 'up' | 'down') => {
-    const currentIndex = kpis.findIndex(k => k.id === kpi.id);
-    const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+  const moveKPI = async (kpi: ConfigurableKPI, direction: "up" | "down") => {
+    const currentIndex = kpis.findIndex((k) => k.id === kpi.id);
+    const targetIndex =
+      direction === "up" ? currentIndex - 1 : currentIndex + 1;
 
     if (targetIndex < 0 || targetIndex >= kpis.length) return;
 
     try {
-      await kpiManager.updateKPI(kpi.id, {
-        sort_order: kpis[targetIndex].sort_order
+      await kpiManager.updateKPI(kpi.kpi_id, {
+        sort_order: kpis[targetIndex].sort_order,
       });
-      await kpiManager.updateKPI(kpis[targetIndex].id, {
-        sort_order: kpi.sort_order
+      await kpiManager.updateKPI(kpis[targetIndex].kpi_id, {
+        sort_order: kpi.sort_order,
       });
       await loadKPIs();
 
@@ -282,7 +343,7 @@ const KPIManagement: React.FC<KPIManagementProps> = ({ onClose }) => {
         description: `${kpi.name} has been moved ${direction}.`,
       });
     } catch (error) {
-      console.error('Failed to reorder KPI:', error);
+      console.error("Failed to reorder KPI:", error);
       toast({
         title: "Error reordering KPI",
         description: "Failed to reorder KPI. Please try again.",
@@ -323,7 +384,7 @@ const KPIManagement: React.FC<KPIManagementProps> = ({ onClose }) => {
         {(isCreating || editingKPI) && (
           <div className="bg-sidebar border border-accent-cyan/30 p-4 rounded-sm space-y-4">
             <h3 className="text-accent-cyan font-mono text-sm">
-              {isCreating ? 'Create New KPI' : 'Edit KPI'}
+              {isCreating ? "Create New KPI" : "Edit KPI"}
             </h3>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -332,7 +393,9 @@ const KPIManagement: React.FC<KPIManagementProps> = ({ onClose }) => {
                 <input
                   type="text"
                   value={formData.name}
-                  onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                  onChange={(e) =>
+                    setFormData((prev) => ({ ...prev, name: e.target.value }))
+                  }
                   className="w-full bg-panel border border-gray-600 rounded px-3 py-2 text-sm"
                   placeholder="e.g., Gym Sessions"
                 />
@@ -343,55 +406,78 @@ const KPIManagement: React.FC<KPIManagementProps> = ({ onClose }) => {
                 <input
                   type="text"
                   value={formData.unit}
-                  onChange={(e) => setFormData(prev => ({ ...prev, unit: e.target.value }))}
+                  onChange={(e) =>
+                    setFormData((prev) => ({ ...prev, unit: e.target.value }))
+                  }
                   className="w-full bg-panel border border-gray-600 rounded px-3 py-2 text-sm"
                   placeholder="e.g., sessions, hours, points"
                 />
               </div>
 
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Target</label>
+                <label className="block text-xs text-gray-400 mb-1">
+                  Target
+                </label>
                 <input
                   type="number"
                   min="0"
                   step="0.1"
                   value={formData.target}
-                  onChange={(e) => setFormData(prev => ({ ...prev, target: parseFloat(e.target.value) || 0 }))}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      target: parseFloat(e.target.value) || 0,
+                    }))
+                  }
                   className="w-full bg-panel border border-gray-600 rounded px-3 py-2 text-sm"
                 />
               </div>
 
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Min Target (optional)</label>
+                <label className="block text-xs text-gray-400 mb-1">
+                  Min Target (optional)
+                </label>
                 <input
                   type="number"
                   min="0"
                   step="0.1"
-                  value={formData.min_target || ''}
-                  onChange={(e) => setFormData(prev => ({
-                    ...prev,
-                    min_target: e.target.value ? parseFloat(e.target.value) : undefined
-                  }))}
+                  value={formData.min_target || ""}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      min_target: e.target.value
+                        ? parseFloat(e.target.value)
+                        : undefined,
+                    }))
+                  }
                   className="w-full bg-panel border border-gray-600 rounded px-3 py-2 text-sm"
                 />
               </div>
 
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Category</label>
+                <label className="block text-xs text-gray-400 mb-1">
+                  Category
+                </label>
                 <div className="space-y-2">
                   <select
                     value={formData.category}
-                    onChange={(e) => setFormData(prev => ({
-                      ...prev,
-                      category: e.target.value
-                    }))}
+                    onChange={(e) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        category: e.target.value,
+                      }))
+                    }
                     className="w-full bg-panel border border-gray-600 rounded px-3 py-2 text-sm"
                   >
-                    {DEFAULT_CATEGORY_OPTIONS.map(cat => (
-                      <option key={cat.value} value={cat.value}>{cat.label}</option>
+                    {DEFAULT_CATEGORY_OPTIONS.map((cat) => (
+                      <option key={cat.value} value={cat.value}>
+                        {cat.label}
+                      </option>
                     ))}
-                    {customCategories.map(cat => (
-                      <option key={cat} value={cat}>{cat.charAt(0).toUpperCase() + cat.slice(1)}</option>
+                    {customCategories.map((cat) => (
+                      <option key={cat} value={cat}>
+                        {cat.charAt(0).toUpperCase() + cat.slice(1)}
+                      </option>
                     ))}
                   </select>
 
@@ -403,7 +489,9 @@ const KPIManagement: React.FC<KPIManagementProps> = ({ onClose }) => {
                         onChange={(e) => setNewCategory(e.target.value)}
                         placeholder="New category name"
                         className="flex-1 bg-panel border border-gray-600 rounded px-3 py-2 text-xs"
-                        onKeyPress={(e) => e.key === 'Enter' && addCustomCategory()}
+                        onKeyPress={(e) =>
+                          e.key === "Enter" && addCustomCategory()
+                        }
                       />
                       <button
                         onClick={addCustomCategory}
@@ -412,7 +500,10 @@ const KPIManagement: React.FC<KPIManagementProps> = ({ onClose }) => {
                         Add
                       </button>
                       <button
-                        onClick={() => { setShowNewCategory(false); setNewCategory(''); }}
+                        onClick={() => {
+                          setShowNewCategory(false);
+                          setNewCategory("");
+                        }}
                         className="px-3 py-2 bg-gray-600 text-white rounded text-xs hover:bg-gray-500 transition-colors"
                       >
                         Cancel
@@ -430,19 +521,28 @@ const KPIManagement: React.FC<KPIManagementProps> = ({ onClose }) => {
               </div>
 
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Color</label>
+                <label className="block text-xs text-gray-400 mb-1">
+                  Color
+                </label>
                 <div className="flex items-center gap-2">
                   <input
                     type="color"
                     value={formData.color}
-                    onChange={(e) => setFormData(prev => ({ ...prev, color: e.target.value }))}
+                    onChange={(e) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        color: e.target.value,
+                      }))
+                    }
                     className="w-10 h-8 bg-panel border border-gray-600 rounded"
                   />
                   <div className="flex gap-1 flex-wrap">
-                    {COLOR_PRESETS.slice(0, 6).map(color => (
+                    {COLOR_PRESETS.slice(0, 6).map((color) => (
                       <button
                         key={color}
-                        onClick={() => setFormData(prev => ({ ...prev, color }))}
+                        onClick={() =>
+                          setFormData((prev) => ({ ...prev, color }))
+                        }
                         className="w-6 h-6 rounded border border-gray-600 hover:scale-110 transition-transform"
                         style={{ backgroundColor: color }}
                       />
@@ -457,27 +557,34 @@ const KPIManagement: React.FC<KPIManagementProps> = ({ onClose }) => {
                   Auto-Sync Source
                 </label>
                 <div className="grid grid-cols-3 gap-2">
-                  {AUTO_SYNC_OPTIONS.map(option => (
+                  {AUTO_SYNC_OPTIONS.map((option) => (
                     <button
-                      key={option.value || 'none'}
+                      key={option.value || "none"}
                       type="button"
-                      onClick={() => setFormData(prev => ({ ...prev, auto_sync_source: option.value }))}
+                      onClick={() =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          auto_sync_source: option.value,
+                        }))
+                      }
                       className={cn(
                         "flex items-center gap-2 px-3 py-2 rounded border text-sm transition-all",
                         formData.auto_sync_source === option.value
                           ? "border-accent-cyan bg-accent-cyan/10 text-accent-cyan"
-                          : "border-gray-600 text-gray-400 hover:border-gray-500"
+                          : "border-gray-600 text-gray-400 hover:border-gray-500",
                       )}
                     >
                       {option.icon}
                       <div className="text-left">
                         <div className="font-medium">{option.label}</div>
-                        <div className="text-[10px] opacity-70">{option.description}</div>
+                        <div className="text-[10px] opacity-70">
+                          {option.description}
+                        </div>
                       </div>
                     </button>
                   ))}
                 </div>
-                {formData.auto_sync_source === 'github_prs' && (
+                {formData.auto_sync_source === "github_prs" && (
                   <p className="text-xs text-gray-500 mt-2">
                     Requires GitHub token in Profile &gt; Integrations
                   </p>
@@ -522,22 +629,31 @@ const KPIManagement: React.FC<KPIManagementProps> = ({ onClose }) => {
               key={kpi.id}
               className={cn(
                 "bg-sidebar border rounded-sm p-4 transition-all",
-                kpi.is_active ? "border-gray-600" : "border-gray-700 opacity-60"
+                kpi.is_active
+                  ? "border-gray-600"
+                  : "border-gray-700 opacity-60",
               )}
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div
                     className="w-4 h-4 rounded-full border-2"
-                    style={{ backgroundColor: kpi.color, borderColor: kpi.color }}
+                    style={{
+                      backgroundColor: kpi.color,
+                      borderColor: kpi.color,
+                    }}
                   />
                   <div>
                     <h4 className="font-medium text-sm flex items-center gap-2">
                       {kpi.name}
                       {kpi.auto_sync_source && (
                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent-cyan/20 text-accent-cyan flex items-center gap-1">
-                          {kpi.auto_sync_source === 'github_prs' && <Github size={10} />}
-                          {kpi.auto_sync_source === 'deep_work_timer' && <Clock size={10} />}
+                          {kpi.auto_sync_source === "github_prs" && (
+                            <Github size={10} />
+                          )}
+                          {kpi.auto_sync_source === "deep_work_timer" && (
+                            <Clock size={10} />
+                          )}
                           Auto-sync
                         </span>
                       )}
@@ -545,22 +661,27 @@ const KPIManagement: React.FC<KPIManagementProps> = ({ onClose }) => {
                     <div className="text-xs text-gray-400">
                       Target: {kpi.target} {kpi.unit}
                       {kpi.min_target && ` (min: ${kpi.min_target})`}
-                      {' • '} {DEFAULT_CATEGORY_OPTIONS.find(c => c.value === kpi.category)?.label || kpi.category.charAt(0).toUpperCase() + kpi.category.slice(1)}
-                      {!kpi.is_active && ' • DISABLED'}
+                      {" • "}{" "}
+                      {DEFAULT_CATEGORY_OPTIONS.find(
+                        (c) => c.value === kpi.category,
+                      )?.label ||
+                        kpi.category.charAt(0).toUpperCase() +
+                          kpi.category.slice(1)}
+                      {!kpi.is_active && " • DISABLED"}
                     </div>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-1">
                   <button
-                    onClick={() => moveKPI(kpi, 'up')}
+                    onClick={() => moveKPI(kpi, "up")}
                     disabled={index === 0}
                     className="p-1 text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
                   >
                     <ArrowUp size={16} />
                   </button>
                   <button
-                    onClick={() => moveKPI(kpi, 'down')}
+                    onClick={() => moveKPI(kpi, "down")}
                     disabled={index === kpis.length - 1}
                     className="p-1 text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
                   >
@@ -572,10 +693,10 @@ const KPIManagement: React.FC<KPIManagementProps> = ({ onClose }) => {
                       "px-2 py-1 text-xs rounded transition-colors",
                       kpi.is_active
                         ? "bg-yellow-600 text-white hover:bg-yellow-700"
-                        : "bg-green-600 text-white hover:bg-green-700"
+                        : "bg-green-600 text-white hover:bg-green-700",
                     )}
                   >
-                    {kpi.is_active ? 'Disable' : 'Enable'}
+                    {kpi.is_active ? "Disable" : "Enable"}
                   </button>
                   <button
                     onClick={() => startEditing(kpi)}
