@@ -55,10 +55,16 @@ interface DailyScheduleData {
 
 interface DailyScheduleProps {
   className?: string;
+  initialDate?: Date;
+  onDateChange?: (date: Date) => void;
 }
 
-export const DailySchedule: React.FC<DailyScheduleProps> = ({ className }) => {
-  const [currentDate, setCurrentDate] = useState(new Date());
+export const DailySchedule: React.FC<DailyScheduleProps> = ({
+  className,
+  initialDate,
+  onDateChange,
+}) => {
+  const [currentDate, setCurrentDate] = useState(initialDate || new Date());
   const [scheduleData, setScheduleData] = useState<DailyScheduleData | null>(
     null,
   );
@@ -159,10 +165,13 @@ export const DailySchedule: React.FC<DailyScheduleProps> = ({ className }) => {
       newDate.setDate(newDate.getDate() + 1);
     }
     setCurrentDate(newDate);
+    onDateChange?.(newDate);
   };
 
   const goToToday = () => {
-    setCurrentDate(new Date());
+    const today = new Date();
+    setCurrentDate(today);
+    onDateChange?.(today);
   };
 
   const formatDate = (date: Date): string => {
