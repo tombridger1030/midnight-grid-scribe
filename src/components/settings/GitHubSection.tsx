@@ -29,6 +29,7 @@ export const GitHubSection: React.FC = () => {
   const [formData, setFormData] = useState({
     apiToken: "",
     username: "",
+    repos: "",
   });
 
   // Load GitHub settings
@@ -42,6 +43,7 @@ export const GitHubSection: React.FC = () => {
           setFormData({
             apiToken: settings.api_token || "",
             username: settings.username || "",
+            repos: settings.repos || "",
           });
           setIsConnected(!!settings.api_token);
         }
@@ -67,6 +69,9 @@ export const GitHubSection: React.FC = () => {
       localStorage.setItem("github_api_token", formData.apiToken);
       if (formData.username) {
         localStorage.setItem("github_username", formData.username);
+      }
+      if (formData.repos) {
+        localStorage.setItem("github_repos", formData.repos);
       }
 
       // Use the enhanced test function
@@ -118,6 +123,7 @@ export const GitHubSection: React.FC = () => {
       const success = await userStorage.saveGithubSettings(
         formData.apiToken,
         formData.username,
+        formData.repos,
       );
 
       if (success) {
@@ -217,6 +223,38 @@ export const GitHubSection: React.FC = () => {
               "transition-colors duration-200",
             )}
           />
+        </div>
+
+        {/* Repos */}
+        <div className="space-y-1.5">
+          <label
+            htmlFor="githubRepos"
+            className="block text-sm text-content-secondary"
+          >
+            Repositories (comma separated)
+          </label>
+          <input
+            id="githubRepos"
+            type="text"
+            value={formData.repos}
+            onChange={(e) =>
+              setFormData((prev) => ({ ...prev, repos: e.target.value }))
+            }
+            placeholder="repo1, repo2, repo3"
+            className={cn(
+              "w-full px-3 py-2 rounded-md text-sm font-mono",
+              "bg-surface border border-line",
+              "text-content-primary placeholder:text-content-muted",
+              "focus:outline-none focus:border-terminal-accent",
+              "transition-colors duration-200",
+            )}
+          />
+          <p className="text-xs text-content-muted">
+            Repository names without the owner. Example:{" "}
+            <code className="px-1 py-0.5 bg-surface-tertiary rounded text-xs">
+              midnight-grid-scribe
+            </code>
+          </p>
         </div>
 
         {/* Actions */}

@@ -1,28 +1,34 @@
 /**
  * DailySchedule Component
  *
- * Timeline view of daily deep work sessions with work/personal breakdown.
- * Shows all sessions for a selected day with navigation.
+ * Timeline view of daily deep work sessions with custom categories
+ * Shows 15-min block visualization and session list
  */
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ChevronLeft,
   ChevronRight,
-  Calendar,
+  Calendar as CalendarIcon,
   Clock,
-  Briefcase,
-  Heart,
-  Circle,
+  Plus,
+  Grid,
+  List,
+  Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { deepWorkService, ActivityType } from "@/lib/deepWorkService";
-import { colors } from "@/styles/design-tokens";
+import {
+  deepWorkService,
+  TimelineBlock,
+  ActivityCategory,
+} from "@/lib/deepWorkService";
+import { useActivityCategories } from "@/hooks/useActivityCategories";
+import { CategorySummaryCards } from "./CategorySummaryCards";
+import { TimelineView } from "./TimelineView";
+import { ManualSessionEntry } from "./ManualSessionEntry";
 
-interface DailyScheduleProps {
-  className?: string;
-}
+type ViewMode = "timeline" | "list";
 
 interface ScheduleSession {
   id: string;
@@ -31,17 +37,22 @@ interface ScheduleSession {
   endTime: string | null;
   duration: number;
   durationFormatted: string;
-  activityType: ActivityType;
+  categoryId: string;
+  categoryName: string;
+  categoryColor: string;
   activityLabel: string | null;
   isActive: boolean;
 }
 
 interface DailyScheduleData {
   date: string;
-  workHours: number;
-  personalHours: number;
+  categoryHours: Map<string, number>;
   totalHours: number;
   sessions: ScheduleSession[];
+}
+
+interface DailyScheduleProps {
+  className?: string;
 }
 
 export const DailySchedule: React.FC<DailyScheduleProps> = ({ className }) => {
@@ -49,25 +60,90 @@ export const DailySchedule: React.FC<DailyScheduleProps> = ({ className }) => {
   const [scheduleData, setScheduleData] = useState<DailyScheduleData | null>(
     null,
   );
+  const [timelineBlocks, setTimelineBlocks] = useState<TimelineBlock[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>("timeline");
+  const [showManualEntry, setShowManualEntry] = useState(false);
+  const [showCategoryManager, setShowCategoryManager] = useState(false);
+
+  const {
+    categories,
+    defaultCategory,
+    isLoading: categoriesLoading,
+  } = useActivityCategories();
 
   // Load schedule for current date
-  useEffect(() => {
-    loadSchedule(currentDate);
-  }, [currentDate]);
+  const loadSchedule = useCallback(
+    async (date: Date) => {
+      setIsLoading(true);
+      try {
+        // Load sessions
+        const data = await deepWorkService.getDailySchedule(date);
 
-  const loadSchedule = async (date: Date) => {
-    setIsLoading(true);
-    try {
-      const data = await deepWorkService.getDailySchedule(date);
-      setScheduleData(data);
-    } catch (error) {
-      console.error("Failed to load schedule:", error);
-      setScheduleData(null);
-    } finally {
-      setIsLoading(false);
+        // Create category hours map
+        const categoryHours = new Map<string, number>();
+        for (const session of data.sessions) {
+          const catId = session.activityType as string;
+          categoryHours.set(
+            catId,
+            (categoryHours.get(catId) || 0) + session.duration / 3600,
+          );
+        }
+
+        // Map sessions with category info
+        const categoryMap = new Map(categories.map((c) => [c.id, c]));
+
+        const sessionsWithCategories: ScheduleSession[] = data.sessions.map(
+          (s) => {
+            const category = categoryMap.get(s.activityType as string) || {
+              id: "uncategorized",
+              name: "Uncategorized",
+              color: "#6B7280",
+              icon: "circle",
+              sort_order: 999,
+              is_default: false,
+            };
+            return {
+              id: s.id,
+              taskName: s.taskName,
+              startTime: s.startTime,
+              endTime: s.endTime,
+              duration: s.duration,
+              durationFormatted: s.durationFormatted,
+              categoryId: category.id,
+              categoryName: category.name,
+              categoryColor: category.color,
+              activityLabel: s.activityLabel,
+              isActive: s.isActive,
+            };
+          },
+        );
+
+        setScheduleData({
+          date: data.date,
+          categoryHours,
+          totalHours: data.totalHours,
+          sessions: sessionsWithCategories,
+        });
+
+        // Load timeline blocks
+        const timeline = await deepWorkService.getTimelineBlocks(date);
+        setTimelineBlocks(timeline.blocks);
+      } catch (error) {
+        console.error("Failed to load schedule:", error);
+        setScheduleData(null);
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [categories],
+  );
+
+  useEffect(() => {
+    if (!categoriesLoading) {
+      loadSchedule(currentDate);
     }
-  };
+  }, [currentDate, categoriesLoading, loadSchedule]);
 
   const navigateDate = (direction: "prev" | "next") => {
     const newDate = new Date(currentDate);
@@ -108,234 +184,278 @@ export const DailySchedule: React.FC<DailyScheduleProps> = ({ className }) => {
     });
   };
 
-  const getActivityColor = (activityType: ActivityType): string => {
-    return activityType === "work" ? colors.primary.DEFAULT : "#A855F7"; // purple-500
-  };
+  const handleBlockClick = (block: TimelineBlock) => {
+    // If empty block, open manual entry with that time pre-filled
+    if (block.coverage === 0) {
+      const blockDate = new Date(block.startTime);
+      const hours = blockDate.getHours();
+      const minutes = blockDate.getMinutes();
 
-  const getActivityIcon = (activityType: ActivityType) => {
-    return activityType === "work" ? (
-      <Briefcase size={14} />
-    ) : (
-      <Heart size={14} />
-    );
+      // Set end time to 1 hour later
+      const endDate = new Date(blockDate);
+      endDate.setHours(hours + 1, minutes);
+
+      setShowManualEntry(true);
+      // Note: We'd need to pass these times to ManualSessionEntry
+      // For now, just opening the dialog
+    }
   };
 
   return (
-    <div className={cn("space-y-4", className)}>
-      {/* Header with Date Navigation */}
-      <div className="flex items-center justify-between p-4 rounded-lg bg-surface-secondary border border-line">
-        <button
-          onClick={() => navigateDate("prev")}
-          className="p-2 rounded-md hover:bg-surface-tertiary transition-colors"
-          aria-label="Previous day"
-        >
-          <ChevronLeft size={20} className="text-content-secondary" />
-        </button>
+    <>
+      <div className={cn("space-y-4", className)}>
+        {/* Header with Date Navigation */}
+        <div className="flex items-center justify-between p-4 rounded-lg bg-surface-secondary border border-line">
+          <button
+            onClick={() => navigateDate("prev")}
+            className="p-2 rounded-md hover:bg-surface-tertiary transition-colors"
+            aria-label="Previous day"
+          >
+            <ChevronLeft size={20} className="text-content-secondary" />
+          </button>
 
-        <div className="text-center">
-          <div className="text-lg font-semibold text-content-primary">
-            {formatDate(currentDate)}
+          <div className="text-center">
+            <div className="text-lg font-semibold text-content-primary">
+              {formatDate(currentDate)}
+            </div>
+            <div className="text-xs text-content-muted font-mono">
+              {scheduleData?.date}
+            </div>
           </div>
-          <div className="text-xs text-content-muted font-mono">
-            {scheduleData?.date}
+
+          <button
+            onClick={() => navigateDate("next")}
+            className="p-2 rounded-md hover:bg-surface-tertiary transition-colors"
+            aria-label="Next day"
+          >
+            <ChevronRight size={20} className="text-content-secondary" />
+          </button>
+        </div>
+
+        {/* Actions row */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            {/* Today Button */}
+            <button
+              onClick={goToToday}
+              className="px-3 py-1.5 text-sm text-content-muted hover:text-content-primary hover:bg-surface-tertiary rounded transition-colors"
+            >
+              Today
+            </button>
+
+            {/* View Toggle */}
+            <div className="flex items-center bg-surface-tertiary rounded-lg p-1 border border-line/50">
+              <button
+                onClick={() => setViewMode("timeline")}
+                className={cn(
+                  "p-1.5 rounded-md transition-colors",
+                  viewMode === "timeline"
+                    ? "bg-terminal-accent text-black"
+                    : "text-content-muted hover:text-content-primary",
+                )}
+              >
+                <Grid size={16} />
+              </button>
+              <button
+                onClick={() => setViewMode("list")}
+                className={cn(
+                  "p-1.5 rounded-md transition-colors",
+                  viewMode === "list"
+                    ? "bg-terminal-accent text-black"
+                    : "text-content-muted hover:text-content-primary",
+                )}
+              >
+                <List size={16} />
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {/* Category Manager */}
+            <button
+              onClick={() => setShowCategoryManager(true)}
+              className="px-3 py-1.5 text-sm text-content-muted hover:text-content-primary hover:bg-surface-tertiary rounded transition-colors flex items-center gap-1"
+            >
+              <Settings size={14} />
+              <span>Categories</span>
+            </button>
+
+            {/* Add Entry Button */}
+            <button
+              onClick={() => setShowManualEntry(true)}
+              className={cn(
+                "flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium",
+                "bg-terminal-accent text-black",
+                "hover:bg-terminal-accent/90 hover:shadow-glow",
+                "transition-all",
+              )}
+            >
+              <Plus size={16} />
+              <span>Add Entry</span>
+            </button>
           </div>
         </div>
 
-        <button
-          onClick={() => navigateDate("next")}
-          className="p-2 rounded-md hover:bg-surface-tertiary transition-colors"
-          aria-label="Next day"
-        >
-          <ChevronRight size={20} className="text-content-secondary" />
-        </button>
+        {/* Loading State */}
+        {isLoading && (
+          <div className="flex items-center justify-center py-8">
+            <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          </div>
+        )}
+
+        {/* Schedule Content */}
+        {!isLoading && scheduleData && (
+          <AnimatePresence mode="wait">
+            {viewMode === "timeline" ? (
+              <motion.div
+                key="timeline"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.2 }}
+              >
+                {/* Category Summary Cards */}
+                <CategorySummaryCards
+                  categoryHours={scheduleData.categoryHours}
+                  totalHours={scheduleData.totalHours}
+                  categories={categories}
+                  className="mb-4"
+                />
+
+                {/* Timeline View */}
+                <div className="p-4 rounded-lg bg-surface-secondary border border-line">
+                  <h3 className="text-sm font-semibold text-content-primary mb-3 flex items-center gap-2">
+                    <CalendarIcon size={16} className="text-neon-cyan" />
+                    15-Minute Timeline
+                  </h3>
+                  <TimelineView
+                    blocks={timelineBlocks}
+                    onBlockClick={handleBlockClick}
+                  />
+                </div>
+              </motion.div>
+            ) : (
+              <motion.div
+                key="list"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.2 }}
+                className="space-y-4"
+              >
+                {/* Category Summary Cards */}
+                <CategorySummaryCards
+                  categoryHours={scheduleData.categoryHours}
+                  totalHours={scheduleData.totalHours}
+                  categories={categories}
+                />
+
+                {/* Sessions List */}
+                <div className="p-4 rounded-lg bg-surface-secondary border border-line">
+                  <h3 className="text-sm font-semibold text-content-primary mb-3 flex items-center gap-2">
+                    <CalendarIcon size={16} className="text-neon-cyan" />
+                    Sessions
+                  </h3>
+
+                  {scheduleData.sessions.length === 0 ? (
+                    <div className="text-center py-8 text-content-muted">
+                      <p className="text-sm">
+                        No sessions recorded for this day
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <AnimatePresence mode="popLayout">
+                        {scheduleData.sessions.map((session, index) => (
+                          <motion.div
+                            key={session.id}
+                            initial={{ opacity: 0, x: -20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0, x: 20 }}
+                            transition={{ delay: index * 0.05 }}
+                            className={cn(
+                              "flex gap-3 p-3 rounded-lg",
+                              "bg-surface-tertiary/50 border",
+                              session.isActive
+                                ? "border-neon-cyan/50 ring-1 ring-neon-cyan/30"
+                                : "border-line/50",
+                            )}
+                          >
+                            {/* Category Indicator */}
+                            <div
+                              className="flex flex-col items-center justify-center w-8 h-8 rounded-full shrink-0"
+                              style={{
+                                backgroundColor: `${session.categoryColor}20`,
+                                color: session.categoryColor,
+                              }}
+                            >
+                              <Clock size={14} />
+                            </div>
+
+                            {/* Session Details */}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex-1 min-w-0">
+                                  <h4 className="text-sm font-medium text-content-primary truncate">
+                                    {session.taskName}
+                                  </h4>
+                                  <div className="text-xs text-content-muted">
+                                    {session.categoryName}
+                                  </div>
+                                  {session.activityLabel && (
+                                    <span className="inline-block mt-1 px-2 py-0.5 text-xs rounded bg-surface-tertiary text-content-secondary">
+                                      {session.activityLabel}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-right shrink-0">
+                                  <div className="font-mono text-sm font-semibold text-content-primary">
+                                    {session.durationFormatted}
+                                  </div>
+                                  {session.isActive && (
+                                    <span className="text-xs text-neon-cyan">
+                                      Active
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2 mt-1 text-xs text-content-muted">
+                                <Clock size={12} />
+                                <span>
+                                  {formatTime(session.startTime)}
+                                  {session.endTime && (
+                                    <> - {formatTime(session.endTime)}</>
+                                  )}
+                                </span>
+                              </div>
+                            </div>
+                          </motion.div>
+                        ))}
+                      </AnimatePresence>
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        )}
       </div>
 
-      {/* Today Button */}
-      <button
-        onClick={goToToday}
-        className="w-full py-2 text-sm text-content-muted hover:text-content-primary hover:bg-surface-tertiary rounded transition-colors"
-      >
-        Go to Today
-      </button>
+      {/* Manual Entry Dialog */}
+      <ManualSessionEntry
+        isOpen={showManualEntry}
+        onClose={() => {
+          setShowManualEntry(false);
+          loadSchedule(currentDate);
+        }}
+        onSave={() => loadSchedule(currentDate)}
+        initialDate={currentDate}
+        categories={categories}
+        defaultCategoryId={defaultCategory?.id || "cat_work"}
+      />
 
-      {/* Loading State */}
-      {isLoading && (
-        <div className="flex items-center justify-center py-8">
-          <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-        </div>
-      )}
-
-      {/* Schedule Content */}
-      {!isLoading && scheduleData && (
-        <>
-          {/* Summary Cards */}
-          <div className="grid grid-cols-3 gap-3">
-            {/* Work Hours */}
-            <div className="p-3 rounded-lg bg-surface-secondary border border-line/50">
-              <div className="flex items-center gap-2 mb-1">
-                <Briefcase size={14} className={cn("text-[#5FE3B3]")} />
-                <span className="text-xs text-content-muted">Work</span>
-              </div>
-              <div className="text-lg font-bold text-content-primary">
-                {scheduleData.workHours.toFixed(1)}h
-              </div>
-            </div>
-
-            {/* Personal Hours */}
-            <div className="p-3 rounded-lg bg-surface-secondary border border-line/50">
-              <div className="flex items-center gap-2 mb-1">
-                <Heart size={14} className="text-purple-400" />
-                <span className="text-xs text-content-muted">Personal</span>
-              </div>
-              <div className="text-lg font-bold text-content-primary">
-                {scheduleData.personalHours.toFixed(1)}h
-              </div>
-            </div>
-
-            {/* Total Hours */}
-            <div className="p-3 rounded-lg bg-surface-secondary border border-line/50">
-              <div className="flex items-center gap-2 mb-1">
-                <Clock size={14} className="text-neon-cyan" />
-                <span className="text-xs text-content-muted">Total</span>
-              </div>
-              <div className="text-lg font-bold text-content-primary">
-                {scheduleData.totalHours.toFixed(1)}h
-              </div>
-            </div>
-          </div>
-
-          {/* Sessions Timeline */}
-          <div className="p-4 rounded-lg bg-surface-secondary border border-line">
-            <h3 className="text-sm font-semibold text-content-primary mb-3 flex items-center gap-2">
-              <Calendar size={16} className="text-neon-cyan" />
-              Timeline
-            </h3>
-
-            {scheduleData.sessions.length === 0 ? (
-              <div className="text-center py-8 text-content-muted">
-                <Circle size={24} className="mx-auto mb-2 opacity-50" />
-                <p className="text-sm">No sessions recorded for this day</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <AnimatePresence mode="popLayout">
-                  {scheduleData.sessions.map((session, index) => (
-                    <motion.div
-                      key={session.id}
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0, x: 20 }}
-                      transition={{ delay: index * 0.05 }}
-                      className={cn(
-                        "flex gap-3 p-3 rounded-lg",
-                        "bg-surface-tertiary/50 border",
-                        session.isActive
-                          ? "border-neon-cyan/50 ring-1 ring-neon-cyan/30"
-                          : "border-line/50",
-                      )}
-                    >
-                      {/* Activity Type Indicator */}
-                      <div
-                        className={cn(
-                          "flex flex-col items-center justify-center w-8 h-8 rounded-full shrink-0",
-                          session.activityType === "work"
-                            ? "bg-neon-cyan/10 text-neon-cyan"
-                            : "bg-purple-500/10 text-purple-400",
-                        )}
-                      >
-                        {getActivityIcon(session.activityType)}
-                      </div>
-
-                      {/* Session Details */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex-1 min-w-0">
-                            <h4 className="text-sm font-medium text-content-primary truncate">
-                              {session.taskName}
-                            </h4>
-                            {session.activityLabel && (
-                              <span className="inline-block mt-1 px-2 py-0.5 text-xs rounded bg-surface-tertiary text-content-secondary">
-                                {session.activityLabel}
-                              </span>
-                            )}
-                          </div>
-                          <div className="text-right shrink-0">
-                            <div className="font-mono text-sm font-semibold text-content-primary">
-                              {session.durationFormatted}
-                            </div>
-                            {session.isActive && (
-                              <span className="text-xs text-neon-cyan">
-                                Active
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2 mt-1 text-xs text-content-muted">
-                          <Clock size={12} />
-                          <span>
-                            {formatTime(session.startTime)}
-                            {session.endTime && (
-                              <> - {formatTime(session.endTime)}</>
-                            )}
-                          </span>
-                        </div>
-                      </div>
-                    </motion.div>
-                  ))}
-                </AnimatePresence>
-              </div>
-            )}
-          </div>
-
-          {/* Work vs Personal Bar */}
-          {scheduleData.totalHours > 0 && (
-            <div className="p-4 rounded-lg bg-surface-secondary border border-line">
-              <div className="text-xs text-content-muted mb-2">
-                Work vs Personal
-              </div>
-              <div className="h-3 rounded-full overflow-hidden flex bg-surface-tertiary">
-                <div
-                  className="transition-all duration-500"
-                  style={{
-                    width: `${(scheduleData.workHours / scheduleData.totalHours) * 100}%`,
-                    backgroundColor: colors.primary.DEFAULT,
-                  }}
-                />
-                <div
-                  className="transition-all duration-500"
-                  style={{
-                    width: `${(scheduleData.personalHours / scheduleData.totalHours) * 100}%`,
-                    backgroundColor: "#A855F7",
-                  }}
-                />
-              </div>
-              <div className="flex justify-between mt-2 text-xs text-content-muted">
-                <span className="flex items-center gap-1">
-                  <div
-                    className="w-2 h-2 rounded-full"
-                    style={{ backgroundColor: colors.primary.DEFAULT }}
-                  />
-                  Work{" "}
-                  {Math.round(
-                    (scheduleData.workHours / scheduleData.totalHours) * 100,
-                  )}
-                  %
-                </span>
-                <span className="flex items-center gap-1">
-                  <div className="w-2 h-2 rounded-full bg-purple-500" />
-                  Personal{" "}
-                  {Math.round(
-                    (scheduleData.personalHours / scheduleData.totalHours) *
-                      100,
-                  )}
-                  %
-                </span>
-              </div>
-            </div>
-          )}
-        </>
-      )}
-    </div>
+      {/* Category Manager Dialog - TODO: implement */}
+    </>
   );
 };
 

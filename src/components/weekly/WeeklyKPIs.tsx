@@ -18,11 +18,13 @@ import { useBooks } from "@/hooks/useBooks";
 import { useAutoSync } from "@/hooks/useAutoSync";
 import { useNutrition } from "@/hooks/useNutrition";
 import { useSleep } from "@/hooks/useSleep";
+import { useWeight } from "@/hooks/useWeight";
 import { KPIRow } from "./KPIRow";
 import { TrainingKPI } from "./TrainingKPI";
 import { ReadingKPI } from "./ReadingKPI";
 import { NutritionKPI } from "./NutritionKPI";
 import { SleepKPI } from "./SleepKPI";
+import { WeightKPI } from "./WeightKPI";
 import { WeeklyHistory } from "./WeeklyHistory";
 import {
   getCurrentWeek,
@@ -34,6 +36,7 @@ import { DEFAULT_KPIS } from "@/lib/kpiDefaults";
 // Local storage keys for targets
 const NUTRITION_TARGETS_KEY = "noctisium-nutrition-targets";
 const SLEEP_TARGET_KEY = "noctisium-sleep-target";
+const WEIGHT_TARGET_KEY = "noctisium-weight-target";
 
 interface NutritionTargets {
   calories: number;
@@ -45,6 +48,7 @@ const DEFAULT_NUTRITION_TARGETS: NutritionTargets = {
   protein: 150,
 };
 const DEFAULT_SLEEP_TARGET = 7;
+const DEFAULT_WEIGHT_TARGET = 180;
 
 interface WeeklyKPIsProps {
   className?: string;
@@ -130,6 +134,15 @@ export const WeeklyKPIs: React.FC<WeeklyKPIsProps> = ({ className }) => {
     isLoading: sleepLoading,
   } = useSleep(weekKey);
 
+  // Weight data
+  const {
+    weekData: weightData,
+    weeklyStats: weightStats,
+    daysTracked: weightDaysTracked,
+    updateDay: updateWeight,
+    isLoading: weightLoading,
+  } = useWeight(weekKey);
+
   // Nutrition and Sleep targets (persisted in localStorage)
   const [nutritionTargets, setNutritionTargets] = useState<NutritionTargets>(
     () => {
@@ -151,6 +164,15 @@ export const WeeklyKPIs: React.FC<WeeklyKPIsProps> = ({ className }) => {
     }
   });
 
+  const [weightTarget, setWeightTarget] = useState<number>(() => {
+    try {
+      const stored = localStorage.getItem(WEIGHT_TARGET_KEY);
+      return stored ? parseFloat(stored) : DEFAULT_WEIGHT_TARGET;
+    } catch {
+      return DEFAULT_WEIGHT_TARGET;
+    }
+  });
+
   // Save targets to localStorage when changed
   const handleUpdateNutritionTargets = useCallback(
     (calories: number, protein: number) => {
@@ -166,76 +188,39 @@ export const WeeklyKPIs: React.FC<WeeklyKPIsProps> = ({ className }) => {
     localStorage.setItem(SLEEP_TARGET_KEY, hours.toString());
   }, []);
 
-  // Auto-sync data
-  const { syncedValues, kpiValueMapping, isSyncing, syncNow } =
-    useAutoSync(weekKey);
+  const handleUpdateWeightTarget = useCallback((target: number) => {
+    setWeightTarget(target);
+    localStorage.setItem(WEIGHT_TARGET_KEY, target.toString());
+  }, []);
 
-  // Merge synced values with manual values (legacy compatibility)
+  // Auto-sync data
+  const { kpiValueMapping, isSyncing, syncNow } = useAutoSync(weekKey);
+
+  // Merge synced values with manual values
   const mergedValues = useMemo(
     () => ({
       ...values,
-      prs_created: Math.max(
-        values.prs_created || 0,
-        syncedValues.prs_created || 0,
-      ),
-      commits_created: Math.max(
-        values.commits_created || 0,
-        syncedValues.commits_created || 0,
-      ),
-      deep_work_hours: Math.max(
-        values.deep_work_hours || 0,
-        syncedValues.deep_work_hours || 0,
-      ),
+      ...kpiValueMapping, // Auto-synced values override manual ones
     }),
-    [values, syncedValues],
+    [values, kpiValueMapping],
   );
 
   // Persist auto-synced values based on KPI auto_sync_source configuration
   useEffect(() => {
     const persistSyncedValues = async () => {
-      // Persist KPI-specific mapping first (new approach)
+      // Persist KPI-specific mapping based on database kpi_id
       for (const [kpiId, value] of Object.entries(kpiValueMapping)) {
         const currentValue = values[kpiId] || 0;
         if (value > currentValue) {
           await updateValue(kpiId, value);
         }
       }
-
-      // Legacy fallback for hardcoded kpi_ids
-      if (
-        syncedValues.prs_created &&
-        syncedValues.prs_created > (values.prs_created || 0)
-      ) {
-        await updateValue("prs_created", syncedValues.prs_created);
-      }
-      if (
-        syncedValues.commits_created &&
-        syncedValues.commits_created > (values.commits_created || 0)
-      ) {
-        await updateValue("commits_created", syncedValues.commits_created);
-      }
-      if (
-        syncedValues.deep_work_hours &&
-        syncedValues.deep_work_hours > (values.deep_work_hours || 0)
-      ) {
-        await updateValue("deep_work_hours", syncedValues.deep_work_hours);
-      }
     };
 
-    if (
-      Object.keys(kpiValueMapping).length > 0 ||
-      syncedValues.prs_created ||
-      syncedValues.commits_created ||
-      syncedValues.deep_work_hours
-    ) {
+    if (Object.keys(kpiValueMapping).length > 0) {
       persistSyncedValues();
     }
-  }, [
-    kpiValueMapping,
-    syncedValues.prs_created,
-    syncedValues.commits_created,
-    syncedValues.deep_work_hours,
-  ]);
+  }, [kpiValueMapping, values]);
 
   // Calculate history data
   const historyWeeks = useMemo(() => {
@@ -293,7 +278,8 @@ export const WeeklyKPIs: React.FC<WeeklyKPIsProps> = ({ className }) => {
     trainingLoading ||
     booksLoading ||
     nutritionLoading ||
-    sleepLoading;
+    sleepLoading ||
+    weightLoading;
 
   if (isLoading) {
     return (
@@ -462,7 +448,7 @@ export const WeeklyKPIs: React.FC<WeeklyKPIsProps> = ({ className }) => {
               color={kpi.color}
               autoSynced={
                 !!kpi.auto_sync_source &&
-                (syncedValues as any)[kpi.kpi_id] !== undefined
+                kpiValueMapping[kpi.kpi_id] !== undefined
               }
               step={kpi.kpi_type === "hours" ? 0.5 : 1}
               onChange={(value) => updateValue(kpi.kpi_id, value)}
@@ -532,6 +518,19 @@ export const WeeklyKPIs: React.FC<WeeklyKPIsProps> = ({ className }) => {
           targetHours={sleepTarget}
           onUpdateDay={updateSleep}
           onUpdateTarget={handleUpdateSleepTarget}
+          weekDates={weekDates}
+        />
+      </motion.div>
+
+      {/* Weight KPI */}
+      <motion.div variants={itemVariants}>
+        <WeightKPI
+          weekData={weightData}
+          weeklyStats={weightStats}
+          daysTracked={weightDaysTracked}
+          targetLbs={weightTarget}
+          onUpdateDay={updateWeight}
+          onUpdateTarget={handleUpdateWeightTarget}
           weekDates={weekDates}
         />
       </motion.div>

@@ -1,16 +1,17 @@
 /**
  * useWeeklyKPIs Hook
- * 
+ *
  * Main data hook for weekly KPI tracking.
  * Handles fetching, updating, and calculating progress.
  */
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/contexts/AuthContext';
-import { DEFAULT_KPIS, KPIType, AutoSyncSource } from '@/lib/kpiDefaults';
-import { getCurrentWeek, getWeekDates, formatWeekKey } from '@/lib/weeklyKpi';
-import { REALTIME_EVENTS } from '@/hooks/useRealtimeSync';
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/contexts/AuthContext";
+import { DEFAULT_KPIS, KPIType, AutoSyncSource } from "@/lib/kpiDefaults";
+import { getCurrentWeek, getWeekDates, formatWeekKey } from "@/lib/weeklyKpi";
+import { REALTIME_EVENTS } from "@/hooks/useRealtimeSync";
+import { useProgressionStore } from "@/stores/progressionStore";
 
 export interface KPIConfig {
   id: string;
@@ -38,7 +39,7 @@ export interface WeeklyKPIData {
 
 export interface UseWeeklyKPIsReturn extends WeeklyKPIData {
   updateValue: (kpiId: string, value: number) => Promise<void>;
-  navigateWeek: (direction: 'prev' | 'next') => void;
+  navigateWeek: (direction: "prev" | "next") => void;
   goToWeek: (weekKey: string) => void;
   refreshData: () => Promise<void>;
 }
@@ -57,7 +58,9 @@ export function useWeeklyKPIs(initialWeekKey?: string): UseWeeklyKPIsReturn {
 
   // Calculate overall progress
   const overallProgress = useMemo(() => {
-    const activeKpis = kpis.filter(k => k.is_active && k.target && k.target > 0);
+    const activeKpis = kpis.filter(
+      (k) => k.is_active && k.target && k.target > 0,
+    );
     if (activeKpis.length === 0) return 0;
 
     let totalProgress = 0;
@@ -76,11 +79,11 @@ export function useWeeklyKPIs(initialWeekKey?: string): UseWeeklyKPIsReturn {
 
     try {
       const { data, error: fetchError } = await supabase
-        .from('user_kpis')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('is_active', true)
-        .order('sort_order');
+        .from("user_kpis")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("is_active", true)
+        .order("sort_order");
 
       if (fetchError) throw fetchError;
 
@@ -92,7 +95,7 @@ export function useWeeklyKPIs(initialWeekKey?: string): UseWeeklyKPIsReturn {
           target: row.target ? parseFloat(row.target) : null,
           unit: row.unit,
           color: row.color,
-          kpi_type: row.kpi_type || 'counter',
+          kpi_type: row.kpi_type || "counter",
           auto_sync_source: row.auto_sync_source || null,
           sort_order: row.sort_order || 0,
           is_active: row.is_active,
@@ -106,7 +109,7 @@ export function useWeeklyKPIs(initialWeekKey?: string): UseWeeklyKPIsReturn {
         ...kpi,
       })) as KPIConfig[];
     } catch (err) {
-      console.error('Failed to load KPI configs:', err);
+      console.error("Failed to load KPI configs:", err);
       // Return defaults as fallback
       return DEFAULT_KPIS.map((kpi, idx) => ({
         id: `default-${idx}`,
@@ -120,20 +123,20 @@ export function useWeeklyKPIs(initialWeekKey?: string): UseWeeklyKPIsReturn {
     if (!user?.id) return;
 
     try {
-      const kpisToInsert = DEFAULT_KPIS.map(kpi => ({
+      const kpisToInsert = DEFAULT_KPIS.map((kpi) => ({
         user_id: user.id,
         ...kpi,
       }));
 
       const { error: insertError } = await supabase
-        .from('user_kpis')
-        .upsert(kpisToInsert, { onConflict: 'user_id,kpi_id' });
+        .from("user_kpis")
+        .upsert(kpisToInsert, { onConflict: "user_id,kpi_id" });
 
       if (insertError) {
-        console.error('Failed to initialize default KPIs:', insertError);
+        console.error("Failed to initialize default KPIs:", insertError);
       }
     } catch (err) {
-      console.error('Error initializing default KPIs:', err);
+      console.error("Error initializing default KPIs:", err);
     }
   }, [user?.id]);
 
@@ -143,10 +146,10 @@ export function useWeeklyKPIs(initialWeekKey?: string): UseWeeklyKPIsReturn {
 
     try {
       const { data, error: fetchError } = await supabase
-        .from('weekly_kpis')
-        .select('data')
-        .eq('user_id', user.id)
-        .eq('week_key', weekKey)
+        .from("weekly_kpis")
+        .select("data")
+        .eq("user_id", user.id)
+        .eq("week_key", weekKey)
         .maybeSingle();
 
       if (fetchError) throw fetchError;
@@ -154,12 +157,12 @@ export function useWeeklyKPIs(initialWeekKey?: string): UseWeeklyKPIsReturn {
       if (data?.data) {
         // Handle both old format (values nested) and new format
         const values = data.data.values || data.data;
-        return typeof values === 'object' ? values : {};
+        return typeof values === "object" ? values : {};
       }
 
       return {};
     } catch (err) {
-      console.error('Failed to load weekly values:', err);
+      console.error("Failed to load weekly values:", err);
       return {};
     }
   }, [user?.id, weekKey]);
@@ -183,8 +186,8 @@ export function useWeeklyKPIs(initialWeekKey?: string): UseWeeklyKPIsReturn {
       setKpis(loadedKpis);
       setValues(loadedValues);
     } catch (err) {
-      console.error('Failed to load weekly KPI data:', err);
-      setError(err instanceof Error ? err : new Error('Failed to load data'));
+      console.error("Failed to load weekly KPI data:", err);
+      setError(err instanceof Error ? err : new Error("Failed to load data"));
     } finally {
       setIsLoading(false);
     }
@@ -205,64 +208,85 @@ export function useWeeklyKPIs(initialWeekKey?: string): UseWeeklyKPIsReturn {
   // Listen for KPI definition changes
   useEffect(() => {
     const handleKPIUpdate = () => {
-      console.log('[useWeeklyKPIs] KPI update event detected, reloading KPI configs...');
+      console.log(
+        "[useWeeklyKPIs] KPI update event detected, reloading KPI configs...",
+      );
       loadKPIConfigs().then(setKpis);
     };
 
     window.addEventListener(REALTIME_EVENTS.KPI_UPDATED, handleKPIUpdate);
-    
+
     return () => {
       window.removeEventListener(REALTIME_EVENTS.KPI_UPDATED, handleKPIUpdate);
     };
   }, [loadKPIConfigs]);
 
   // Update a KPI value
-  const updateValue = useCallback(async (kpiId: string, value: number) => {
-    if (!user?.id) return;
+  const updateValue = useCallback(
+    async (kpiId: string, value: number) => {
+      if (!user?.id) return;
 
-    // Optimistic update
-    const newValues = { ...values, [kpiId]: value };
-    setValues(newValues);
+      const previousValue = values[kpiId] || 0;
+      const isIncrease = value > previousValue;
 
-    try {
-      const { error: upsertError } = await supabase
-        .from('weekly_kpis')
-        .upsert({
-          user_id: user.id,
-          week_key: weekKey,
-          data: { values: newValues },
-          updated_at: new Date().toISOString(),
-        }, { onConflict: 'user_id,week_key' });
+      // Optimistic update
+      const newValues = { ...values, [kpiId]: value };
+      setValues(newValues);
 
-      if (upsertError) throw upsertError;
-      
-      // Dispatch event for other components to refresh (for non-React-Query consumers)
-      window.dispatchEvent(new CustomEvent(REALTIME_EVENTS.KPI_UPDATED, {
-        detail: { weekKey, kpiId, value }
-      }));
-    } catch (err) {
-      console.error('Failed to update KPI value:', err);
-      // Revert on error
-      setValues(values);
-    }
-  }, [user?.id, weekKey, values]);
+      try {
+        const { error: upsertError } = await supabase
+          .from("weekly_kpis")
+          .upsert(
+            {
+              user_id: user.id,
+              week_key: weekKey,
+              data: { values: newValues },
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: "user_id,week_key" },
+          );
+
+        if (upsertError) throw upsertError;
+
+        // Dispatch event for other components to refresh (for non-React-Query consumers)
+        window.dispatchEvent(
+          new CustomEvent(REALTIME_EVENTS.KPI_UPDATED, {
+            detail: { weekKey, kpiId, value },
+          }),
+        );
+
+        // Award XP for counter KPI increments (not decrements)
+        if (isIncrease) {
+          useProgressionStore.getState().onKPIEntry("weekly_kpi_update");
+        }
+      } catch (err) {
+        console.error("Failed to update KPI value:", err);
+        // Revert on error
+        setValues(values);
+      }
+    },
+    [user?.id, weekKey, values],
+  );
 
   // Navigate between weeks
-  const navigateWeek = useCallback((direction: 'prev' | 'next') => {
-    const [year, week] = weekKey.split('-W').map(Number);
-    let newWeek = week + (direction === 'next' ? 1 : -1);
-    let newYear = year;
+  const navigateWeek = useCallback(
+    (direction: "prev" | "next") => {
+      const [year, week] = weekKey.split("-W").map(Number);
+      let newWeek = week + (direction === "next" ? 1 : -1);
+      let newYear = year;
 
-    if (newWeek < 1) {
-      newWeek = 52;
-      newYear -= 1;
-    } else if (newWeek > 52) {
-      newWeek = 1;
-      newYear += 1;
-    }
+      if (newWeek < 1) {
+        newWeek = 52;
+        newYear -= 1;
+      } else if (newWeek > 52) {
+        newWeek = 1;
+        newYear += 1;
+      }
 
-    setWeekKey(`${newYear}-W${String(newWeek).padStart(2, '0')}`);
-  }, [weekKey]);
+      setWeekKey(`${newYear}-W${String(newWeek).padStart(2, "0")}`);
+    },
+    [weekKey],
+  );
 
   // Go to specific week
   const goToWeek = useCallback((newWeekKey: string) => {

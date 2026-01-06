@@ -4,12 +4,43 @@
  */
 
 import { supabase } from "./supabase";
+import { userStorage } from "./userStorage";
 
 // Constants
 const MAX_SESSION_DURATION_SECONDS = 4 * 60 * 60; // 4 hours in seconds
 const MAX_SESSION_DURATION_MS = MAX_SESSION_DURATION_SECONDS * 1000;
 
+// Legacy activity type (kept for backward compatibility)
 export type ActivityType = "work" | "personal";
+
+// Activity Category Types (new system)
+export interface ActivityCategory {
+  id: string;
+  name: string;
+  color: string;
+  icon: string;
+  sort_order: number;
+  is_default: boolean;
+}
+
+export interface ActivityCategoriesConfig {
+  categories: ActivityCategory[];
+  default_category_id: string;
+}
+
+// Timeline Block Types
+export interface TimelineBlock {
+  timeLabel: string;
+  startTime: string;
+  endTime: string;
+  hour: number;
+  quarter: number; // 0-3 for 15-min increments
+  categoryId: string | null;
+  categoryName: string;
+  categoryColor: string;
+  coverage: number; // 0-1, how much of block is covered
+  sessionIds: string[];
+}
 
 export interface DeepWorkSession {
   id: string;
@@ -682,6 +713,376 @@ class DeepWorkService {
     }
 
     return uniqueLabels;
+  }
+
+  // ============================================================
+  // CATEGORY MANAGEMENT METHODS
+  // ============================================================
+
+  /**
+   * Get user's activity categories from user_configs
+   */
+  async getActivityCategories(): Promise<ActivityCategoriesConfig> {
+    const defaultConfig: ActivityCategoriesConfig = {
+      categories: [
+        {
+          id: "cat_work",
+          name: "Work",
+          color: "#5FE3B3",
+          icon: "briefcase",
+          sort_order: 1,
+          is_default: true,
+        },
+        {
+          id: "cat_personal",
+          name: "Personal",
+          color: "#A855F7",
+          icon: "heart",
+          sort_order: 2,
+          is_default: true,
+        },
+      ],
+      default_category_id: "cat_work",
+    };
+
+    try {
+      const config = await userStorage.getUserConfig(
+        "activity_categories",
+        defaultConfig,
+      );
+      return config as ActivityCategoriesConfig;
+    } catch (error) {
+      console.error("Error getting activity categories:", error);
+      return defaultConfig;
+    }
+  }
+
+  /**
+   * Save activity categories to user_configs
+   */
+  async saveActivityCategories(
+    config: ActivityCategoriesConfig,
+  ): Promise<boolean> {
+    try {
+      await userStorage.setUserConfig("activity_categories", config);
+      return true;
+    } catch (error) {
+      console.error("Error saving activity categories:", error);
+      return false;
+    }
+  }
+
+  /**
+   * Add a new activity category
+   */
+  async addActivityCategory(
+    category: Omit<ActivityCategory, "id">,
+  ): Promise<ActivityCategory | null> {
+    const config = await this.getActivityCategories();
+    const newCategory: ActivityCategory = {
+      ...category,
+      id: `cat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    };
+
+    config.categories.push(newCategory);
+    config.categories.sort((a, b) => a.sort_order - b.sort_order);
+
+    const saved = await this.saveActivityCategories(config);
+    return saved ? newCategory : null;
+  }
+
+  /**
+   * Update an existing activity category
+   */
+  async updateActivityCategory(
+    id: string,
+    updates: Partial<Omit<ActivityCategory, "id">>,
+  ): Promise<boolean> {
+    const config = await this.getActivityCategories();
+    const index = config.categories.findIndex((c) => c.id === id);
+
+    if (index === -1) return false;
+
+    config.categories[index] = { ...config.categories[index], ...updates };
+
+    // Update default if changed
+    if (updates.is_default && config.default_category_id !== id) {
+      config.default_category_id = id;
+    }
+
+    return await this.saveActivityCategories(config);
+  }
+
+  /**
+   * Delete an activity category (if not in use)
+   */
+  async deleteActivityCategory(id: string): Promise<boolean> {
+    const config = await this.getActivityCategories();
+
+    // Don't allow deleting if it's the default category
+    if (config.default_category_id === id) {
+      console.warn("Cannot delete default category");
+      return false;
+    }
+
+    // Check if category is in use
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (user) {
+      const { data } = await supabase
+        .from("deep_work_sessions")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("activity_type", id)
+        .limit(1);
+
+      if (data && data.length > 0) {
+        console.warn("Cannot delete category that is in use");
+        return false;
+      }
+    }
+
+    config.categories = config.categories.filter((c) => c.id !== id);
+
+    // If default was deleted, set to first available
+    if (!config.categories.find((c) => c.id === config.default_category_id)) {
+      config.default_category_id = config.categories[0]?.id || "cat_work";
+    }
+
+    return await this.saveActivityCategories(config);
+  }
+
+  /**
+   * Get category by ID
+   */
+  async getCategoryById(id: string): Promise<ActivityCategory | null> {
+    const config = await this.getActivityCategories();
+    return config.categories.find((c) => c.id === id) || null;
+  }
+
+  // ============================================================
+  // MANUAL SESSION ENTRY METHODS
+  // ============================================================
+
+  /**
+   * Add a manual session for a past time period
+   */
+  async addManualSession(params: {
+    taskName: string;
+    categoryId: string;
+    activityLabel?: string;
+    startTime: Date;
+    endTime: Date;
+  }): Promise<DeepWorkSession | null> {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      console.error("No authenticated user");
+      return null;
+    }
+
+    // Validate times
+    if (params.endTime <= params.startTime) {
+      console.error("End time must be after start time");
+      return null;
+    }
+
+    const durationSeconds = Math.floor(
+      (params.endTime.getTime() - params.startTime.getTime()) / 1000,
+    );
+
+    const { data, error } = await supabase
+      .from("deep_work_sessions")
+      .insert({
+        user_id: user.id,
+        task_name: params.taskName.trim(),
+        start_time: params.startTime.toISOString(),
+        end_time: params.endTime.toISOString(),
+        duration_seconds: durationSeconds,
+        is_active: false,
+        auto_stopped: false,
+        activity_type: params.categoryId,
+        activity_label: params.activityLabel?.trim() || null,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Error adding manual session:", error);
+      return null;
+    }
+
+    return data;
+  }
+
+  /**
+   * Update an existing session's times
+   */
+  async updateSessionTimes(
+    sessionId: string,
+    startTime: Date,
+    endTime: Date,
+  ): Promise<DeepWorkSession | null> {
+    // Validate times
+    if (endTime <= startTime) {
+      console.error("End time must be after start time");
+      return null;
+    }
+
+    const durationSeconds = Math.floor(
+      (endTime.getTime() - startTime.getTime()) / 1000,
+    );
+
+    const { data, error } = await supabase
+      .from("deep_work_sessions")
+      .update({
+        start_time: startTime.toISOString(),
+        end_time: endTime.toISOString(),
+        duration_seconds: durationSeconds,
+      })
+      .eq("id", sessionId)
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Error updating session times:", error);
+      return null;
+    }
+
+    return data;
+  }
+
+  /**
+   * Delete a session
+   */
+  async deleteSession(sessionId: string): Promise<boolean> {
+    const { error } = await supabase
+      .from("deep_work_sessions")
+      .delete()
+      .eq("id", sessionId);
+
+    if (error) {
+      console.error("Error deleting session:", error);
+      return false;
+    }
+
+    return true;
+  }
+
+  // ============================================================
+  // TIMELINE VISUALIZATION METHODS
+  // ============================================================
+
+  /**
+   * Get 15-minute block coverage for a date
+   * Returns 96 blocks (24 hours × 4 blocks per hour)
+   */
+  async getTimelineBlocks(date: Date): Promise<{
+    date: string;
+    blocks: TimelineBlock[];
+  }> {
+    const config = await this.getActivityCategories();
+    const categoryMap = new Map(config.categories.map((c) => [c.id, c]));
+
+    // Get sessions for the date
+    const dayStart = new Date(date);
+    dayStart.setHours(0, 0, 0, 0);
+    const dayEnd = new Date(dayStart);
+    dayEnd.setDate(dayEnd.getDate() + 1);
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      return { date: dayStart.toISOString().split("T")[0], blocks: [] };
+    }
+
+    const { data: sessions } = await supabase
+      .from("deep_work_sessions")
+      .select("*")
+      .eq("user_id", user.id)
+      .gte("start_time", dayStart.toISOString())
+      .lt("start_time", dayEnd.toISOString())
+      .order("start_time", { ascending: true });
+
+    const sessionList = sessions || [];
+
+    // Initialize all 96 blocks
+    const blocks: TimelineBlock[] = [];
+    for (let hour = 0; hour < 24; hour++) {
+      for (let quarter = 0; quarter < 4; quarter++) {
+        const blockStart = new Date(dayStart);
+        blockStart.setHours(hour, quarter * 15, 0, 0);
+        const blockEnd = new Date(blockStart);
+        blockEnd.setMinutes(blockStart.getMinutes() + 15);
+
+        blocks.push({
+          timeLabel: blockStart.toLocaleTimeString("en-US", {
+            hour: "numeric",
+            minute: "2-digit",
+          }),
+          startTime: blockStart.toISOString(),
+          endTime: blockEnd.toISOString(),
+          hour,
+          quarter,
+          categoryId: null,
+          categoryName: "",
+          categoryColor: "#374151", // gray-700 for empty blocks
+          coverage: 0,
+          sessionIds: [],
+        });
+      }
+    }
+
+    // Calculate coverage for each block
+    for (const session of sessionList) {
+      const sessionStart = new Date(session.start_time);
+      const sessionEnd = session.end_time
+        ? new Date(session.end_time)
+        : new Date();
+
+      const category = categoryMap.get(session.activity_type) || {
+        id: "uncategorized",
+        name: "Uncategorized",
+        color: "#6B7280",
+        icon: "circle",
+        sort_order: 999,
+        is_default: false,
+      };
+
+      // Find all blocks this session touches
+      for (const block of blocks) {
+        const blockStart = new Date(block.startTime);
+        const blockEnd = new Date(block.endTime);
+
+        // Calculate overlap
+        const overlapStart = new Date(
+          Math.max(sessionStart.getTime(), blockStart.getTime()),
+        );
+        const overlapEnd = new Date(
+          Math.min(sessionEnd.getTime(), blockEnd.getTime()),
+        );
+
+        if (overlapStart < overlapEnd) {
+          const overlapMinutes =
+            (overlapEnd.getTime() - overlapStart.getTime()) / (1000 * 60);
+          const coverage = overlapMinutes / 15; // 15-min block
+
+          block.coverage = Math.min(1, block.coverage + coverage);
+          block.categoryId = category.id;
+          block.categoryName = category.name;
+          block.categoryColor = category.color;
+          block.sessionIds.push(session.id);
+        }
+      }
+    }
+
+    return {
+      date: dayStart.toISOString().split("T")[0],
+      blocks,
+    };
   }
 }
 

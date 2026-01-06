@@ -1,14 +1,20 @@
 /**
  * useTraining Hook
- * 
+ *
  * Manages training types and sessions.
  */
 
-import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/contexts/AuthContext';
-import { TrainingType, TrainingSession, DEFAULT_TRAINING_TYPES } from '@/lib/kpiDefaults';
-import { getWeekDates } from '@/lib/weeklyKpi';
+import { useState, useEffect, useCallback } from "react";
+import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/contexts/AuthContext";
+import {
+  TrainingType,
+  TrainingSession,
+  DEFAULT_TRAINING_TYPES,
+} from "@/lib/kpiDefaults";
+import { getWeekDates, updateWeeklyKPIRecord } from "@/lib/weeklyKpi";
+import { formatLocalDate } from "@/lib/dateUtils";
+import { useProgressionStore } from "@/stores/progressionStore";
 
 export interface UseTrainingReturn {
   trainingTypes: TrainingType[];
@@ -17,8 +23,15 @@ export interface UseTrainingReturn {
   countingSessionCount: number; // Only sessions that count toward target
   addSession: (typeId: string, date: string, notes?: string) => Promise<void>;
   removeSession: (sessionId: string) => Promise<void>;
-  addTrainingType: (name: string, color: string, icon?: string) => Promise<void>;
-  updateTrainingType: (id: string, updates: Partial<TrainingType>) => Promise<void>;
+  addTrainingType: (
+    name: string,
+    color: string,
+    icon?: string,
+  ) => Promise<void>;
+  updateTrainingType: (
+    id: string,
+    updates: Partial<TrainingType>,
+  ) => Promise<void>;
   deleteTrainingType: (id: string) => Promise<void>;
   isLoading: boolean;
   error: Error | null;
@@ -33,8 +46,8 @@ export function useTraining(weekKey: string): UseTrainingReturn {
 
   // Get week date range
   const { start, end } = getWeekDates(weekKey);
-  const startDate = start.toISOString().split('T')[0];
-  const endDate = end.toISOString().split('T')[0];
+  const startDate = formatLocalDate(start);
+  const endDate = formatLocalDate(end);
 
   // Load training types
   const loadTrainingTypes = useCallback(async () => {
@@ -42,11 +55,11 @@ export function useTraining(weekKey: string): UseTrainingReturn {
 
     try {
       const { data, error: fetchError } = await supabase
-        .from('training_types')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('is_active', true)
-        .order('sort_order');
+        .from("training_types")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("is_active", true)
+        .order("sort_order");
 
       if (fetchError) throw fetchError;
 
@@ -58,15 +71,15 @@ export function useTraining(weekKey: string): UseTrainingReturn {
       await initializeDefaultTypes();
       // Reload after initialization
       const { data: reloaded } = await supabase
-        .from('training_types')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('is_active', true)
-        .order('sort_order');
+        .from("training_types")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("is_active", true)
+        .order("sort_order");
 
       return (reloaded || []) as TrainingType[];
     } catch (err) {
-      console.error('Failed to load training types:', err);
+      console.error("Failed to load training types:", err);
       return [];
     }
   }, [user?.id]);
@@ -76,21 +89,21 @@ export function useTraining(weekKey: string): UseTrainingReturn {
     if (!user?.id) return;
 
     try {
-      const typesToInsert = DEFAULT_TRAINING_TYPES.map(type => ({
+      const typesToInsert = DEFAULT_TRAINING_TYPES.map((type) => ({
         user_id: user.id,
         ...type,
         is_active: true,
       }));
 
       const { error: insertError } = await supabase
-        .from('training_types')
-        .upsert(typesToInsert, { onConflict: 'user_id,name' });
+        .from("training_types")
+        .upsert(typesToInsert, { onConflict: "user_id,name" });
 
       if (insertError) {
-        console.error('Failed to initialize training types:', insertError);
+        console.error("Failed to initialize training types:", insertError);
       }
     } catch (err) {
-      console.error('Error initializing training types:', err);
+      console.error("Error initializing training types:", err);
     }
   }, [user?.id]);
 
@@ -100,21 +113,23 @@ export function useTraining(weekKey: string): UseTrainingReturn {
 
     try {
       const { data, error: fetchError } = await supabase
-        .from('training_sessions')
-        .select(`
+        .from("training_sessions")
+        .select(
+          `
           *,
           training_type:training_types(*)
-        `)
-        .eq('user_id', user.id)
-        .gte('date', startDate)
-        .lte('date', endDate)
-        .order('date', { ascending: true });
+        `,
+        )
+        .eq("user_id", user.id)
+        .gte("date", startDate)
+        .lte("date", endDate)
+        .order("date", { ascending: true });
 
       if (fetchError) throw fetchError;
 
       return (data || []) as TrainingSession[];
     } catch (err) {
-      console.error('Failed to load training sessions:', err);
+      console.error("Failed to load training sessions:", err);
       return [];
     }
   }, [user?.id, startDate, endDate]);
@@ -138,8 +153,10 @@ export function useTraining(weekKey: string): UseTrainingReturn {
       setTrainingTypes(types);
       setSessions(weekSessions);
     } catch (err) {
-      console.error('Failed to load training data:', err);
-      setError(err instanceof Error ? err : new Error('Failed to load training data'));
+      console.error("Failed to load training data:", err);
+      setError(
+        err instanceof Error ? err : new Error("Failed to load training data"),
+      );
     } finally {
       setIsLoading(false);
     }
@@ -158,139 +175,173 @@ export function useTraining(weekKey: string): UseTrainingReturn {
   }, [weekKey]);
 
   // Add a training session
-  const addSession = useCallback(async (typeId: string, date: string, notes?: string) => {
-    if (!user?.id) return;
+  const addSession = useCallback(
+    async (typeId: string, date: string, notes?: string) => {
+      if (!user?.id) return;
 
-    try {
-      const { data, error: insertError } = await supabase
-        .from('training_sessions')
-        .insert({
-          user_id: user.id,
-          training_type_id: typeId,
-          date,
-          notes,
-        })
-        .select(`
+      try {
+        const { data, error: insertError } = await supabase
+          .from("training_sessions")
+          .insert({
+            user_id: user.id,
+            training_type_id: typeId,
+            date,
+            notes,
+          })
+          .select(
+            `
           *,
           training_type:training_types(*)
-        `)
-        .single();
+        `,
+          )
+          .single();
 
-      if (insertError) throw insertError;
+        if (insertError) throw insertError;
 
-      if (data) {
-        setSessions(prev => [...prev, data as TrainingSession].sort((a, b) => 
-          a.date.localeCompare(b.date)
-        ));
+        if (data) {
+          setSessions((prev) =>
+            [...prev, data as TrainingSession].sort((a, b) =>
+              a.date.localeCompare(b.date),
+            ),
+          );
+          // Award XP for training session
+          useProgressionStore.getState().onKPIEntry("training");
+        }
+      } catch (err) {
+        console.error("Failed to add training session:", err);
+        throw err;
       }
-    } catch (err) {
-      console.error('Failed to add training session:', err);
-      throw err;
-    }
-  }, [user?.id]);
+    },
+    [user?.id],
+  );
 
   // Remove a training session
-  const removeSession = useCallback(async (sessionId: string) => {
-    if (!user?.id) return;
+  const removeSession = useCallback(
+    async (sessionId: string) => {
+      if (!user?.id) return;
 
-    // Optimistic update
-    const previousSessions = sessions;
-    setSessions(prev => prev.filter(s => s.id !== sessionId));
+      // Optimistic update
+      const previousSessions = sessions;
+      setSessions((prev) => prev.filter((s) => s.id !== sessionId));
 
-    try {
-      const { error: deleteError } = await supabase
-        .from('training_sessions')
-        .delete()
-        .eq('id', sessionId)
-        .eq('user_id', user.id);
+      try {
+        const { error: deleteError } = await supabase
+          .from("training_sessions")
+          .delete()
+          .eq("id", sessionId)
+          .eq("user_id", user.id);
 
-      if (deleteError) throw deleteError;
-    } catch (err) {
-      console.error('Failed to remove training session:', err);
-      setSessions(previousSessions);
-      throw err;
-    }
-  }, [user?.id, sessions]);
+        if (deleteError) throw deleteError;
+      } catch (err) {
+        console.error("Failed to remove training session:", err);
+        setSessions(previousSessions);
+        throw err;
+      }
+    },
+    [user?.id, sessions],
+  );
 
   // Add a new training type
-  const addTrainingType = useCallback(async (name: string, color: string, icon?: string) => {
-    if (!user?.id) return;
+  const addTrainingType = useCallback(
+    async (name: string, color: string, icon?: string) => {
+      if (!user?.id) return;
 
-    try {
-      const maxSortOrder = Math.max(0, ...trainingTypes.map(t => t.sort_order));
+      try {
+        const maxSortOrder = Math.max(
+          0,
+          ...trainingTypes.map((t) => t.sort_order),
+        );
 
-      const { data, error: insertError } = await supabase
-        .from('training_types')
-        .insert({
-          user_id: user.id,
-          name,
-          color,
-          icon: icon || '🏋️',
-          counts_toward_target: true,
-          sort_order: maxSortOrder + 1,
-          is_active: true,
-        })
-        .select()
-        .single();
+        const { data, error: insertError } = await supabase
+          .from("training_types")
+          .insert({
+            user_id: user.id,
+            name,
+            color,
+            icon: icon || "🏋️",
+            counts_toward_target: true,
+            sort_order: maxSortOrder + 1,
+            is_active: true,
+          })
+          .select()
+          .single();
 
-      if (insertError) throw insertError;
+        if (insertError) throw insertError;
 
-      if (data) {
-        setTrainingTypes(prev => [...prev, data as TrainingType]);
+        if (data) {
+          setTrainingTypes((prev) => [...prev, data as TrainingType]);
+        }
+      } catch (err) {
+        console.error("Failed to add training type:", err);
+        throw err;
       }
-    } catch (err) {
-      console.error('Failed to add training type:', err);
-      throw err;
-    }
-  }, [user?.id, trainingTypes]);
+    },
+    [user?.id, trainingTypes],
+  );
 
   // Update a training type
-  const updateTrainingType = useCallback(async (id: string, updates: Partial<TrainingType>) => {
-    if (!user?.id) return;
+  const updateTrainingType = useCallback(
+    async (id: string, updates: Partial<TrainingType>) => {
+      if (!user?.id) return;
 
-    try {
-      const { error: updateError } = await supabase
-        .from('training_types')
-        .update(updates)
-        .eq('id', id)
-        .eq('user_id', user.id);
+      try {
+        const { error: updateError } = await supabase
+          .from("training_types")
+          .update(updates)
+          .eq("id", id)
+          .eq("user_id", user.id);
 
-      if (updateError) throw updateError;
+        if (updateError) throw updateError;
 
-      setTrainingTypes(prev => 
-        prev.map(t => t.id === id ? { ...t, ...updates } : t)
-      );
-    } catch (err) {
-      console.error('Failed to update training type:', err);
-      throw err;
-    }
-  }, [user?.id]);
+        setTrainingTypes((prev) =>
+          prev.map((t) => (t.id === id ? { ...t, ...updates } : t)),
+        );
+      } catch (err) {
+        console.error("Failed to update training type:", err);
+        throw err;
+      }
+    },
+    [user?.id],
+  );
 
   // Delete (deactivate) a training type
-  const deleteTrainingType = useCallback(async (id: string) => {
-    if (!user?.id) return;
+  const deleteTrainingType = useCallback(
+    async (id: string) => {
+      if (!user?.id) return;
 
-    try {
-      const { error: updateError } = await supabase
-        .from('training_types')
-        .update({ is_active: false })
-        .eq('id', id)
-        .eq('user_id', user.id);
+      try {
+        const { error: updateError } = await supabase
+          .from("training_types")
+          .update({ is_active: false })
+          .eq("id", id)
+          .eq("user_id", user.id);
 
-      if (updateError) throw updateError;
+        if (updateError) throw updateError;
 
-      setTrainingTypes(prev => prev.filter(t => t.id !== id));
-    } catch (err) {
-      console.error('Failed to delete training type:', err);
-      throw err;
-    }
-  }, [user?.id]);
+        setTrainingTypes((prev) => prev.filter((t) => t.id !== id));
+      } catch (err) {
+        console.error("Failed to delete training type:", err);
+        throw err;
+      }
+    },
+    [user?.id],
+  );
 
   // Calculate session counts
   const sessionCount = sessions.length;
-  const countingSessionCount = sessions.filter(s => 
-    s.training_type?.counts_toward_target !== false
+  const countingSessionCount = sessions.filter(
+    (s) => s.training_type?.counts_toward_target !== false,
   ).length;
+
+  // Sync training sessions count to weekly KPI system
+  useEffect(() => {
+    if (user?.id && weekKey) {
+      updateWeeklyKPIRecord(user.id, weekKey, {
+        strengthSessions: countingSessionCount,
+        bjjSessions: countingSessionCount,
+      });
+    }
+  }, [countingSessionCount, user?.id, weekKey]);
 
   return {
     trainingTypes,

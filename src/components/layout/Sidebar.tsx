@@ -3,23 +3,24 @@
  * Collapsible navigation sidebar with smooth animations
  */
 
-import React, { useEffect, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { 
-  LayoutDashboard, 
-  BarChart3, 
-  TrendingUp, 
-  GitBranch, 
-  Network, 
+import React, { useEffect, useState } from "react";
+import { Link, useLocation } from "react-router-dom";
+import { motion } from "framer-motion";
+import {
+  LayoutDashboard,
+  BarChart3,
+  TrendingUp,
+  GitBranch,
+  Network,
   FileText,
   Settings,
   Ship,
-  LucideIcon
-} from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { preferencesManager } from '@/lib/userPreferences';
-import { useAuth } from '@/contexts/AuthContext';
+  Calendar,
+  LucideIcon,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { preferencesManager } from "@/lib/userPreferences";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface NavItem {
   path: string;
@@ -43,18 +44,20 @@ const iconMap: Record<string, LucideIcon> = {
   cash: Network,
   content: FileText,
   ships: Ship,
+  "daily-review": Calendar,
 };
 
 // Path mapping for module IDs
 const pathMap: Record<string, string> = {
-  dashboard: '/',
-  kpis: '/kpis',
-  analytics: '/analytics',
-  visualizer: '/visualizer',
-  roadmap: '/roadmap',
-  cash: '/cash',
-  content: '/content',
-  ships: '/ships',
+  dashboard: "/",
+  kpis: "/kpis",
+  analytics: "/analytics",
+  visualizer: "/visualizer",
+  roadmap: "/roadmap",
+  cash: "/cash",
+  content: "/content",
+  ships: "/ships",
+  "daily-review": "/daily-review",
 };
 
 export const Sidebar: React.FC<SidebarProps> = ({ expanded, className }) => {
@@ -66,23 +69,23 @@ export const Sidebar: React.FC<SidebarProps> = ({ expanded, className }) => {
   useEffect(() => {
     const loadNavItems = async () => {
       if (!user) return;
-      
+
       try {
         const preferences = await preferencesManager.getUserPreferences();
         const allModules = preferencesManager.getAvailableModules();
-        
+
         const enabledItems = allModules
-          .filter(module => preferences.enabled_modules.includes(module.id))
-          .map(module => ({
+          .filter((module) => preferences.enabled_modules.includes(module.id))
+          .map((module) => ({
             id: module.id,
             path: pathMap[module.id] || `/${module.id}`,
             icon: iconMap[module.id] || BarChart3,
             label: module.name,
           }));
-        
+
         setNavItems(enabledItems);
       } catch (error) {
-        console.error('Failed to load nav items:', error);
+        console.error("Failed to load nav items:", error);
       }
     };
 
@@ -90,13 +93,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ expanded, className }) => {
 
     // Listen for preference updates
     const handlePreferenceUpdate = () => loadNavItems();
-    window.addEventListener('preferencesUpdated', handlePreferenceUpdate);
-    return () => window.removeEventListener('preferencesUpdated', handlePreferenceUpdate);
+    window.addEventListener("preferencesUpdated", handlePreferenceUpdate);
+    return () =>
+      window.removeEventListener("preferencesUpdated", handlePreferenceUpdate);
   }, [user]);
 
   const isActive = (path: string) => {
-    if (path === '/') {
-      return location.pathname === '/';
+    if (path === "/") {
+      return location.pathname === "/";
     }
     return location.pathname.startsWith(path);
   };
@@ -105,21 +109,21 @@ export const Sidebar: React.FC<SidebarProps> = ({ expanded, className }) => {
     <motion.aside
       initial={false}
       animate={{ width: expanded ? 220 : 56 }}
-      transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+      transition={{ type: "spring", stiffness: 300, damping: 30 }}
       className={cn(
-        'h-full flex flex-col',
-        'bg-surface-secondary border-r border-line',
-        'overflow-hidden',
-        className
+        "h-full flex flex-col",
+        "bg-surface-secondary border-r border-line",
+        "overflow-hidden",
+        className,
       )}
     >
       {/* Logo */}
-      <Link 
-        to="/" 
+      <Link
+        to="/"
         className={cn(
-          'flex items-center h-14 px-4',
-          'border-b border-line',
-          'hover:bg-surface-hover transition-colors'
+          "flex items-center h-14 px-4",
+          "border-b border-line",
+          "hover:bg-surface-hover transition-colors",
         )}
       >
         <motion.div
@@ -128,24 +132,26 @@ export const Sidebar: React.FC<SidebarProps> = ({ expanded, className }) => {
           className="flex items-center gap-3"
         >
           {/* Logo Mark */}
-          <div className={cn(
-            'w-6 h-6 flex items-center justify-center',
-            'text-neon-cyan font-display font-bold text-lg'
-          )}>
+          <div
+            className={cn(
+              "w-6 h-6 flex items-center justify-center",
+              "text-neon-cyan font-display font-bold text-lg",
+            )}
+          >
             ◆
           </div>
-          
+
           {/* Logo Text - Only when expanded */}
           <motion.span
             initial={false}
-            animate={{ 
+            animate={{
               opacity: expanded ? 1 : 0,
-              width: expanded ? 'auto' : 0,
+              width: expanded ? "auto" : 0,
             }}
             transition={{ duration: 0.2 }}
             className={cn(
-              'font-display font-bold text-sm tracking-wider',
-              'text-content-primary whitespace-nowrap overflow-hidden'
+              "font-display font-bold text-sm tracking-wider",
+              "text-content-primary whitespace-nowrap overflow-hidden",
             )}
           >
             NOCTISIUM
@@ -165,12 +171,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ expanded, className }) => {
                 <Link
                   to={item.path}
                   className={cn(
-                    'flex items-center gap-3 px-3 py-2.5 rounded-md',
-                    'transition-all duration-200',
-                    'relative group',
+                    "flex items-center gap-3 px-3 py-2.5 rounded-md",
+                    "transition-all duration-200",
+                    "relative group",
                     active
-                      ? 'bg-neon-cyan/10 text-neon-cyan'
-                      : 'text-content-secondary hover:text-content-primary hover:bg-surface-hover'
+                      ? "bg-neon-cyan/10 text-neon-cyan"
+                      : "text-content-secondary hover:text-content-primary hover:bg-surface-hover",
                   )}
                 >
                   {/* Active Indicator */}
@@ -178,30 +184,34 @@ export const Sidebar: React.FC<SidebarProps> = ({ expanded, className }) => {
                     <motion.div
                       layoutId="sidebar-active-indicator"
                       className="absolute -left-2 w-0.5 h-5 bg-neon-cyan rounded-full"
-                      style={{ top: '50%', marginTop: '-10px' }}
-                      transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                      style={{ top: "50%", marginTop: "-10px" }}
+                      transition={{
+                        type: "spring",
+                        stiffness: 400,
+                        damping: 30,
+                      }}
                     />
                   )}
 
                   {/* Icon */}
-                  <Icon 
-                    size={20} 
+                  <Icon
+                    size={20}
                     className={cn(
-                      'shrink-0 transition-colors',
-                      active && 'drop-shadow-[0_0_8px_rgba(0,240,255,0.5)]'
-                    )} 
+                      "shrink-0 transition-colors",
+                      active && "drop-shadow-[0_0_8px_rgba(0,240,255,0.5)]",
+                    )}
                   />
 
                   {/* Label */}
                   <motion.span
                     initial={false}
-                    animate={{ 
+                    animate={{
                       opacity: expanded ? 1 : 0,
-                      width: expanded ? 'auto' : 0,
+                      width: expanded ? "auto" : 0,
                     }}
                     transition={{ duration: 0.2 }}
                     className={cn(
-                      'text-sm font-medium whitespace-nowrap overflow-hidden'
+                      "text-sm font-medium whitespace-nowrap overflow-hidden",
                     )}
                   >
                     {item.label}
@@ -209,13 +219,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ expanded, className }) => {
 
                   {/* Tooltip when collapsed */}
                   {!expanded && (
-                    <div className={cn(
-                      'absolute left-full ml-2 px-2 py-1 rounded',
-                      'bg-surface-tertiary text-content-primary text-xs',
-                      'opacity-0 group-hover:opacity-100 pointer-events-none',
-                      'transition-opacity whitespace-nowrap z-50',
-                      'border border-line'
-                    )}>
+                    <div
+                      className={cn(
+                        "absolute left-full ml-2 px-2 py-1 rounded",
+                        "bg-surface-tertiary text-content-primary text-xs",
+                        "opacity-0 group-hover:opacity-100 pointer-events-none",
+                        "transition-opacity whitespace-nowrap z-50",
+                        "border border-line",
+                      )}
+                    >
                       {item.label}
                     </div>
                   )}
@@ -231,20 +243,20 @@ export const Sidebar: React.FC<SidebarProps> = ({ expanded, className }) => {
         <Link
           to="/settings"
           className={cn(
-            'flex items-center gap-3 px-3 py-2.5 rounded-md',
-            'transition-all duration-200',
-            'text-content-secondary hover:text-content-primary hover:bg-surface-hover',
-            'relative group',
-            isActive('/settings') && 'bg-neon-cyan/10 text-neon-cyan'
+            "flex items-center gap-3 px-3 py-2.5 rounded-md",
+            "transition-all duration-200",
+            "text-content-secondary hover:text-content-primary hover:bg-surface-hover",
+            "relative group",
+            isActive("/settings") && "bg-neon-cyan/10 text-neon-cyan",
           )}
         >
           <Settings size={20} className="shrink-0" />
-          
+
           <motion.span
             initial={false}
-            animate={{ 
+            animate={{
               opacity: expanded ? 1 : 0,
-              width: expanded ? 'auto' : 0,
+              width: expanded ? "auto" : 0,
             }}
             transition={{ duration: 0.2 }}
             className="text-sm font-medium whitespace-nowrap overflow-hidden"
@@ -254,13 +266,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ expanded, className }) => {
 
           {/* Tooltip when collapsed */}
           {!expanded && (
-            <div className={cn(
-              'absolute left-full ml-2 px-2 py-1 rounded',
-              'bg-surface-tertiary text-content-primary text-xs',
-              'opacity-0 group-hover:opacity-100 pointer-events-none',
-              'transition-opacity whitespace-nowrap z-50',
-              'border border-line'
-            )}>
+            <div
+              className={cn(
+                "absolute left-full ml-2 px-2 py-1 rounded",
+                "bg-surface-tertiary text-content-primary text-xs",
+                "opacity-0 group-hover:opacity-100 pointer-events-none",
+                "transition-opacity whitespace-nowrap z-50",
+                "border border-line",
+              )}
+            >
               Settings
             </div>
           )}

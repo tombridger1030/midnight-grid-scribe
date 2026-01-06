@@ -1,12 +1,12 @@
-import { useAuth } from '@/contexts/AuthContext';
-import { userStorage } from './userStorage';
+import { useAuth } from "@/contexts/AuthContext";
+import { userStorage } from "./userStorage";
 
 export interface UserPreferences {
   show_content_tab: boolean;
   enabled_modules: string[];
   default_view: string;
   theme_settings: {
-    terminal_style: 'cyberpunk' | 'classic' | 'minimal';
+    terminal_style: "cyberpunk" | "classic" | "minimal";
     animation_enabled: boolean;
     sound_enabled: boolean;
     matrix_background: boolean;
@@ -38,10 +38,19 @@ export interface UserPreferences {
 
 export const DEFAULT_PREFERENCES: UserPreferences = {
   show_content_tab: true,
-  enabled_modules: ['dashboard', 'kpis', 'ships', 'analytics', 'roadmap', 'cash', 'content'],
-  default_view: 'dashboard',
+  enabled_modules: [
+    "dashboard",
+    "kpis",
+    "ships",
+    "analytics",
+    "roadmap",
+    "cash",
+    "content",
+    "daily-review",
+  ],
+  default_view: "dashboard",
   theme_settings: {
-    terminal_style: 'cyberpunk',
+    terminal_style: "cyberpunk",
     animation_enabled: true,
     sound_enabled: false,
     matrix_background: true,
@@ -66,20 +75,64 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
 };
 
 export const AVAILABLE_MODULES = [
-  { id: 'dashboard', name: 'Dashboard', icon: 'LayoutDashboard', description: 'Main overview and metrics' },
-  { id: 'kpis', name: 'Weekly KPIs', icon: 'BarChart3', description: 'Track weekly performance indicators' },
-  { id: 'ships', name: 'Ships', icon: 'Ship', description: 'Track shipped work and commits' },
-  { id: 'analytics', name: 'Analytics', icon: 'TrendingUp', description: 'Comprehensive analytics and insights' },
-  { id: 'roadmap', name: 'Roadmap', icon: 'GitBranch', description: 'Goals and milestone tracking' },
-  { id: 'cash', name: 'Cash', icon: 'Network', description: 'Financial tracking and metrics' },
-  { id: 'content', name: 'Content', icon: 'FileText', description: 'Content creation and management' },
+  {
+    id: "dashboard",
+    name: "Dashboard",
+    icon: "LayoutDashboard",
+    description: "Main overview and metrics",
+  },
+  {
+    id: "kpis",
+    name: "Weekly KPIs",
+    icon: "BarChart3",
+    description: "Track weekly performance indicators",
+  },
+  {
+    id: "ships",
+    name: "Ships",
+    icon: "Ship",
+    description: "Track shipped work and commits",
+  },
+  {
+    id: "analytics",
+    name: "Analytics",
+    icon: "TrendingUp",
+    description: "Comprehensive analytics and insights",
+  },
+  {
+    id: "roadmap",
+    name: "Roadmap",
+    icon: "GitBranch",
+    description: "Goals and milestone tracking",
+  },
+  {
+    id: "cash",
+    name: "Cash",
+    icon: "Network",
+    description: "Financial tracking and metrics",
+  },
+  {
+    id: "content",
+    name: "Content",
+    icon: "FileText",
+    description: "Content creation and management",
+  },
+  {
+    id: "daily-review",
+    name: "Daily Review",
+    icon: "Calendar",
+    description: "Daily schedule and deep work review",
+  },
 ];
 
 export class UserPreferencesManager {
   // Get user preferences (with fallback to defaults)
   async getUserPreferences(): Promise<UserPreferences> {
     try {
-      const preferences = await userStorage.getUserConfig('user_preferences', DEFAULT_PREFERENCES);
+      const preferences = await userStorage.getUserConfig(
+        "user_preferences",
+        DEFAULT_PREFERENCES,
+      );
 
       // Merge with defaults to ensure all keys exist
       return {
@@ -103,7 +156,7 @@ export class UserPreferencesManager {
         },
       };
     } catch (error) {
-      console.error('Failed to get user preferences:', error);
+      console.error("Failed to get user preferences:", error);
       return DEFAULT_PREFERENCES;
     }
   }
@@ -112,7 +165,7 @@ export class UserPreferencesManager {
   async updatePreferences(updates: Partial<UserPreferences>): Promise<void> {
     try {
       const currentPrefs = await this.getUserPreferences();
-      
+
       const newPreferences = {
         ...currentPrefs,
         ...updates,
@@ -134,9 +187,9 @@ export class UserPreferencesManager {
         },
       };
 
-      await userStorage.setUserConfig('user_preferences', newPreferences);
+      await userStorage.setUserConfig("user_preferences", newPreferences);
     } catch (error) {
-      console.error('Failed to update user preferences:', error);
+      console.error("Failed to update user preferences:", error);
       throw error; // Re-throw so the UI can handle it
     }
   }
@@ -164,28 +217,36 @@ export class UserPreferencesManager {
   }
 
   // Update theme settings
-  async updateTheme(themeUpdates: Partial<UserPreferences['theme_settings']>): Promise<void> {
+  async updateTheme(
+    themeUpdates: Partial<UserPreferences["theme_settings"]>,
+  ): Promise<void> {
     await this.updatePreferences({
       theme_settings: themeUpdates,
     });
   }
 
   // Update KPI preferences
-  async updateKPIPreferences(kpiUpdates: Partial<UserPreferences['kpi_preferences']>): Promise<void> {
+  async updateKPIPreferences(
+    kpiUpdates: Partial<UserPreferences["kpi_preferences"]>,
+  ): Promise<void> {
     await this.updatePreferences({
       kpi_preferences: kpiUpdates,
     });
   }
 
   // Update dashboard layout
-  async updateDashboardLayout(layoutUpdates: Partial<UserPreferences['dashboard_layout']>): Promise<void> {
+  async updateDashboardLayout(
+    layoutUpdates: Partial<UserPreferences["dashboard_layout"]>,
+  ): Promise<void> {
     await this.updatePreferences({
       dashboard_layout: layoutUpdates,
     });
   }
 
   // Update cash layout
-  async updateCashLayout(layoutUpdates: Partial<UserPreferences['cash_layout']>): Promise<void> {
+  async updateCashLayout(
+    layoutUpdates: Partial<UserPreferences["cash_layout"]>,
+  ): Promise<void> {
     await this.updatePreferences({
       cash_layout: layoutUpdates,
     });
@@ -199,15 +260,18 @@ export class UserPreferencesManager {
   // Get enabled navigation items
   async getEnabledNavItems() {
     const preferences = await this.getUserPreferences();
-    return AVAILABLE_MODULES.filter(module =>
-      preferences.enabled_modules.includes(module.id)
+    return AVAILABLE_MODULES.filter((module) =>
+      preferences.enabled_modules.includes(module.id),
     );
   }
 
   // Content tab visibility
   async shouldShowContentTab(): Promise<boolean> {
     const preferences = await this.getUserPreferences();
-    return preferences.show_content_tab && preferences.enabled_modules.includes('content');
+    return (
+      preferences.show_content_tab &&
+      preferences.enabled_modules.includes("content")
+    );
   }
 
   // Dashboard component visibility
@@ -228,25 +292,25 @@ export class UserPreferencesManager {
       const preferences = JSON.parse(preferencesJson) as UserPreferences;
 
       // Validate that it has the required structure
-      if (typeof preferences !== 'object' || !preferences.enabled_modules) {
-        throw new Error('Invalid preferences format');
+      if (typeof preferences !== "object" || !preferences.enabled_modules) {
+        throw new Error("Invalid preferences format");
       }
 
       await this.updatePreferences(preferences);
       return true;
     } catch (error) {
-      console.error('Failed to import preferences:', error);
+      console.error("Failed to import preferences:", error);
       return false;
     }
   }
 
   // Reset to defaults
   async resetToDefaults(): Promise<void> {
-    await userStorage.setUserConfig('user_preferences', DEFAULT_PREFERENCES);
+    await userStorage.setUserConfig("user_preferences", DEFAULT_PREFERENCES);
   }
 
   // Theme-specific helpers
-  async getTerminalStyle(): Promise<'cyberpunk' | 'classic' | 'minimal'> {
+  async getTerminalStyle(): Promise<"cyberpunk" | "classic" | "minimal"> {
     const preferences = await this.getUserPreferences();
     return preferences.theme_settings.terminal_style;
   }

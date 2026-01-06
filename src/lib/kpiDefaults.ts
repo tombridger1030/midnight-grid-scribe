@@ -1,12 +1,24 @@
 /**
  * Default KPI Definitions
- * 
+ *
  * These are the 5 core KPIs that new users start with.
  * Users can customize targets and add their own KPIs.
  */
 
-export type KPIType = 'counter' | 'hours' | 'percentage' | 'training' | 'reading';
-export type AutoSyncSource = 'github_prs' | 'github_commits' | 'deep_work_timer' | 'youtube' | 'instagram' | 'twitter' | null;
+export type KPIType =
+  | "counter"
+  | "hours"
+  | "percentage"
+  | "training"
+  | "reading";
+export type AutoSyncSource =
+  | "github_prs"
+  | "github_commits"
+  | "deep_work_timer"
+  | "youtube"
+  | "instagram"
+  | "twitter"
+  | null;
 
 export interface DefaultKPI {
   kpi_id: string;
@@ -22,58 +34,80 @@ export interface DefaultKPI {
 
 export const DEFAULT_KPIS: DefaultKPI[] = [
   {
-    kpi_id: 'prs_created',
-    name: 'PRs Created',
-    target: 5,
-    unit: 'PRs',
-    color: '#4A90E2',
-    kpi_type: 'counter',
-    auto_sync_source: 'github_prs',
+    kpi_id: "deepWorkHours",
+    name: "Deep Work",
+    target: 40,
+    unit: "hours",
+    color: "#5FE3B3",
+    kpi_type: "hours",
+    auto_sync_source: "deep_work_timer",
     sort_order: 1,
     is_active: true,
   },
   {
-    kpi_id: 'deep_work_hours',
-    name: 'Deep Work',
-    target: 40,
-    unit: 'hours',
-    color: '#5FE3B3',
-    kpi_type: 'hours',
-    auto_sync_source: 'deep_work_timer',
+    kpi_id: "sleepAverage",
+    name: "Sleep Average",
+    target: 7,
+    unit: "hours",
+    color: "#9D4EDD",
+    kpi_type: "counter",
+    auto_sync_source: null,
     sort_order: 2,
     is_active: true,
   },
   {
-    kpi_id: 'content_posted',
-    name: 'Content Posted',
-    target: 7,
-    unit: 'posts',
-    color: '#F97316',
-    kpi_type: 'counter',
-    auto_sync_source: null,
+    kpi_id: "prRequests",
+    name: "PR Requests",
+    target: 3,
+    unit: "requests",
+    color: "#4A90E2",
+    kpi_type: "counter",
+    auto_sync_source: "github_prs",
     sort_order: 3,
     is_active: true,
   },
   {
-    kpi_id: 'training_sessions',
-    name: 'Training',
+    kpi_id: "strengthSessions",
+    name: "Training",
     target: 5,
-    unit: 'sessions',
-    color: '#FF073A',
-    kpi_type: 'training',
+    unit: "sessions",
+    color: "#FF073A",
+    kpi_type: "training",
     auto_sync_source: null,
     sort_order: 4,
     is_active: true,
   },
   {
-    kpi_id: 'reading_progress',
-    name: 'Reading',
-    target: null, // No default target - users can set pages/week if they want
-    unit: 'pages',
-    color: '#8B5CF6',
-    kpi_type: 'reading',
+    kpi_id: "pagesRead",
+    name: "Reading",
+    target: 100,
+    unit: "pages",
+    color: "#FFA500",
+    kpi_type: "reading",
     auto_sync_source: null,
     sort_order: 5,
+    is_active: true,
+  },
+  {
+    kpi_id: "avg_calories",
+    name: "Avg Calories",
+    target: 2000,
+    unit: "calories",
+    color: "#FF6B6B",
+    kpi_type: "counter",
+    auto_sync_source: null,
+    sort_order: 6,
+    is_active: true,
+  },
+  {
+    kpi_id: "avg_protein",
+    name: "Avg Protein",
+    target: 150,
+    unit: "grams",
+    color: "#4ECDC4",
+    kpi_type: "counter",
+    auto_sync_source: null,
+    sort_order: 7,
     is_active: true,
   },
 ];
@@ -88,16 +122,46 @@ export interface DefaultTrainingType {
 }
 
 export const DEFAULT_TRAINING_TYPES: DefaultTrainingType[] = [
-  { name: 'Strength', color: '#FF073A', icon: '💪', counts_toward_target: true, sort_order: 1 },
-  { name: 'BJJ', color: '#3B82F6', icon: '🥋', counts_toward_target: true, sort_order: 2 },
-  { name: 'Cardio', color: '#F97316', icon: '🏃', counts_toward_target: true, sort_order: 3 },
-  { name: 'Recovery', color: '#10B981', icon: '🧘', counts_toward_target: false, sort_order: 4 },
-  { name: 'Yoga', color: '#8B5CF6', icon: '🧘‍♀️', counts_toward_target: true, sort_order: 5 },
+  {
+    name: "Strength",
+    color: "#FF073A",
+    icon: "💪",
+    counts_toward_target: true,
+    sort_order: 1,
+  },
+  {
+    name: "BJJ",
+    color: "#3B82F6",
+    icon: "🥋",
+    counts_toward_target: true,
+    sort_order: 2,
+  },
+  {
+    name: "Cardio",
+    color: "#F97316",
+    icon: "🏃",
+    counts_toward_target: true,
+    sort_order: 3,
+  },
+  {
+    name: "Recovery",
+    color: "#10B981",
+    icon: "🧘",
+    counts_toward_target: false,
+    sort_order: 4,
+  },
+  {
+    name: "Yoga",
+    color: "#8B5CF6",
+    icon: "🧘‍♀️",
+    counts_toward_target: true,
+    sort_order: 5,
+  },
 ];
 
 // Book types
-export type BookType = 'physical' | 'ebook' | 'audiobook';
-export type BookStatus = 'reading' | 'completed' | 'abandoned' | 'paused';
+export type BookType = "physical" | "ebook" | "audiobook";
+export type BookStatus = "reading" | "completed" | "abandoned" | "paused";
 
 export interface Book {
   id: string;

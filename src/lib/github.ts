@@ -88,6 +88,7 @@ export function getGitHubConfig(): GitHubConfig {
   // Priority 1: User-saved settings via Settings UI (stored in localStorage)
   const localToken = localStorage.getItem("github_api_token");
   const localUsername = localStorage.getItem("github_username");
+  const localRepos = localStorage.getItem("github_repos");
 
   // Priority 2: Environment variables (for dev/deployment config)
   const envToken = import.meta.env.VITE_GITHUB_TOKEN;
@@ -102,8 +103,13 @@ export function getGitHubConfig(): GitHubConfig {
   const token = localToken || envToken;
   const username = localUsername || envUsername;
 
-  // Repos from env vars (could add UI for this later)
-  const repos = envRepos;
+  // Repos from localStorage or env vars
+  const repos = localRepos
+    ? localRepos
+        .split(",")
+        .map((r) => r.trim())
+        .filter(Boolean)
+    : envRepos;
 
   // Enabled if: we have a valid token (from either source)
   // Token from localStorage auto-enables; env token requires VITE_GITHUB_SYNC_ENABLED=true
@@ -776,7 +782,7 @@ let shipCache: {
   lastFetch: number;
 } | null = null;
 
-const SHIP_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
+const SHIP_CACHE_TTL = 2 * 60 * 1000; // 2 minutes
 
 /**
  * Fetch recent ships (commits and PRs) from GitHub

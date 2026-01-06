@@ -933,6 +933,7 @@ export class UserStorage {
   async getGithubSettings(): Promise<{
     api_token: string;
     username: string;
+    repos: string;
   } | null> {
     try {
       const settings = await this.getUserConfig("github_settings", null);
@@ -943,23 +944,26 @@ export class UserStorage {
       // Fallback to localStorage for backward compatibility
       const api_token = localStorage.getItem("github_api_token") || "";
       const username = localStorage.getItem("github_username") || "";
+      const repos = localStorage.getItem("github_repos") || "";
 
-      return { api_token, username };
+      return { api_token, username, repos };
     } catch (error) {
       console.error("Error getting GitHub settings:", error);
       // Fallback to localStorage
       const api_token = localStorage.getItem("github_api_token") || "";
       const username = localStorage.getItem("github_username") || "";
-      return { api_token, username };
+      const repos = localStorage.getItem("github_repos") || "";
+      return { api_token, username, repos };
     }
   }
 
   async saveGithubSettings(
     api_token: string,
     username: string,
+    repos: string,
   ): Promise<boolean> {
     try {
-      const settings = { api_token, username };
+      const settings = { api_token, username, repos };
 
       // Save to Supabase user_configs
       await this.setUserConfig("github_settings", settings);
@@ -967,6 +971,7 @@ export class UserStorage {
       // Also save to localStorage for immediate access and backward compatibility
       localStorage.setItem("github_api_token", api_token);
       localStorage.setItem("github_username", username);
+      localStorage.setItem("github_repos", repos);
 
       return true;
     } catch (error) {
@@ -976,6 +981,7 @@ export class UserStorage {
       try {
         localStorage.setItem("github_api_token", api_token);
         localStorage.setItem("github_username", username);
+        localStorage.setItem("github_repos", repos);
         return true;
       } catch (localError) {
         console.error("Failed to save GitHub settings anywhere:", localError);
@@ -990,11 +996,13 @@ export class UserStorage {
       await this.setUserConfig("github_settings", {
         api_token: "",
         username: "",
+        repos: "",
       });
 
       // Clear from localStorage
       localStorage.removeItem("github_api_token");
       localStorage.removeItem("github_username");
+      localStorage.removeItem("github_repos");
 
       return true;
     } catch (error) {
@@ -1004,6 +1012,7 @@ export class UserStorage {
       try {
         localStorage.removeItem("github_api_token");
         localStorage.removeItem("github_username");
+        localStorage.removeItem("github_repos");
         return true;
       } catch (localError) {
         console.error("Failed to clear GitHub settings:", localError);
@@ -1333,9 +1342,7 @@ export class UserStorage {
     }
   }
 
-  async addAvoidanceItem(
-    text: string,
-  ): Promise<{
+  async addAvoidanceItem(text: string): Promise<{
     id: string;
     text: string;
     isCompleted: boolean;

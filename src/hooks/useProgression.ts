@@ -1,12 +1,12 @@
 /**
  * useProgression Hook
- * 
+ *
  * Single hook for all progression functionality.
  * Replaces: useGamification, useGamificationMode, useGamificationFeatures, etc.
  */
 
-import { useEffect } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
+import { useEffect } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   useProgressionStore,
   useLevel,
@@ -17,8 +17,13 @@ import {
   useIsLoading,
   useIsInitialized,
   usePendingToasts,
-} from '@/stores/progressionStore';
-import { ACHIEVEMENTS, RANK_THRESHOLDS, getXPProgress, getRRProgress } from '@/lib/progression';
+} from "@/stores/progressionStore";
+import {
+  ACHIEVEMENTS,
+  RANK_THRESHOLDS,
+  getXPProgress,
+  getRRProgress,
+} from "@/lib/progression";
 
 /**
  * Main progression hook - use this for most cases
@@ -26,7 +31,7 @@ import { ACHIEVEMENTS, RANK_THRESHOLDS, getXPProgress, getRRProgress } from '@/l
 export function useProgression() {
   const { user } = useAuth();
   const store = useProgressionStore();
-  
+
   // Auto-initialize when user is available
   useEffect(() => {
     if (user?.id && !store.isInitialized && !store.isLoading) {
@@ -95,7 +100,7 @@ export function useLevelBadge() {
   const rank = useRank();
   const streak = useStreak();
   const isLoading = useIsLoading();
-  
+
   const rankInfo = RANK_THRESHOLDS[rank];
 
   return {
@@ -125,7 +130,7 @@ export function useAchievementToasts() {
 }
 
 /**
- * Hook for XP actions (to be used by ShipFeed, Content creation, etc.)
+ * Hook for XP actions (to be used by ShipFeed, Content creation, KPI hooks, etc.)
  */
 export function useXPActions() {
   const store = useProgressionStore();
@@ -134,6 +139,7 @@ export function useXPActions() {
     onShip: store.onShip,
     onContent: store.onContent,
     onWeekComplete: store.onWeekComplete,
+    onKPIEntry: store.onKPIEntry,
   };
 }
 
