@@ -6,7 +6,7 @@
 
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Clock } from "lucide-react";
+import { Clock, Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TimelineBlock as TimelineBlockType } from "@/lib/deepWorkService";
 
@@ -14,12 +14,16 @@ interface TimelineViewProps {
   blocks: TimelineBlockType[];
   onBlockClick?: (block: TimelineBlockType) => void;
   className?: string;
+  showAllHours?: boolean;
+  onToggleShowAllHours?: () => void;
 }
 
 export const TimelineView: React.FC<TimelineViewProps> = ({
   blocks,
   onBlockClick,
   className,
+  showAllHours = false,
+  onToggleShowAllHours,
 }) => {
   const [hoveredBlock, setHoveredBlock] = useState<TimelineBlockType | null>(
     null,
@@ -43,17 +47,33 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
           <Clock size={16} className="text-neon-cyan" />
           <span className="text-sm text-content-muted">15-min blocks</span>
         </div>
-        <div className="text-sm text-content-muted">
-          {coveragePercentage.toFixed(0)}% covered
+        <div className="flex items-center gap-3">
+          <div className="text-sm text-content-muted">
+            {coveragePercentage.toFixed(0)}% covered
+          </div>
+          <button
+            onClick={onToggleShowAllHours}
+            className={cn(
+              "flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium transition-colors",
+              showAllHours
+                ? "bg-terminal-accent text-black"
+                : "text-content-muted hover:text-content-primary hover:bg-surface-tertiary",
+            )}
+            title={showAllHours ? "Hide empty hours" : "Show all hours"}
+          >
+            {showAllHours ? <EyeOff size={14} /> : <Eye size={14} />}
+            <span>{showAllHours ? "All 24h" : "Compact"}</span>
+          </button>
         </div>
       </div>
 
       {/* Timeline grid */}
       <div className="space-y-1">
         {hourlyBlocks.map((hourBlocks, hourIndex) => {
-          // Skip completely empty hours to reduce clutter
+          // Skip completely empty hours to reduce clutter (unless showAllHours is true)
           const hasActivity = hourBlocks.some((b) => b.coverage > 0);
           const showHour =
+            showAllHours ||
             hasActivity ||
             hourIndex === 0 ||
             hourIndex === 6 ||

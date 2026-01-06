@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
-import { GoalStatus } from '@/components/roadmap/StatusIndicator';
-import { REALTIME_EVENTS } from '@/hooks/useRealtimeSync';
+import { useState, useEffect, useCallback } from "react";
+import { supabase } from "@/lib/supabase";
+import { GoalStatus } from "@/components/roadmap/StatusIndicator";
+import { REALTIME_EVENTS } from "@/hooks/useRealtimeSync";
 
 // Types (frontend uses camelCase)
 export interface Goal {
@@ -9,7 +9,7 @@ export interface Goal {
   name: string;
   yearlyTarget: number;
   unit: string;
-  source: 'kpi' | 'content' | 'manual';
+  source: "kpi" | "content" | "manual";
   connectedKpis?: string[];
   manualMonthly?: Record<string, number>;
 }
@@ -19,12 +19,12 @@ export interface GoalWithProgress extends Goal {
   progressPct: number;
   monthlyTarget: number;
   monthlyActuals: number[];
-  
+
   // v3 additions
   status: GoalStatus;
   trend: {
     percentChange: number;
-    direction: 'up' | 'flat' | 'down';
+    direction: "up" | "flat" | "down";
   };
   weeklyData: {
     current: number;
@@ -46,14 +46,27 @@ interface GoalRow {
   name: string;
   yearly_target: number;
   unit: string;
-  source: 'kpi' | 'content' | 'manual';
+  source: "kpi" | "content" | "manual";
   connected_kpis: string[] | null;
   manual_monthly: Record<string, number> | null;
   created_at: string;
   updated_at: string;
 }
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const MONTHS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
 
 // Convert DB row to frontend Goal
 const rowToGoal = (row: GoalRow): Goal => ({
@@ -67,7 +80,7 @@ const rowToGoal = (row: GoalRow): Goal => ({
 });
 
 // Convert frontend Goal to DB row (partial for inserts/updates)
-const goalToRow = (goal: Omit<Goal, 'id'> | Goal): Partial<GoalRow> => {
+const goalToRow = (goal: Omit<Goal, "id"> | Goal): Partial<GoalRow> => {
   const row: Partial<GoalRow> = {
     name: goal.name,
     yearly_target: goal.yearlyTarget,
@@ -76,7 +89,7 @@ const goalToRow = (goal: Omit<Goal, 'id'> | Goal): Partial<GoalRow> => {
     connected_kpis: goal.connectedKpis || [],
     manual_monthly: goal.manualMonthly || {},
   };
-  if ('id' in goal) {
+  if ("id" in goal) {
     row.id = goal.id;
   }
   return row;
@@ -84,7 +97,7 @@ const goalToRow = (goal: Omit<Goal, 'id'> | Goal): Partial<GoalRow> => {
 
 // Get week dates for a week key (handles fiscal year)
 const getWeekDates = (weekKey: string): { start: Date; end: Date } => {
-  const [year, week] = weekKey.split('-W').map(Number);
+  const [year, week] = weekKey.split("-W").map(Number);
   const fiscalStart = new Date(year, 8, 1); // September 1st
   const start = new Date(fiscalStart);
   start.setDate(fiscalStart.getDate() + (week - 1) * 7);
@@ -98,29 +111,34 @@ const getCurrentWeekKey = (): string => {
   const now = new Date();
   const year = now.getFullYear();
   const fiscalStart = new Date(year, 8, 1);
-  const effectiveStart = now >= fiscalStart ? fiscalStart : new Date(year - 1, 8, 1);
+  const effectiveStart =
+    now >= fiscalStart ? fiscalStart : new Date(year - 1, 8, 1);
   const msPerDay = 24 * 60 * 60 * 1000;
-  const dayIndex = Math.floor((now.getTime() - effectiveStart.getTime()) / msPerDay);
+  const dayIndex = Math.floor(
+    (now.getTime() - effectiveStart.getTime()) / msPerDay,
+  );
   const weekNumber = Math.floor(dayIndex / 7) + 1;
   const yearLabel = now >= fiscalStart ? year : year - 1;
-  return `${yearLabel}-W${weekNumber.toString().padStart(2, '0')}`;
+  return `${yearLabel}-W${weekNumber.toString().padStart(2, "0")}`;
 };
 
 // Calculate monthly totals from weekly KPI data
 const calculateMonthlyFromKPIs = (
   weeklyRecords: any[],
   kpiIds: string[],
-  year: number
+  year: number,
 ): number[] => {
   const monthlyTotals = new Array(12).fill(0);
 
-  weeklyRecords.forEach(record => {
+  weeklyRecords.forEach((record) => {
     const { start } = getWeekDates(record.week_key);
     if (start.getFullYear() !== year) return;
 
     const monthIndex = start.getMonth();
-    kpiIds.forEach(kpiId => {
-      const value = record.values?.[kpiId] || 0;
+    // Values are nested under data.values in the weekly_kpis table
+    const values = record.data?.values || record.values || {};
+    kpiIds.forEach((kpiId) => {
+      const value = values[kpiId] || 0;
       monthlyTotals[monthIndex] += value;
     });
   });
@@ -132,57 +150,64 @@ const calculateMonthlyFromKPIs = (
 const calculateWeeklyData = (
   weeklyRecords: any[],
   kpiIds: string[],
-  yearlyTarget: number
-): { current: number; last4Weeks: number[]; weeklyTarget: number; weeklyAverage: number } => {
+  yearlyTarget: number,
+): {
+  current: number;
+  last4Weeks: number[];
+  weeklyTarget: number;
+  weeklyAverage: number;
+} => {
   const currentWeekKey = getCurrentWeekKey();
   const weeklyTarget = yearlyTarget / 52;
-  
+
   // Sort records by week key descending
-  const sortedRecords = [...weeklyRecords].sort((a, b) => 
-    b.week_key.localeCompare(a.week_key)
+  const sortedRecords = [...weeklyRecords].sort((a, b) =>
+    b.week_key.localeCompare(a.week_key),
   );
-  
+
   // Get last 4 weeks of data
   const last4Weeks: number[] = [];
   let current = 0;
   let totalWeeks = 0;
   let totalValue = 0;
-  
-  sortedRecords.forEach(record => {
+
+  sortedRecords.forEach((record) => {
+    // Values are nested under data.values in the weekly_kpis table
+    const values = record.data?.values || record.values || {};
     let weekValue = 0;
-    kpiIds.forEach(kpiId => {
-      weekValue += record.values?.[kpiId] || 0;
+    kpiIds.forEach((kpiId) => {
+      weekValue += values[kpiId] || 0;
     });
-    
+
     if (record.week_key === currentWeekKey) {
       current = weekValue;
     }
-    
+
     if (last4Weeks.length < 4) {
       last4Weeks.push(weekValue);
     }
-    
+
     totalValue += weekValue;
     totalWeeks++;
   });
-  
+
   // Reverse to get chronological order
   last4Weeks.reverse();
-  
+
   const weeklyAverage = totalWeeks > 0 ? totalValue / totalWeeks : 0;
-  
+
   return { current, last4Weeks, weeklyTarget, weeklyAverage };
 };
 
 // Calculate monthly follower growth from content metrics
 const calculateMonthlyFollowers = (
   contentMetrics: any[],
-  year: number
+  year: number,
 ): { monthlyGrowth: number[]; cumulative: number } => {
   const monthlyGrowth = new Array(12).fill(0);
   let cumulative = 0;
 
-  contentMetrics.forEach(metric => {
+  contentMetrics.forEach((metric) => {
     const date = new Date(metric.snapshot_date || metric.created_at);
     if (date.getFullYear() !== year) return;
 
@@ -196,29 +221,38 @@ const calculateMonthlyFollowers = (
 };
 
 // Calculate status based on pace
-const calculateStatus = (currentTotal: number, yearlyTarget: number): GoalStatus => {
+const calculateStatus = (
+  currentTotal: number,
+  yearlyTarget: number,
+): GoalStatus => {
   const currentMonth = new Date().getMonth();
   const expectedPace = ((currentMonth + 1) / 12) * yearlyTarget;
   const paceRatio = currentTotal / expectedPace;
-  
-  if (paceRatio >= 1) return 'on-pace';
-  if (paceRatio >= 0.75) return 'slightly-behind';
-  return 'behind';
+
+  if (paceRatio >= 1) return "on-pace";
+  if (paceRatio >= 0.75) return "slightly-behind";
+  return "behind";
 };
 
 // Calculate trend
-const calculateTrend = (monthlyActuals: number[]): { percentChange: number; direction: 'up' | 'flat' | 'down' } => {
+const calculateTrend = (
+  monthlyActuals: number[],
+): { percentChange: number; direction: "up" | "flat" | "down" } => {
   const currentMonth = new Date().getMonth();
   const current = monthlyActuals[currentMonth] || 0;
   const previous = currentMonth > 0 ? monthlyActuals[currentMonth - 1] || 0 : 0;
-  
+
   if (previous === 0) {
-    return { percentChange: current > 0 ? 100 : 0, direction: current > 0 ? 'up' : 'flat' };
+    return {
+      percentChange: current > 0 ? 100 : 0,
+      direction: current > 0 ? "up" : "flat",
+    };
   }
-  
+
   const percentChange = ((current - previous) / previous) * 100;
-  const direction = percentChange > 5 ? 'up' : percentChange < -5 ? 'down' : 'flat';
-  
+  const direction =
+    percentChange > 5 ? "up" : percentChange < -5 ? "down" : "flat";
+
   return { percentChange, direction };
 };
 
@@ -236,50 +270,62 @@ export const useGoals = () => {
     try {
       // 1. Fetch goals
       const { data: goalsData, error: goalsError } = await supabase
-        .from('goals_v2')
-        .select('*')
-        .order('created_at', { ascending: true });
+        .from("goals_v2")
+        .select("*")
+        .order("created_at", { ascending: true });
 
       if (goalsError) {
-        console.error('Error fetching goals:', goalsError);
+        console.error("Error fetching goals:", goalsError);
         setGoals([]);
         setIsLoading(false);
         return;
       }
 
       // Convert rows to frontend format
-      const rawGoals: Goal[] = (goalsData as GoalRow[] || []).map(rowToGoal);
+      const rawGoals: Goal[] = ((goalsData as GoalRow[]) || []).map(rowToGoal);
 
-      // 2. Fetch weekly KPIs for current year
+      // 2. Fetch weekly KPIs for current fiscal year
+      // Note: Use fiscal year (September start) for week_key matching
+      // Current fiscal year: if currentMonth >= 8 (Sept), it's currentYear, else currentYear-1
+      const fiscalYear = currentMonth >= 8 ? currentYear : currentYear - 1;
       const { data: weeklyKPIs } = await supabase
-        .from('weekly_kpi_entries')
-        .select('week_key, values')
-        .like('week_key', `${currentYear}%`);
+        .from("weekly_kpis")
+        .select("week_key, data")
+        .like("week_key", `${fiscalYear}%`);
 
       // 3. Fetch content metrics for followers
       const { data: contentMetrics } = await supabase
-        .from('content_metrics')
-        .select('follows, snapshot_date, created_at')
-        .gte('created_at', `${currentYear}-01-01`);
+        .from("content_metrics")
+        .select("follows, snapshot_date, created_at")
+        .gte("created_at", `${currentYear}-01-01`);
 
       // 4. Calculate progress for each goal
-      const goalsWithProgress: GoalWithProgress[] = rawGoals.map(goal => {
+      const goalsWithProgress: GoalWithProgress[] = rawGoals.map((goal) => {
         let monthlyActuals: number[] = new Array(12).fill(0);
         let currentTotal = 0;
-        let weeklyData = { current: 0, last4Weeks: [0, 0, 0, 0], weeklyTarget: goal.yearlyTarget / 52, weeklyAverage: 0 };
+        let weeklyData = {
+          current: 0,
+          last4Weeks: [0, 0, 0, 0],
+          weeklyTarget: goal.yearlyTarget / 52,
+          weeklyAverage: 0,
+        };
 
-        if (goal.source === 'kpi' && goal.connectedKpis?.length) {
+        if (goal.source === "kpi" && goal.connectedKpis?.length) {
           monthlyActuals = calculateMonthlyFromKPIs(
             weeklyKPIs || [],
             goal.connectedKpis,
-            currentYear
+            currentYear,
           );
           currentTotal = monthlyActuals.reduce((sum, v) => sum + v, 0);
-          weeklyData = calculateWeeklyData(weeklyKPIs || [], goal.connectedKpis, goal.yearlyTarget);
-        } else if (goal.source === 'content') {
+          weeklyData = calculateWeeklyData(
+            weeklyKPIs || [],
+            goal.connectedKpis,
+            goal.yearlyTarget,
+          );
+        } else if (goal.source === "content") {
           const { monthlyGrowth, cumulative } = calculateMonthlyFollowers(
             contentMetrics || [],
-            currentYear
+            currentYear,
           );
           monthlyActuals = monthlyGrowth;
           currentTotal = cumulative;
@@ -288,24 +334,32 @@ export const useGoals = () => {
           weeklyData = {
             current: Math.round(currentMonthValue / 4),
             last4Weeks: [
-              Math.round((monthlyActuals[Math.max(0, currentMonth - 1)] || 0) / 4),
-              Math.round((monthlyActuals[Math.max(0, currentMonth - 1)] || 0) / 4),
+              Math.round(
+                (monthlyActuals[Math.max(0, currentMonth - 1)] || 0) / 4,
+              ),
+              Math.round(
+                (monthlyActuals[Math.max(0, currentMonth - 1)] || 0) / 4,
+              ),
               Math.round(currentMonthValue / 4),
               Math.round(currentMonthValue / 4),
             ],
             weeklyTarget: goal.yearlyTarget / 52,
             weeklyAverage: currentTotal / Math.max(1, currentMonth + 1) / 4,
           };
-        } else if (goal.source === 'manual' && goal.manualMonthly) {
-          monthlyActuals = MONTHS.map(m => goal.manualMonthly?.[m] || 0);
+        } else if (goal.source === "manual" && goal.manualMonthly) {
+          monthlyActuals = MONTHS.map((m) => goal.manualMonthly?.[m] || 0);
           currentTotal = monthlyActuals.reduce((sum, v) => sum + v, 0);
           // For manual, estimate weekly from monthly
           const currentMonthValue = monthlyActuals[currentMonth] || 0;
           weeklyData = {
             current: Math.round(currentMonthValue / 4),
             last4Weeks: [
-              Math.round((monthlyActuals[Math.max(0, currentMonth - 1)] || 0) / 4),
-              Math.round((monthlyActuals[Math.max(0, currentMonth - 1)] || 0) / 4),
+              Math.round(
+                (monthlyActuals[Math.max(0, currentMonth - 1)] || 0) / 4,
+              ),
+              Math.round(
+                (monthlyActuals[Math.max(0, currentMonth - 1)] || 0) / 4,
+              ),
               Math.round(currentMonthValue / 4),
               Math.round(currentMonthValue / 4),
             ],
@@ -321,7 +375,8 @@ export const useGoals = () => {
         return {
           ...goal,
           currentTotal,
-          progressPct: goal.yearlyTarget > 0 ? currentTotal / goal.yearlyTarget : 0,
+          progressPct:
+            goal.yearlyTarget > 0 ? currentTotal / goal.yearlyTarget : 0,
           monthlyTarget: goal.yearlyTarget / 12,
           monthlyActuals,
           status: calculateStatus(currentTotal, goal.yearlyTarget),
@@ -329,7 +384,8 @@ export const useGoals = () => {
           weeklyData,
           remaining: {
             amount: remaining,
-            perMonth: monthsRemaining > 0 ? remaining / monthsRemaining : remaining,
+            perMonth:
+              monthsRemaining > 0 ? remaining / monthsRemaining : remaining,
           },
           expectedPace,
         };
@@ -337,75 +393,84 @@ export const useGoals = () => {
 
       setGoals(goalsWithProgress);
     } catch (error) {
-      console.error('Error in fetchGoals:', error);
+      console.error("Error in fetchGoals:", error);
     } finally {
       setIsLoading(false);
     }
   }, [currentYear, currentMonth]);
 
   // Add a new goal
-  const addGoal = useCallback(async (goal: Omit<Goal, 'id'>) => {
-    // Get current user
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      console.error('No authenticated user');
-      throw new Error('Not authenticated');
-    }
+  const addGoal = useCallback(
+    async (goal: Omit<Goal, "id">) => {
+      // Get current user
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        console.error("No authenticated user");
+        throw new Error("Not authenticated");
+      }
 
-    const row = {
-      ...goalToRow(goal),
-      user_id: user.id,
-    };
+      const row = {
+        ...goalToRow(goal),
+        user_id: user.id,
+      };
 
-    const { error } = await supabase
-      .from('goals_v2')
-      .insert(row);
+      const { error } = await supabase.from("goals_v2").insert(row);
 
-    if (error) {
-      console.error('Error adding goal:', error);
-      throw error;
-    }
+      if (error) {
+        console.error("Error adding goal:", error);
+        throw error;
+      }
 
-    await fetchGoals();
-  }, [fetchGoals]);
+      await fetchGoals();
+    },
+    [fetchGoals],
+  );
 
   // Update an existing goal
-  const updateGoal = useCallback(async (id: string, updates: Partial<Goal>) => {
-    const row: Record<string, any> = {};
-    if (updates.name !== undefined) row.name = updates.name;
-    if (updates.yearlyTarget !== undefined) row.yearly_target = updates.yearlyTarget;
-    if (updates.unit !== undefined) row.unit = updates.unit;
-    if (updates.source !== undefined) row.source = updates.source;
-    if (updates.connectedKpis !== undefined) row.connected_kpis = updates.connectedKpis || [];
-    if (updates.manualMonthly !== undefined) row.manual_monthly = updates.manualMonthly || {};
+  const updateGoal = useCallback(
+    async (id: string, updates: Partial<Goal>) => {
+      const row: Record<string, any> = {};
+      if (updates.name !== undefined) row.name = updates.name;
+      if (updates.yearlyTarget !== undefined)
+        row.yearly_target = updates.yearlyTarget;
+      if (updates.unit !== undefined) row.unit = updates.unit;
+      if (updates.source !== undefined) row.source = updates.source;
+      if (updates.connectedKpis !== undefined)
+        row.connected_kpis = updates.connectedKpis || [];
+      if (updates.manualMonthly !== undefined)
+        row.manual_monthly = updates.manualMonthly || {};
 
-    const { error } = await supabase
-      .from('goals_v2')
-      .update(row)
-      .eq('id', id);
+      const { error } = await supabase
+        .from("goals_v2")
+        .update(row)
+        .eq("id", id);
 
-    if (error) {
-      console.error('Error updating goal:', error);
-      throw error;
-    }
+      if (error) {
+        console.error("Error updating goal:", error);
+        throw error;
+      }
 
-    await fetchGoals();
-  }, [fetchGoals]);
+      await fetchGoals();
+    },
+    [fetchGoals],
+  );
 
   // Delete a goal
-  const deleteGoal = useCallback(async (id: string) => {
-    const { error } = await supabase
-      .from('goals_v2')
-      .delete()
-      .eq('id', id);
+  const deleteGoal = useCallback(
+    async (id: string) => {
+      const { error } = await supabase.from("goals_v2").delete().eq("id", id);
 
-    if (error) {
-      console.error('Error deleting goal:', error);
-      throw error;
-    }
+      if (error) {
+        console.error("Error deleting goal:", error);
+        throw error;
+      }
 
-    await fetchGoals();
-  }, [fetchGoals]);
+      await fetchGoals();
+    },
+    [fetchGoals],
+  );
 
   // Initial fetch
   useEffect(() => {
@@ -415,7 +480,7 @@ export const useGoals = () => {
   // Listen for real-time KPI updates to refresh goal progress
   useEffect(() => {
     const handleKPIUpdate = () => {
-      console.log('[Goals] KPI update detected, refreshing goal progress...');
+      console.log("[Goals] KPI update detected, refreshing goal progress...");
       fetchGoals();
     };
 
@@ -426,7 +491,10 @@ export const useGoals = () => {
     return () => {
       window.removeEventListener(REALTIME_EVENTS.KPI_UPDATED, handleKPIUpdate);
       window.removeEventListener(REALTIME_EVENTS.GOAL_UPDATED, handleKPIUpdate);
-      window.removeEventListener(REALTIME_EVENTS.CONTENT_UPDATED, handleKPIUpdate);
+      window.removeEventListener(
+        REALTIME_EVENTS.CONTENT_UPDATED,
+        handleKPIUpdate,
+      );
     };
   }, [fetchGoals]);
 

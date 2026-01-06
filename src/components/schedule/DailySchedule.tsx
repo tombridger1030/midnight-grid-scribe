@@ -16,6 +16,7 @@ import {
   Grid,
   List,
   Settings,
+  Pencil,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -27,6 +28,7 @@ import { useActivityCategories } from "@/hooks/useActivityCategories";
 import { CategorySummaryCards } from "./CategorySummaryCards";
 import { TimelineView } from "./TimelineView";
 import { ManualSessionEntry } from "./ManualSessionEntry";
+import { EditSessionDialog } from "./EditSessionDialog";
 
 type ViewMode = "timeline" | "list";
 
@@ -63,8 +65,12 @@ export const DailySchedule: React.FC<DailyScheduleProps> = ({ className }) => {
   const [timelineBlocks, setTimelineBlocks] = useState<TimelineBlock[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("timeline");
+  const [showAllHours, setShowAllHours] = useState(false);
   const [showManualEntry, setShowManualEntry] = useState(false);
   const [showCategoryManager, setShowCategoryManager] = useState(false);
+  const [editingSession, setEditingSession] = useState<ScheduleSession | null>(
+    null,
+  );
 
   const {
     categories,
@@ -331,6 +337,8 @@ export const DailySchedule: React.FC<DailyScheduleProps> = ({ className }) => {
                   <TimelineView
                     blocks={timelineBlocks}
                     onBlockClick={handleBlockClick}
+                    showAllHours={showAllHours}
+                    onToggleShowAllHours={() => setShowAllHours(!showAllHours)}
                   />
                 </div>
               </motion.div>
@@ -408,15 +416,24 @@ export const DailySchedule: React.FC<DailyScheduleProps> = ({ className }) => {
                                     </span>
                                   )}
                                 </div>
-                                <div className="text-right shrink-0">
-                                  <div className="font-mono text-sm font-semibold text-content-primary">
-                                    {session.durationFormatted}
+                                <div className="flex items-center gap-3 text-right shrink-0">
+                                  <div>
+                                    <div className="font-mono text-sm font-semibold text-content-primary">
+                                      {session.durationFormatted}
+                                    </div>
+                                    {session.isActive && (
+                                      <span className="text-xs text-neon-cyan">
+                                        Active
+                                      </span>
+                                    )}
                                   </div>
-                                  {session.isActive && (
-                                    <span className="text-xs text-neon-cyan">
-                                      Active
-                                    </span>
-                                  )}
+                                  <button
+                                    onClick={() => setEditingSession(session)}
+                                    className="p-1.5 rounded-md hover:bg-surface-tertiary transition-colors text-content-muted hover:text-content-primary"
+                                    aria-label="Edit session"
+                                  >
+                                    <Pencil size={14} />
+                                  </button>
                                 </div>
                               </div>
                               <div className="flex items-center gap-2 mt-1 text-xs text-content-muted">
@@ -453,6 +470,17 @@ export const DailySchedule: React.FC<DailyScheduleProps> = ({ className }) => {
         categories={categories}
         defaultCategoryId={defaultCategory?.id || "cat_work"}
       />
+
+      {/* Edit Session Dialog */}
+      {editingSession && (
+        <EditSessionDialog
+          session={editingSession}
+          categories={categories}
+          isOpen={!!editingSession}
+          onClose={() => setEditingSession(null)}
+          onSave={() => loadSchedule(currentDate)}
+        />
+      )}
 
       {/* Category Manager Dialog - TODO: implement */}
     </>
