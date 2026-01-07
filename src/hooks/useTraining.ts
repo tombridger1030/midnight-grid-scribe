@@ -336,7 +336,7 @@ export function useTraining(weekKey: string): UseTrainingReturn {
   // Sync training sessions count to weekly KPI system
   useEffect(() => {
     if (user?.id && weekKey) {
-      updateWeeklyKPIRecord(user.id, weekKey, {
+      updateWeeklyKPIRecord(weekKey, {
         strengthSessions: countingSessionCount,
         bjjSessions: countingSessionCount,
       });

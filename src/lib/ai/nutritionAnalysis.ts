@@ -501,6 +501,22 @@ export async function getMealItems(
 }
 
 /**
+ * Delete a meal item by ID
+ */
+export async function deleteMealItem(itemId: string): Promise<void> {
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) throw new Error("Not authenticated");
+
+  const { error } = await supabase
+    .from("meal_items")
+    .delete()
+    .eq("id", itemId)
+    .eq("user_id", userData.user.id);
+
+  if (error) throw error;
+}
+
+/**
  * Search for food items in the user's catalog
  */
 export async function searchFoodItems(

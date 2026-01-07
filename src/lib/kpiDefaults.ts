@@ -55,6 +55,28 @@ export const DEFAULT_KPIS: DefaultKPI[] = [
     sort_order: 2,
     is_active: true,
   },
+  {
+    kpi_id: "training",
+    name: "Training",
+    target: 5,
+    unit: "sessions",
+    color: "#FF073A",
+    kpi_type: "training",
+    auto_sync_source: null,
+    sort_order: 3,
+    is_active: true,
+  },
+  {
+    kpi_id: "reading",
+    name: "Reading",
+    target: 100,
+    unit: "pages",
+    color: "#FFA500",
+    kpi_type: "reading",
+    auto_sync_source: null,
+    sort_order: 4,
+    is_active: true,
+  },
 ];
 
 // Default training types for new users

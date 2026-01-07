@@ -18,6 +18,7 @@ import {
   Scale,
   BookOpen,
   DollarSign,
+  GitPullRequest,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
@@ -25,11 +26,18 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/contexts/AuthContext";
 import { REALTIME_EVENTS } from "@/hooks/useRealtimeSync";
+import { getPRsCreatedOnDate } from "@/lib/github";
 
 interface ChecklistItem {
   id: string;
   name: string;
-  category: "deep work" | "fitness" | "health" | "learning" | "finance";
+  category:
+    | "deep work"
+    | "fitness"
+    | "health"
+    | "learning"
+    | "finance"
+    | "engineering";
   isComplete: boolean;
   value?: string; // Display value when complete (e.g., "3 sessions")
   onClick: () => void;
@@ -48,6 +56,7 @@ const CATEGORY_COLORS = {
   health: "#9D4EDD",
   learning: "#FFA500",
   finance: "#FFD700",
+  engineering: "#4A90E2",
 };
 
 // Icon components for each category
@@ -55,6 +64,8 @@ const getCategoryIcon = (item: { id: string; category: string }) => {
   switch (item.id) {
     case "deep-work":
       return Zap;
+    case "prs-created":
+      return GitPullRequest;
     case "training":
       return Dumbbell;
     case "sleep":
@@ -95,6 +106,13 @@ export const DailyChecklist: React.FC<DailyChecklistProps> = ({
         category: "deep work",
         isComplete: false,
         onClick: () => navigate("/kpis#deep-work-kpi"),
+      },
+      {
+        id: "prs-created",
+        name: "PRs Created",
+        category: "engineering",
+        isComplete: false,
+        onClick: () => navigate("/kpis#ship-kpi"),
       },
       {
         id: "nutrition",
@@ -155,6 +173,7 @@ export const DailyChecklist: React.FC<DailyChecklistProps> = ({
         trainingResult,
         readingResult,
         deepWorkResult,
+        prsCreatedCount,
       ] = await Promise.all([
         // Nutrition
         supabase
@@ -198,50 +217,11 @@ export const DailyChecklist: React.FC<DailyChecklistProps> = ({
           .eq("user_id", user.id)
           .gte("start_time", new Date(dateStr + "T00:00:00").toISOString())
           .lt("start_time", new Date(dateStr + "T23:59:59").toISOString()),
+        // PRs Created (from GitHub API)
+        getPRsCreatedOnDate(dateStr),
       ]);
 
-      // Check Nutrition
-      const nutritionData = nutritionResult.data;
-      const hasNutrition =
-        nutritionData &&
-        (nutritionData.breakfast_calories || 0) +
-          (nutritionData.lunch_calories || 0) +
-          (nutritionData.dinner_calories || 0) +
-          (nutritionData.snacks_calories || 0) >
-          0;
-      checklistItems[1].isComplete = !!hasNutrition;
-
-      // Check Sleep
-      const sleepData = sleepResult.data;
-      const hasSleep = sleepData && sleepData.hours > 0;
-      checklistItems[2].isComplete = !!hasSleep;
-
-      // Check Weight
-      const weightData = weightResult.data;
-      const hasWeight = weightData && weightData.weight_lbs > 0;
-      checklistItems[3].isComplete = !!hasWeight;
-
-      // Check Training
-      const trainingSessions = trainingResult.data || [];
-      const hasTraining = trainingSessions.length > 0;
-      checklistItems[4].isComplete = hasTraining;
-      if (hasTraining) {
-        checklistItems[4].value = `${trainingSessions.length} session${trainingSessions.length !== 1 ? "s" : ""}`;
-      }
-
-      // Check Reading
-      const readingProgress = readingResult.data || [];
-      const totalPagesRead = (readingProgress as any[]).reduce(
-        (sum: number, r: any) => sum + (r.pages_read || 0),
-        0,
-      );
-      const hasReading = totalPagesRead > 0;
-      checklistItems[5].isComplete = hasReading;
-      if (hasReading) {
-        checklistItems[5].value = `${totalPagesRead} page${totalPagesRead !== 1 ? "s" : ""}`;
-      }
-
-      // Check Deep Work
+      // Check Deep Work (index 0)
       const deepWorkSessions = deepWorkResult.data || [];
       const hasDeepWork = deepWorkSessions.length > 0;
       checklistItems[0].isComplete = hasDeepWork;
@@ -253,7 +233,55 @@ export const DailyChecklist: React.FC<DailyChecklistProps> = ({
         checklistItems[0].value = `${totalHours.toFixed(1)}h`;
       }
 
-      // Check Expenses from localStorage
+      // Check PRs Created (index 1)
+      const hasPRs = prsCreatedCount > 0;
+      checklistItems[1].isComplete = hasPRs;
+      if (hasPRs) {
+        checklistItems[1].value = `${prsCreatedCount} PR${prsCreatedCount !== 1 ? "s" : ""}`;
+      }
+
+      // Check Nutrition (index 2)
+      const nutritionData = nutritionResult.data;
+      const hasNutrition =
+        nutritionData &&
+        (nutritionData.breakfast_calories || 0) +
+          (nutritionData.lunch_calories || 0) +
+          (nutritionData.dinner_calories || 0) +
+          (nutritionData.snacks_calories || 0) >
+          0;
+      checklistItems[2].isComplete = !!hasNutrition;
+
+      // Check Sleep (index 3)
+      const sleepData = sleepResult.data;
+      const hasSleep = sleepData && sleepData.hours > 0;
+      checklistItems[3].isComplete = !!hasSleep;
+
+      // Check Weight (index 4)
+      const weightData = weightResult.data;
+      const hasWeight = weightData && weightData.weight_lbs > 0;
+      checklistItems[4].isComplete = !!hasWeight;
+
+      // Check Training (index 5)
+      const trainingSessions = trainingResult.data || [];
+      const hasTraining = trainingSessions.length > 0;
+      checklistItems[5].isComplete = hasTraining;
+      if (hasTraining) {
+        checklistItems[5].value = `${trainingSessions.length} session${trainingSessions.length !== 1 ? "s" : ""}`;
+      }
+
+      // Check Reading (index 6)
+      const readingProgress = readingResult.data || [];
+      const totalPagesRead = (readingProgress as any[]).reduce(
+        (sum: number, r: any) => sum + (r.pages_read || 0),
+        0,
+      );
+      const hasReading = totalPagesRead > 0;
+      checklistItems[6].isComplete = hasReading;
+      if (hasReading) {
+        checklistItems[6].value = `${totalPagesRead} page${totalPagesRead !== 1 ? "s" : ""}`;
+      }
+
+      // Check Expenses from localStorage (index 7)
       const cashData = localStorage.getItem("noctisium-cash-data");
       if (cashData) {
         const parsed = JSON.parse(cashData);
@@ -262,14 +290,14 @@ export const DailyChecklist: React.FC<DailyChecklistProps> = ({
           (e: { date: string }) => e.date === dateStr,
         );
         const hasExpenses = todayExpenses.length > 0;
-        checklistItems[6].isComplete = hasExpenses;
+        checklistItems[7].isComplete = hasExpenses;
 
         if (hasExpenses) {
           const total = todayExpenses.reduce(
             (sum: number, e: { amount: number }) => sum + e.amount,
             0,
           );
-          checklistItems[6].value = `$${total.toFixed(0)}`;
+          checklistItems[7].value = `$${total.toFixed(0)}`;
         }
       }
     } catch (error) {

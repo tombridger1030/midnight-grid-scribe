@@ -20,6 +20,7 @@ import {
   Type,
   Scale,
   X,
+  Edit2 as EditPencil,
 } from "lucide-react";
 import { colors } from "@/styles/design-tokens";
 import { getCurrentLocalDate } from "@/lib/dateUtils";
@@ -32,6 +33,8 @@ import {
   FoodItem,
   saveFoodItems,
   saveMealItems,
+  getMealItems,
+  deleteMealItem,
 } from "@/lib/ai/nutritionAnalysis";
 import { toast } from "sonner";
 import { Check, Trash2, Edit2 } from "lucide-react";
@@ -46,6 +49,8 @@ interface NutritionKPIProps {
   targetProtein: number;
   onUpdateMeal: (date: string, meal: MealType, data: MealData) => void;
   weekDates: { start: Date; end: Date };
+  onUpdateCaloriesTarget?: (target: number) => void;
+  onUpdateProteinTarget?: (target: number) => void;
 }
 
 const MEALS: { key: MealType; label: string; icon: string }[] = [
@@ -64,9 +69,17 @@ export const NutritionKPI: React.FC<NutritionKPIProps> = ({
   targetProtein,
   onUpdateMeal,
   weekDates,
+  onUpdateCaloriesTarget,
+  onUpdateProteinTarget,
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(true);
   const [expandedDay, setExpandedDay] = useState<string | null>(null);
+
+  // Target editing state
+  const [isEditingCalories, setIsEditingCalories] = useState(false);
+  const [isEditingProtein, setIsEditingProtein] = useState(false);
+  const [editCaloriesTarget, setEditCaloriesTarget] = useState(targetCalories);
+  const [editProteinTarget, setEditProteinTarget] = useState(targetProtein);
 
   // AI Input state
   const [showAIInput, setShowAIInput] = useState(false);
@@ -99,6 +112,22 @@ export const NutritionKPI: React.FC<NutritionKPIProps> = ({
   >([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
+
+  // Meal items state (for viewing logged food items per meal)
+  const [expandedMeal, setExpandedMeal] = useState<{
+    date: string;
+    meal: MealType;
+  } | null>(null);
+  const [mealItems, setMealItems] = useState<
+    Array<{
+      id: string;
+      name: string;
+      serving_size: string | null;
+      calories: number;
+      protein_g: number;
+    }>
+  >([]);
+  const [loadingMealItems, setLoadingMealItems] = useState(false);
 
   // Ref for dropdown click outside handling
   const suggestionsRef = useRef<HTMLDivElement>(null);
@@ -419,6 +448,63 @@ export const NutritionKPI: React.FC<NutritionKPIProps> = ({
     setEditItemData(null);
   };
 
+  // Toggle meal expansion and load items
+  const toggleMealExpansion = async (date: string, meal: MealType) => {
+    const isSameMeal =
+      expandedMeal?.date === date && expandedMeal?.meal === meal;
+
+    if (isSameMeal) {
+      setExpandedMeal(null);
+      setMealItems([]);
+      return;
+    }
+
+    setExpandedMeal({ date, meal });
+    setLoadingMealItems(true);
+
+    try {
+      const items = await getMealItems(date, meal);
+      setMealItems(items);
+    } catch (error) {
+      console.error("Failed to load meal items:", error);
+      toast.error("Failed to load meal items");
+      setMealItems([]);
+    } finally {
+      setLoadingMealItems(false);
+    }
+  };
+
+  // Handle deleting a meal item
+  const handleDeleteMealItem = async (
+    itemId: string,
+    date: string,
+    meal: MealType,
+  ) => {
+    const itemToDelete = mealItems.find((item) => item.id === itemId);
+    if (!itemToDelete) return;
+
+    try {
+      await deleteMealItem(itemId);
+
+      // Update local state
+      setMealItems((prev) => prev.filter((item) => item.id !== itemId));
+
+      // Update daily totals (subtract the deleted item)
+      const currentCalories = weekData[date]?.[`${meal}_calories`] || 0;
+      const currentProtein = weekData[date]?.[`${meal}_protein`] || 0;
+
+      onUpdateMeal(date, meal, {
+        calories: Math.max(0, currentCalories - itemToDelete.calories),
+        protein: Math.max(0, currentProtein - itemToDelete.protein_g),
+      });
+
+      toast.success(`Removed ${itemToDelete.name}`);
+    } catch (error) {
+      console.error("Failed to delete meal item:", error);
+      toast.error("Failed to delete item");
+    }
+  };
+
   return (
     <motion.div
       className="p-4 rounded-lg"
@@ -508,12 +594,77 @@ export const NutritionKPI: React.FC<NutritionKPIProps> = ({
                   >
                     {dailyAverage.calories}
                   </span>
-                  <span
-                    className="text-xs"
-                    style={{ color: colors.text.muted }}
-                  >
-                    /{targetCalories}
-                  </span>
+                  {isEditingCalories ? (
+                    <span className="flex items-center gap-1">
+                      /
+                      <input
+                        type="number"
+                        min="100"
+                        step="50"
+                        value={editCaloriesTarget}
+                        onChange={(e) =>
+                          setEditCaloriesTarget(parseInt(e.target.value) || 100)
+                        }
+                        onClick={(e) => e.stopPropagation()}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.stopPropagation();
+                            onUpdateCaloriesTarget?.(editCaloriesTarget);
+                            setIsEditingCalories(false);
+                          } else if (e.key === "Escape") {
+                            e.stopPropagation();
+                            setEditCaloriesTarget(targetCalories);
+                            setIsEditingCalories(false);
+                          }
+                        }}
+                        className="w-16 px-1 py-0.5 rounded text-xs font-mono"
+                        style={{
+                          backgroundColor: colors.background.elevated,
+                          border: `1px solid ${colors.primary.DEFAULT}`,
+                          color: colors.text.primary,
+                        }}
+                        autoFocus
+                      />
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onUpdateCaloriesTarget?.(editCaloriesTarget);
+                          setIsEditingCalories(false);
+                        }}
+                        className="p-0.5 rounded hover:bg-white/10"
+                      >
+                        <Check
+                          size={12}
+                          style={{ color: colors.success.DEFAULT }}
+                        />
+                      </button>
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-1">
+                      <span
+                        className="text-xs"
+                        style={{ color: colors.text.muted }}
+                      >
+                        /{targetCalories}
+                      </span>
+                      {onUpdateCaloriesTarget && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditCaloriesTarget(targetCalories);
+                            setIsEditingCalories(true);
+                          }}
+                          className="p-0.5 rounded hover:bg-white/10 opacity-50 hover:opacity-100"
+                          title="Edit target"
+                        >
+                          <EditPencil
+                            size={10}
+                            style={{ color: colors.text.muted }}
+                          />
+                        </button>
+                      )}
+                    </span>
+                  )}
                 </div>
                 <div
                   className="h-1.5 rounded-full mt-2 overflow-hidden"
@@ -550,12 +701,78 @@ export const NutritionKPI: React.FC<NutritionKPIProps> = ({
                   >
                     {dailyAverage.protein}g
                   </span>
-                  <span
-                    className="text-xs"
-                    style={{ color: colors.text.muted }}
-                  >
-                    /{targetProtein}g
-                  </span>
+                  {isEditingProtein ? (
+                    <span className="flex items-center gap-1">
+                      /
+                      <input
+                        type="number"
+                        min="10"
+                        step="5"
+                        value={editProteinTarget}
+                        onChange={(e) =>
+                          setEditProteinTarget(parseInt(e.target.value) || 10)
+                        }
+                        onClick={(e) => e.stopPropagation()}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.stopPropagation();
+                            onUpdateProteinTarget?.(editProteinTarget);
+                            setIsEditingProtein(false);
+                          } else if (e.key === "Escape") {
+                            e.stopPropagation();
+                            setEditProteinTarget(targetProtein);
+                            setIsEditingProtein(false);
+                          }
+                        }}
+                        className="w-14 px-1 py-0.5 rounded text-xs font-mono"
+                        style={{
+                          backgroundColor: colors.background.elevated,
+                          border: `1px solid ${colors.primary.DEFAULT}`,
+                          color: colors.text.primary,
+                        }}
+                        autoFocus
+                      />
+                      g
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onUpdateProteinTarget?.(editProteinTarget);
+                          setIsEditingProtein(false);
+                        }}
+                        className="p-0.5 rounded hover:bg-white/10"
+                      >
+                        <Check
+                          size={12}
+                          style={{ color: colors.success.DEFAULT }}
+                        />
+                      </button>
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-1">
+                      <span
+                        className="text-xs"
+                        style={{ color: colors.text.muted }}
+                      >
+                        /{targetProtein}g
+                      </span>
+                      {onUpdateProteinTarget && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditProteinTarget(targetProtein);
+                            setIsEditingProtein(true);
+                          }}
+                          className="p-0.5 rounded hover:bg-white/10 opacity-50 hover:opacity-100"
+                          title="Edit target"
+                        >
+                          <EditPencil
+                            size={10}
+                            style={{ color: colors.text.muted }}
+                          />
+                        </button>
+                      )}
+                    </span>
+                  )}
                 </div>
                 <div
                   className="h-1.5 rounded-full mt-2 overflow-hidden"
@@ -1421,83 +1638,245 @@ export const NutritionKPI: React.FC<NutritionKPIProps> = ({
                               border: `1px solid ${colors.border.DEFAULT}`,
                             }}
                           >
-                            {MEALS.map((meal) => (
-                              <div key={meal.key} className="space-y-2">
-                                <div className="flex items-center gap-2">
-                                  <span>{meal.icon}</span>
-                                  <span
-                                    className="text-xs font-medium"
-                                    style={{ color: colors.text.secondary }}
+                            {MEALS.map((meal) => {
+                              const isMealExpanded =
+                                expandedMeal?.date === date &&
+                                expandedMeal?.meal === meal.key;
+                              const mealCalories =
+                                dayData?.[`${meal.key}_calories`] || 0;
+                              const mealProtein =
+                                dayData?.[`${meal.key}_protein`] || 0;
+
+                              return (
+                                <div key={meal.key} className="space-y-2">
+                                  {/* Meal Header - Clickable */}
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      toggleMealExpansion(date, meal.key);
+                                    }}
+                                    className="w-full flex items-center justify-between"
                                   >
-                                    {meal.label}
-                                  </span>
-                                </div>
-                                <div className="grid grid-cols-2 gap-2">
-                                  <div className="flex items-center gap-2">
-                                    <input
-                                      type="number"
-                                      placeholder="Cal"
-                                      value={
-                                        dayData?.[`${meal.key}_calories`] || ""
-                                      }
-                                      onChange={(e) =>
-                                        handleMealUpdate(
-                                          date,
-                                          meal.key,
-                                          "calories",
-                                          parseInt(e.target.value) || 0,
-                                        )
-                                      }
-                                      onClick={(e) => e.stopPropagation()}
-                                      className="w-full px-2 py-1.5 rounded text-sm font-mono"
-                                      style={{
-                                        backgroundColor:
-                                          colors.background.elevated,
-                                        border: `1px solid ${colors.border.DEFAULT}`,
-                                        color: colors.text.primary,
-                                      }}
-                                    />
-                                    <span
-                                      className="text-xs"
-                                      style={{ color: colors.text.muted }}
-                                    >
-                                      cal
-                                    </span>
+                                    <div className="flex items-center gap-2">
+                                      <span>{meal.icon}</span>
+                                      <span
+                                        className="text-xs font-medium"
+                                        style={{ color: colors.text.secondary }}
+                                      >
+                                        {meal.label}
+                                      </span>
+                                      {mealCalories > 0 && (
+                                        <span
+                                          className="text-xs font-mono"
+                                          style={{ color: colors.text.muted }}
+                                        >
+                                          ({mealCalories} cal, {mealProtein}g)
+                                        </span>
+                                      )}
+                                    </div>
+                                    {isMealExpanded ? (
+                                      <ChevronUp
+                                        size={12}
+                                        style={{ color: colors.text.muted }}
+                                      />
+                                    ) : (
+                                      <ChevronDown
+                                        size={12}
+                                        style={{ color: colors.text.muted }}
+                                      />
+                                    )}
+                                  </button>
+
+                                  {/* Input Fields */}
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <div className="flex items-center gap-2">
+                                      <input
+                                        type="number"
+                                        placeholder="Cal"
+                                        value={
+                                          dayData?.[`${meal.key}_calories`] ||
+                                          ""
+                                        }
+                                        onChange={(e) =>
+                                          handleMealUpdate(
+                                            date,
+                                            meal.key,
+                                            "calories",
+                                            parseInt(e.target.value) || 0,
+                                          )
+                                        }
+                                        onClick={(e) => e.stopPropagation()}
+                                        className="w-full px-2 py-1.5 rounded text-sm font-mono"
+                                        style={{
+                                          backgroundColor:
+                                            colors.background.elevated,
+                                          border: `1px solid ${colors.border.DEFAULT}`,
+                                          color: colors.text.primary,
+                                        }}
+                                      />
+                                      <span
+                                        className="text-xs"
+                                        style={{ color: colors.text.muted }}
+                                      >
+                                        cal
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <input
+                                        type="number"
+                                        placeholder="Protein"
+                                        value={
+                                          dayData?.[`${meal.key}_protein`] || ""
+                                        }
+                                        onChange={(e) =>
+                                          handleMealUpdate(
+                                            date,
+                                            meal.key,
+                                            "protein",
+                                            parseInt(e.target.value) || 0,
+                                          )
+                                        }
+                                        onClick={(e) => e.stopPropagation()}
+                                        className="w-full px-2 py-1.5 rounded text-sm font-mono"
+                                        style={{
+                                          backgroundColor:
+                                            colors.background.elevated,
+                                          border: `1px solid ${colors.border.DEFAULT}`,
+                                          color: colors.text.primary,
+                                        }}
+                                      />
+                                      <span
+                                        className="text-xs"
+                                        style={{ color: colors.text.muted }}
+                                      >
+                                        g
+                                      </span>
+                                    </div>
                                   </div>
-                                  <div className="flex items-center gap-2">
-                                    <input
-                                      type="number"
-                                      placeholder="Protein"
-                                      value={
-                                        dayData?.[`${meal.key}_protein`] || ""
-                                      }
-                                      onChange={(e) =>
-                                        handleMealUpdate(
-                                          date,
-                                          meal.key,
-                                          "protein",
-                                          parseInt(e.target.value) || 0,
-                                        )
-                                      }
-                                      onClick={(e) => e.stopPropagation()}
-                                      className="w-full px-2 py-1.5 rounded text-sm font-mono"
-                                      style={{
-                                        backgroundColor:
-                                          colors.background.elevated,
-                                        border: `1px solid ${colors.border.DEFAULT}`,
-                                        color: colors.text.primary,
-                                      }}
-                                    />
-                                    <span
-                                      className="text-xs"
-                                      style={{ color: colors.text.muted }}
-                                    >
-                                      g
-                                    </span>
-                                  </div>
+
+                                  {/* Food Items List */}
+                                  <AnimatePresence>
+                                    {isMealExpanded && (
+                                      <motion.div
+                                        initial={{ height: 0, opacity: 0 }}
+                                        animate={{ height: "auto", opacity: 1 }}
+                                        exit={{ height: 0, opacity: 0 }}
+                                        transition={{ duration: 0.15 }}
+                                        className="overflow-hidden"
+                                      >
+                                        <div
+                                          className="mt-2 p-2 rounded-md space-y-1"
+                                          style={{
+                                            backgroundColor:
+                                              colors.background.elevated,
+                                            border: `1px solid ${colors.border.DEFAULT}`,
+                                          }}
+                                        >
+                                          {loadingMealItems ? (
+                                            <div className="flex items-center justify-center py-2">
+                                              <motion.div
+                                                animate={{ rotate: 360 }}
+                                                transition={{
+                                                  duration: 1,
+                                                  repeat: Infinity,
+                                                  ease: "linear",
+                                                }}
+                                              >
+                                                <Sparkles
+                                                  size={14}
+                                                  style={{
+                                                    color:
+                                                      colors.primary.DEFAULT,
+                                                  }}
+                                                />
+                                              </motion.div>
+                                            </div>
+                                          ) : mealItems.length === 0 ? (
+                                            <div
+                                              className="text-xs text-center py-2"
+                                              style={{
+                                                color: colors.text.muted,
+                                              }}
+                                            >
+                                              No items logged
+                                            </div>
+                                          ) : (
+                                            mealItems.map((item) => (
+                                              <div
+                                                key={item.id}
+                                                className="flex items-center justify-between py-1 px-1 rounded hover:bg-white/5"
+                                              >
+                                                <div className="flex-1 min-w-0">
+                                                  <div
+                                                    className="text-xs truncate"
+                                                    style={{
+                                                      color:
+                                                        colors.text.primary,
+                                                    }}
+                                                  >
+                                                    {item.name}
+                                                    {item.serving_size && (
+                                                      <span
+                                                        style={{
+                                                          color:
+                                                            colors.text.muted,
+                                                        }}
+                                                      >
+                                                        {" "}
+                                                        ({item.serving_size})
+                                                      </span>
+                                                    )}
+                                                  </div>
+                                                  <div className="flex items-center gap-2 text-xs font-mono">
+                                                    <span
+                                                      style={{
+                                                        color:
+                                                          colors.danger.DEFAULT,
+                                                      }}
+                                                    >
+                                                      {item.calories} cal
+                                                    </span>
+                                                    <span
+                                                      style={{
+                                                        color:
+                                                          colors.success
+                                                            .DEFAULT,
+                                                      }}
+                                                    >
+                                                      {item.protein_g}g
+                                                    </span>
+                                                  </div>
+                                                </div>
+                                                <button
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleDeleteMealItem(
+                                                      item.id,
+                                                      date,
+                                                      meal.key,
+                                                    );
+                                                  }}
+                                                  className="p-1 rounded hover:bg-white/10"
+                                                  title="Delete item"
+                                                >
+                                                  <Trash2
+                                                    size={12}
+                                                    style={{
+                                                      color:
+                                                        colors.danger.DEFAULT,
+                                                    }}
+                                                  />
+                                                </button>
+                                              </div>
+                                            ))
+                                          )}
+                                        </div>
+                                      </motion.div>
+                                    )}
+                                  </AnimatePresence>
                                 </div>
-                              </div>
-                            ))}
+                              );
+                            })}
                           </div>
                         </motion.div>
                       )}

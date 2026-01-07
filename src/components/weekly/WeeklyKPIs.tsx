@@ -25,9 +25,14 @@ import { ReadingKPI } from "./ReadingKPI";
 import { NutritionKPI } from "./NutritionKPI";
 import { SleepKPI } from "./SleepKPI";
 import { WeightKPI } from "./WeightKPI";
+import { DeepWorkKPI } from "./DeepWorkKPI";
+import { PRsKPI } from "./PRsKPI";
+import { GenericDailyKPI } from "./GenericDailyKPI";
 import { WeeklyHistory } from "./WeeklyHistory";
 import { DEFAULT_KPIS } from "@/lib/kpiDefaults";
 import { getRecentWeeks, loadWeeklyKPIs } from "@/lib/weeklyKpi";
+import { kpiManager } from "@/lib/configurableKpis";
+import { toast } from "sonner";
 
 interface WeeklyKPIsProps {
   className?: string;
@@ -133,6 +138,89 @@ export const WeeklyKPIs: React.FC<WeeklyKPIsProps> = ({ className }) => {
   const targetSleep = sleepTargetKpi?.target ?? 7;
   const targetWeight = weightTargetKpi?.target ?? 180;
 
+  // Target update callbacks
+  const handleUpdateTrainingTarget = useCallback(
+    async (target: number) => {
+      try {
+        // First ensure training KPI exists in database
+        const existingTraining = kpis.find((k) => k.kpi_type === "training");
+        if (existingTraining) {
+          await kpiManager.updateKPI("training", { target });
+        } else {
+          // Create training KPI from default
+          const defaultTraining = DEFAULT_KPIS.find(
+            (k) => k.kpi_type === "training",
+          );
+          if (defaultTraining) {
+            await kpiManager.saveKPI({ ...defaultTraining, target });
+          }
+        }
+        toast.success("Training target updated");
+        refreshData();
+      } catch (error) {
+        console.error("Failed to update training target:", error);
+        toast.error("Failed to update target");
+      }
+    },
+    [kpis, refreshData],
+  );
+
+  const handleUpdateCaloriesTarget = useCallback(
+    async (target: number) => {
+      try {
+        await kpiManager.updateKPI("avg_calories", { target });
+        toast.success("Calories target updated");
+        refreshData();
+      } catch (error) {
+        console.error("Failed to update calories target:", error);
+        toast.error("Failed to update target");
+      }
+    },
+    [refreshData],
+  );
+
+  const handleUpdateProteinTarget = useCallback(
+    async (target: number) => {
+      try {
+        await kpiManager.updateKPI("avg_protein", { target });
+        toast.success("Protein target updated");
+        refreshData();
+      } catch (error) {
+        console.error("Failed to update protein target:", error);
+        toast.error("Failed to update target");
+      }
+    },
+    [refreshData],
+  );
+
+  const handleUpdateSleepTarget = useCallback(
+    async (target: number) => {
+      try {
+        await kpiManager.updateKPI("sleepTarget", { target });
+        toast.success("Sleep target updated");
+        refreshData();
+      } catch (error) {
+        console.error("Failed to update sleep target:", error);
+        toast.error("Failed to update target");
+      }
+    },
+    [refreshData],
+  );
+
+  const handleUpdateWeightTarget = useCallback(
+    async (target: number) => {
+      try {
+        await kpiManager.updateKPI("weightTarget", { target });
+        toast.success("Weight target updated");
+        refreshData();
+      } catch (error) {
+        console.error("Failed to update weight target:", error);
+        toast.error("Failed to update target");
+      }
+    },
+    [refreshData],
+  );
+
   // Auto-sync data
   const { kpiValueMapping, isSyncing, syncNow } = useAutoSync(weekKey);
 
@@ -225,9 +313,30 @@ export const WeeklyKPIs: React.FC<WeeklyKPIsProps> = ({ className }) => {
   }, []);
 
   // Filter KPIs by type - with fallback to defaults for Training and Reading
+  // Exclude deepWorkHours and prRequests as they have dedicated components
+  // Also exclude KPIs with daily_breakdown display_mode (rendered separately)
   const simpleKpis = kpis.filter(
-    (k) => k.kpi_type !== "training" && k.kpi_type !== "reading",
+    (k) =>
+      k.kpi_type !== "training" &&
+      k.kpi_type !== "reading" &&
+      k.kpi_id !== "deepWorkHours" &&
+      k.kpi_id !== "prRequests" &&
+      k.display_mode !== "daily_breakdown",
   );
+
+  // Get KPIs with daily breakdown display mode
+  const dailyBreakdownKpis = kpis.filter(
+    (k) =>
+      k.display_mode === "daily_breakdown" &&
+      k.kpi_id !== "deepWorkHours" &&
+      k.kpi_id !== "prRequests",
+  );
+
+  // Get targets for dedicated KPI components
+  const deepWorkKpi = kpis.find((k) => k.kpi_id === "deepWorkHours");
+  const prRequestsKpi = kpis.find((k) => k.kpi_id === "prRequests");
+  const deepWorkTarget = deepWorkKpi?.target ?? 30;
+  const prsTarget = prRequestsKpi?.target ?? 5;
 
   // Always show Training/Reading with fallback to defaults if not in user's KPIs
   const trainingKpi =
@@ -400,7 +509,6 @@ export const WeeklyKPIs: React.FC<WeeklyKPIsProps> = ({ className }) => {
         {simpleKpis.map((kpi, index) => (
           <motion.div
             key={kpi.kpi_id}
-            id={kpi.kpi_id === "deepWorkHours" ? "deep-work-kpi" : undefined}
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: index * 0.05, duration: 0.3 }}
@@ -422,6 +530,43 @@ export const WeeklyKPIs: React.FC<WeeklyKPIsProps> = ({ className }) => {
         ))}
       </motion.div>
 
+      {/* Deep Work KPI with daily breakdown */}
+      <motion.div variants={itemVariants} id="deep-work-kpi">
+        <DeepWorkKPI target={deepWorkTarget} weekDates={weekDates} />
+      </motion.div>
+
+      {/* PRs Created KPI with daily breakdown */}
+      <motion.div variants={itemVariants} id="ship-kpi">
+        <PRsKPI target={prsTarget} weekDates={weekDates} />
+      </motion.div>
+
+      {/* Generic Daily Breakdown KPIs */}
+      {dailyBreakdownKpis.map((kpi) => (
+        <motion.div
+          key={kpi.kpi_id}
+          variants={itemVariants}
+          id={`${kpi.kpi_id}-kpi`}
+        >
+          <GenericDailyKPI
+            name={kpi.name}
+            kpiId={kpi.kpi_id}
+            target={kpi.target || 0}
+            unit={kpi.unit}
+            color={kpi.color}
+            totalValue={mergedValues[kpi.kpi_id] || 0}
+            dailyValues={[]}
+            weekDates={weekDates}
+            onUpdateDayValue={(date, value) => {
+              // For now, update the weekly total
+              // In the future, we could store per-day values
+              const currentTotal = mergedValues[kpi.kpi_id] || 0;
+              const newTotal = currentTotal + value;
+              updateValue(kpi.kpi_id, newTotal);
+            }}
+          />
+        </motion.div>
+      ))}
+
       {/* Training KPI - Always rendered */}
       {trainingKpi && (
         <motion.div variants={itemVariants} id="training-kpi">
@@ -435,6 +580,7 @@ export const WeeklyKPIs: React.FC<WeeklyKPIsProps> = ({ className }) => {
             onAddSession={addSession}
             onRemoveSession={removeSession}
             onAddType={addTrainingType}
+            onUpdateTarget={handleUpdateTrainingTarget}
           />
         </motion.div>
       )}
@@ -469,6 +615,8 @@ export const WeeklyKPIs: React.FC<WeeklyKPIsProps> = ({ className }) => {
           targetProtein={targetProtein}
           onUpdateMeal={updateMeal}
           weekDates={weekDates}
+          onUpdateCaloriesTarget={handleUpdateCaloriesTarget}
+          onUpdateProteinTarget={handleUpdateProteinTarget}
         />
       </motion.div>
 
@@ -482,6 +630,7 @@ export const WeeklyKPIs: React.FC<WeeklyKPIsProps> = ({ className }) => {
           targetSleep={targetSleep}
           onUpdateDay={updateSleep}
           weekDates={weekDates}
+          onUpdateTarget={handleUpdateSleepTarget}
         />
       </motion.div>
 
@@ -491,9 +640,10 @@ export const WeeklyKPIs: React.FC<WeeklyKPIsProps> = ({ className }) => {
           weekData={weightData}
           weeklyStats={weightStats}
           daysTracked={weightDaysTracked}
-          targetWeight={targetWeight}
+          targetLbs={targetWeight}
           onUpdateDay={updateWeight}
           weekDates={weekDates}
+          onUpdateTarget={handleUpdateWeightTarget}
         />
       </motion.div>
 

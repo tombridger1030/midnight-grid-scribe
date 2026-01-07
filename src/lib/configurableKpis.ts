@@ -1,7 +1,13 @@
-import { userStorage } from './userStorage';
-import { supabase } from './supabase';
+import { userStorage } from "./userStorage";
+import { supabase } from "./supabase";
 
-export type AutoSyncSource = 'github_prs' | 'github_commits' | 'deep_work_timer' | null;
+export type AutoSyncSource =
+  | "github_prs"
+  | "github_commits"
+  | "deep_work_timer"
+  | null;
+
+export type DisplayMode = "simple" | "daily_breakdown";
 
 export interface ConfigurableKPI {
   id: string;
@@ -17,6 +23,7 @@ export interface ConfigurableKPI {
   reverse_scoring?: boolean; // If true, lower values are better (e.g., screen time). If false, higher values are better
   equal_is_better?: boolean; // If true, being exactly at target is best, scores decrease as you move away in either direction
   auto_sync_source?: AutoSyncSource; // External data source for auto-sync
+  display_mode?: DisplayMode; // 'simple' for basic counter, 'daily_breakdown' for collapsible daily view
   sort_order: number;
   weight?: number; // Weight for weekly completion contribution (default 1)
   created_at?: string;
@@ -38,107 +45,110 @@ export interface ConfigurableKPIData {
 }
 
 // Default KPI templates that users can choose from
-export const DEFAULT_KPI_TEMPLATES: Omit<ConfigurableKPI, 'id' | 'created_at' | 'updated_at'>[] = [
+export const DEFAULT_KPI_TEMPLATES: Omit<
+  ConfigurableKPI,
+  "id" | "created_at" | "updated_at"
+>[] = [
   // DISCIPLINE KPIs
   {
-    kpi_id: 'deepWorkHours',
-    name: 'Deep Work Hours',
+    kpi_id: "deepWorkHours",
+    name: "Deep Work Hours",
     target: 40,
     min_target: 30,
-    unit: 'hours',
-    category: 'discipline',
-    color: '#5FE3B3',
+    unit: "hours",
+    category: "discipline",
+    color: "#5FE3B3",
     is_active: true,
-    sort_order: 1
+    sort_order: 1,
   },
   {
-    kpi_id: 'sleepAverage',
-    name: 'Sleep Average',
+    kpi_id: "sleepAverage",
+    name: "Sleep Average",
     target: 7,
     min_target: 6,
-    unit: 'hours/night',
-    category: 'discipline',
-    color: '#9D4EDD',
+    unit: "hours/night",
+    category: "discipline",
+    color: "#9D4EDD",
     is_active: true,
     is_average: true,
-    sort_order: 2
+    sort_order: 2,
   },
   {
-    kpi_id: 'noCompromises',
-    name: 'No Compromises',
+    kpi_id: "noCompromises",
+    name: "No Compromises",
     target: 7,
-    unit: 'days',
-    category: 'discipline',
-    color: '#FFD700',
+    unit: "days",
+    category: "discipline",
+    color: "#FFD700",
     is_active: true,
-    sort_order: 3
+    sort_order: 3,
   },
 
   // ENGINEERING KPIs
   {
-    kpi_id: 'prRequests',
-    name: 'PR Requests',
+    kpi_id: "prRequests",
+    name: "PR Requests",
     target: 3,
-    unit: 'requests',
-    category: 'engineering',
-    color: '#4A90E2',
+    unit: "requests",
+    category: "engineering",
+    color: "#4A90E2",
     is_active: true,
-    sort_order: 4
+    sort_order: 4,
   },
   {
-    kpi_id: 'bugsClosed',
-    name: 'Bugs Closed',
+    kpi_id: "bugsClosed",
+    name: "Bugs Closed",
     target: 10,
-    unit: 'bugs',
-    category: 'engineering',
-    color: '#FF6B6B',
+    unit: "bugs",
+    category: "engineering",
+    color: "#FF6B6B",
     is_active: true,
-    sort_order: 5
+    sort_order: 5,
   },
   {
-    kpi_id: 'contentShipped',
-    name: 'Content Shipped',
+    kpi_id: "contentShipped",
+    name: "Content Shipped",
     target: 5,
-    unit: 'items',
-    category: 'engineering',
-    color: '#00CED1',
+    unit: "items",
+    category: "engineering",
+    color: "#00CED1",
     is_active: true,
-    sort_order: 6
+    sort_order: 6,
   },
 
   // LEARNING KPIs
   {
-    kpi_id: 'pagesRead',
-    name: 'Pages Read',
+    kpi_id: "pagesRead",
+    name: "Pages Read",
     target: 100,
-    unit: 'pages',
-    category: 'learning',
-    color: '#FFA500',
+    unit: "pages",
+    category: "learning",
+    color: "#FFA500",
     is_active: true,
-    sort_order: 7
+    sort_order: 7,
   },
   {
-    kpi_id: 'audiobookPercent',
-    name: 'Audiobook Listened',
+    kpi_id: "audiobookPercent",
+    name: "Audiobook Listened",
     target: 100,
-    unit: '%',
-    category: 'learning',
-    color: '#DA70D6',
+    unit: "%",
+    category: "learning",
+    color: "#DA70D6",
     is_active: true,
-    sort_order: 8
-  }
+    sort_order: 8,
+  },
 ];
 
 // KPI category colors and metadata
 export const KPI_CATEGORIES: Record<string, { color: string; icon: string }> = {
-  discipline: { color: '#5FE3B3', icon: '🧘' },
-  engineering: { color: '#E67E22', icon: '⚙️' },
-  learning: { color: '#9B59B6', icon: '📚' },
-  fitness: { color: '#FF073A', icon: '💪' },
-  health: { color: '#2ECC71', icon: '❤️' },
-  productivity: { color: '#3498DB', icon: '⚡' },
-  social: { color: '#F39C12', icon: '👥' },
-  custom: { color: '#95A5A6', icon: '🎯' }
+  discipline: { color: "#5FE3B3", icon: "🧘" },
+  engineering: { color: "#E67E22", icon: "⚙️" },
+  learning: { color: "#9B59B6", icon: "📚" },
+  fitness: { color: "#FF073A", icon: "💪" },
+  health: { color: "#2ECC71", icon: "❤️" },
+  productivity: { color: "#3498DB", icon: "⚡" },
+  social: { color: "#F39C12", icon: "👥" },
+  custom: { color: "#95A5A6", icon: "🎯" },
 };
 
 export class ConfigurableKPIManager {
@@ -149,8 +159,9 @@ export class ConfigurableKPIManager {
       // Overlay temporary weights from hybrid storage if DB schema not updated yet
       let weightOverlay: Record<string, number> = {};
       try {
-        const maybe = await userStorage.getHybridData('kpi_weights', {});
-        if (maybe && typeof maybe === 'object') weightOverlay = maybe as Record<string, number>;
+        const maybe = await userStorage.getHybridData("kpi_weights", {});
+        if (maybe && typeof maybe === "object")
+          weightOverlay = maybe as Record<string, number>;
       } catch {}
 
       return kpis.map((kpi: any) => ({
@@ -167,15 +178,19 @@ export class ConfigurableKPIManager {
         reverse_scoring: kpi.reverse_scoring || false,
         equal_is_better: kpi.equal_is_better || false,
         auto_sync_source: kpi.auto_sync_source || null,
+        display_mode: kpi.display_mode || "simple",
         sort_order: kpi.sort_order,
-        weight: (typeof weightOverlay[kpi.kpi_id] === 'number')
-          ? Number(weightOverlay[kpi.kpi_id])
-          : (typeof kpi.weight !== 'undefined' && kpi.weight !== null ? parseFloat(kpi.weight) : 1),
+        weight:
+          typeof weightOverlay[kpi.kpi_id] === "number"
+            ? Number(weightOverlay[kpi.kpi_id])
+            : typeof kpi.weight !== "undefined" && kpi.weight !== null
+              ? parseFloat(kpi.weight)
+              : 1,
         created_at: kpi.created_at,
-        updated_at: kpi.updated_at
+        updated_at: kpi.updated_at,
       }));
     } catch (error) {
-      console.error('Failed to get user KPIs:', error);
+      console.error("Failed to get user KPIs:", error);
       return [];
     }
   }
@@ -183,16 +198,18 @@ export class ConfigurableKPIManager {
   // Get only active KPIs for UI display
   async getActiveKPIs(): Promise<ConfigurableKPI[]> {
     const allKPIs = await this.getUserKPIs();
-    return allKPIs.filter(kpi => kpi.is_active);
+    return allKPIs.filter((kpi) => kpi.is_active);
   }
 
   // Add or update a KPI
-  async saveKPI(kpiData: Omit<ConfigurableKPI, 'id' | 'created_at' | 'updated_at'>): Promise<ConfigurableKPI | null> {
+  async saveKPI(
+    kpiData: Omit<ConfigurableKPI, "id" | "created_at" | "updated_at">,
+  ): Promise<ConfigurableKPI | null> {
     try {
       const savedKPI = await userStorage.setUserKPI(kpiData);
       return savedKPI;
     } catch (error) {
-      console.error('Failed to save KPI:', error);
+      console.error("Failed to save KPI:", error);
       return null;
     }
   }
@@ -202,31 +219,32 @@ export class ConfigurableKPIManager {
     name: string,
     target: number,
     unit: string,
-    category: string = 'custom',
+    category: string = "custom",
     color?: string,
     minTarget?: number,
     isAverage?: boolean,
     reverseScoring?: boolean,
     equalIsBetter?: boolean,
-    weight: number = 1
+    weight: number = 1,
   ): Promise<ConfigurableKPI | null> {
-    const kpiId = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const kpiId = name.toLowerCase().replace(/[^a-z0-9]/g, "");
 
-    const customKPI: Omit<ConfigurableKPI, 'id' | 'created_at' | 'updated_at'> = {
-      kpi_id: kpiId,
-      name,
-      target,
-      min_target: minTarget,
-      unit,
-      category,
-      color: color || KPI_CATEGORIES[category]?.color || '#95A5A6',
-      is_active: true,
-      is_average: isAverage || false,
-      reverse_scoring: reverseScoring || false,
-      equal_is_better: equalIsBetter || false,
-      weight,
-      sort_order: 999 // Custom KPIs go to the end
-    };
+    const customKPI: Omit<ConfigurableKPI, "id" | "created_at" | "updated_at"> =
+      {
+        kpi_id: kpiId,
+        name,
+        target,
+        min_target: minTarget,
+        unit,
+        category,
+        color: color || KPI_CATEGORIES[category]?.color || "#95A5A6",
+        is_active: true,
+        is_average: isAverage || false,
+        reverse_scoring: reverseScoring || false,
+        equal_is_better: equalIsBetter || false,
+        weight,
+        sort_order: 999, // Custom KPIs go to the end
+      };
 
     return await this.saveKPI(customKPI);
   }
@@ -235,34 +253,38 @@ export class ConfigurableKPIManager {
   async toggleKPIActive(kpiId: string, isActive: boolean): Promise<void> {
     try {
       const kpis = await this.getUserKPIs();
-      const kpi = kpis.find(k => k.kpi_id === kpiId);
+      const kpi = kpis.find((k) => k.kpi_id === kpiId);
 
       if (kpi) {
         await this.saveKPI({
           ...kpi,
-          is_active: isActive
+          is_active: isActive,
         });
       }
     } catch (error) {
-      console.error('Failed to toggle KPI active status:', error);
+      console.error("Failed to toggle KPI active status:", error);
     }
   }
 
   // Update KPI target
-  async updateKPITarget(kpiId: string, target: number, minTarget?: number): Promise<void> {
+  async updateKPITarget(
+    kpiId: string,
+    target: number,
+    minTarget?: number,
+  ): Promise<void> {
     try {
       const kpis = await this.getUserKPIs();
-      const kpi = kpis.find(k => k.kpi_id === kpiId);
+      const kpi = kpis.find((k) => k.kpi_id === kpiId);
 
       if (kpi) {
         await this.saveKPI({
           ...kpi,
           target,
-          min_target: minTarget
+          min_target: minTarget,
         });
       }
     } catch (error) {
-      console.error('Failed to update KPI target:', error);
+      console.error("Failed to update KPI target:", error);
     }
   }
 
@@ -272,34 +294,44 @@ export class ConfigurableKPIManager {
   }
 
   // Create a new KPI
-  async createKPI(kpiData: Omit<ConfigurableKPI, 'id' | 'created_at' | 'updated_at'>): Promise<ConfigurableKPI | null> {
+  async createKPI(
+    kpiData: Omit<ConfigurableKPI, "id" | "created_at" | "updated_at">,
+  ): Promise<ConfigurableKPI | null> {
     try {
       return await userStorage.setUserKPI(kpiData);
     } catch (error) {
-      console.error('Failed to create KPI:', error);
+      console.error("Failed to create KPI:", error);
       throw error;
     }
   }
 
   // Update an existing KPI
-  async updateKPI(kpiId: string, updates: Partial<Omit<ConfigurableKPI, 'id' | 'kpi_id' | 'created_at' | 'updated_at'>>): Promise<void> {
+  async updateKPI(
+    kpiId: string,
+    updates: Partial<
+      Omit<ConfigurableKPI, "id" | "kpi_id" | "created_at" | "updated_at">
+    >,
+  ): Promise<void> {
     try {
       // Only send whitelisted columns to DB to avoid updating immutable fields
-      const payload: Record<string, any> = { updated_at: new Date().toISOString() };
+      const payload: Record<string, any> = {
+        updated_at: new Date().toISOString(),
+      };
       const allowedKeys = [
-        'name',
-        'target',
-        'min_target',
-        'unit',
-        'category',
-        'color',
-        'is_active',
-        'sort_order',
-        'is_average',
-        'reverse_scoring',
-        'equal_is_better',
-        'auto_sync_source',
-        'weight'
+        "name",
+        "target",
+        "min_target",
+        "unit",
+        "category",
+        "color",
+        "is_active",
+        "sort_order",
+        "is_average",
+        "reverse_scoring",
+        "equal_is_better",
+        "auto_sync_source",
+        "display_mode",
+        "weight",
       ] as const;
 
       for (const key of allowedKeys) {
@@ -310,7 +342,7 @@ export class ConfigurableKPIManager {
 
       await userStorage.updateUserKPI(kpiId, payload);
     } catch (error) {
-      console.error('Failed to update KPI:', error);
+      console.error("Failed to update KPI:", error);
       throw error;
     }
   }
@@ -318,17 +350,17 @@ export class ConfigurableKPIManager {
   // Permanently delete a KPI and all its data
   async permanentlyDeleteKPI(kpiId: string): Promise<boolean> {
     try {
-      console.log('ConfigurableKPIManager: deleting KPI with id:', kpiId);
+      console.log("ConfigurableKPIManager: deleting KPI with id:", kpiId);
       const result = await userStorage.deleteUserKPI(kpiId);
-      console.log('ConfigurableKPIManager: delete result:', result);
-      
+      console.log("ConfigurableKPIManager: delete result:", result);
+
       if (!result) {
-        throw new Error('Failed to delete KPI from database');
+        throw new Error("Failed to delete KPI from database");
       }
-      
+
       return result;
     } catch (error) {
-      console.error('Failed to permanently delete KPI:', error);
+      console.error("Failed to permanently delete KPI:", error);
       throw error;
     }
   }
@@ -337,7 +369,7 @@ export class ConfigurableKPIManager {
   async initializeDefaultKPIs(): Promise<void> {
     try {
       const existingKPIs = await this.getUserKPIs();
-      const existingKPIIds = new Set(existingKPIs.map(kpi => kpi.kpi_id));
+      const existingKPIIds = new Set(existingKPIs.map((kpi) => kpi.kpi_id));
 
       // Only create KPIs that don't already exist
       for (const template of DEFAULT_KPI_TEMPLATES) {
@@ -350,59 +382,80 @@ export class ConfigurableKPIManager {
         }
       }
     } catch (error) {
-      console.error('Failed to initialize default KPIs:', error);
+      console.error("Failed to initialize default KPIs:", error);
     }
   }
 
   // Get available KPI templates that user hasn't added yet
   async getAvailableTemplates(): Promise<typeof DEFAULT_KPI_TEMPLATES> {
     const userKPIs = await this.getUserKPIs();
-    const userKPIIds = new Set(userKPIs.map(kpi => kpi.kpi_id));
+    const userKPIIds = new Set(userKPIs.map((kpi) => kpi.kpi_id));
 
-    return DEFAULT_KPI_TEMPLATES.filter(template =>
-      !userKPIIds.has(template.kpi_id)
+    return DEFAULT_KPI_TEMPLATES.filter(
+      (template) => !userKPIIds.has(template.kpi_id),
     );
   }
 
   // Add a template KPI to user's collection
   async addTemplateKPI(templateKpiId: string): Promise<ConfigurableKPI | null> {
-    const template = DEFAULT_KPI_TEMPLATES.find(t => t.kpi_id === templateKpiId);
+    const template = DEFAULT_KPI_TEMPLATES.find(
+      (t) => t.kpi_id === templateKpiId,
+    );
     if (!template) {
-      console.error('Template KPI not found:', templateKpiId);
+      console.error("Template KPI not found:", templateKpiId);
       return null;
     }
 
     return await this.saveKPI({
       ...template,
-      is_active: true
+      is_active: true,
     });
   }
 
   // Week-specific target overrides
-  async getWeeklyTargetOverrides(weekKey: string): Promise<Array<{ kpi_id: string; target_value: number; min_target_value: number | null }>> {
+  async getWeeklyTargetOverrides(weekKey: string): Promise<
+    Array<{
+      kpi_id: string;
+      target_value: number;
+      min_target_value: number | null;
+    }>
+  > {
     try {
       return await userStorage.getWeeklyTargetOverrides(weekKey);
     } catch (e) {
-      console.error('Failed to load weekly target overrides:', e);
+      console.error("Failed to load weekly target overrides:", e);
       return [];
     }
   }
 
-  async setWeeklyTargetOverride(weekKey: string, kpiId: string, targetValue: number, minTargetValue?: number | null): Promise<boolean> {
+  async setWeeklyTargetOverride(
+    weekKey: string,
+    kpiId: string,
+    targetValue: number,
+    minTargetValue?: number | null,
+  ): Promise<boolean> {
     try {
-      const res = await userStorage.setWeeklyTargetOverride(weekKey, kpiId, targetValue, typeof minTargetValue === 'number' ? minTargetValue : null);
+      const res = await userStorage.setWeeklyTargetOverride(
+        weekKey,
+        kpiId,
+        targetValue,
+        typeof minTargetValue === "number" ? minTargetValue : null,
+      );
       return !!res;
     } catch (e) {
-      console.error('Failed to set weekly target override:', e);
+      console.error("Failed to set weekly target override:", e);
       return false;
     }
   }
 
-  async clearWeeklyTargetOverride(weekKey: string, kpiId: string): Promise<boolean> {
+  async clearWeeklyTargetOverride(
+    weekKey: string,
+    kpiId: string,
+  ): Promise<boolean> {
     try {
       return await userStorage.deleteWeeklyTargetOverride(weekKey, kpiId);
     } catch (e) {
-      console.error('Failed to clear weekly target override:', e);
+      console.error("Failed to clear weekly target override:", e);
       return false;
     }
   }
@@ -412,7 +465,7 @@ export class ConfigurableKPIManager {
     try {
       return await userStorage.getUserWeeklyKPIs();
     } catch (error) {
-      console.error('Failed to get weekly KPI data:', error);
+      console.error("Failed to get weekly KPI data:", error);
       return { records: [] };
     }
   }
@@ -421,34 +474,42 @@ export class ConfigurableKPIManager {
     try {
       await userStorage.setUserWeeklyKPIs(data);
     } catch (error) {
-      console.error('Failed to save weekly KPI data:', error);
+      console.error("Failed to save weekly KPI data:", error);
     }
   }
 
   // Calculate completion percentage for a week
-  calculateWeekCompletion(weekValues: WeeklyKPIValues, kpis: ConfigurableKPI[]): number {
+  calculateWeekCompletion(
+    weekValues: WeeklyKPIValues,
+    kpis: ConfigurableKPI[],
+  ): number {
     if (kpis.length === 0) return 0;
 
     let weightedProgress = 0;
     let totalWeight = 0;
 
-    for (const kpi of kpis.filter(k => k.is_active)) {
+    for (const kpi of kpis.filter((k) => k.is_active)) {
       const value = weekValues[kpi.kpi_id] || 0;
       const target = kpi.min_target || kpi.target;
 
       if (target > 0) {
         let progress;
-        
+
         if (kpi.equal_is_better) {
           // For equal is better (being exactly at target is best)
           const difference = Math.abs(value - target);
           const tolerance = target * 0.1; // Allow 10% tolerance for perfect score
           const maxAcceptableDifference = target * 0.5; // 50% difference = 0 score
-          
+
           if (difference <= tolerance) {
             progress = 1; // Perfect score if within tolerance
           } else {
-            progress = Math.max(0, 1 - ((difference - tolerance) / (maxAcceptableDifference - tolerance)));
+            progress = Math.max(
+              0,
+              1 -
+                (difference - tolerance) /
+                  (maxAcceptableDifference - tolerance),
+            );
           }
         } else if (kpi.reverse_scoring) {
           // For reverse scoring (lower is better)
@@ -457,15 +518,16 @@ export class ConfigurableKPIManager {
           } else {
             const excess = value - target;
             const maxAcceptableExcess = target * 0.5; // Allow 50% above target before hitting 0
-            progress = Math.max(0, 1 - (excess / maxAcceptableExcess));
+            progress = Math.max(0, 1 - excess / maxAcceptableExcess);
           }
         } else {
           // Normal scoring (higher is better)
           progress = Math.min(1, value / target);
         }
-        
+
         // Allow 0 weight to exclude KPI from completion
-        const weight = (typeof kpi.weight === 'number' && kpi.weight >= 0) ? kpi.weight : 1;
+        const weight =
+          typeof kpi.weight === "number" && kpi.weight >= 0 ? kpi.weight : 1;
         if (weight > 0) {
           weightedProgress += progress * weight;
           totalWeight += weight;
@@ -483,41 +545,49 @@ export class ConfigurableKPIManager {
     let fair = 0;
     let poor = 0;
 
-    kpis.filter(kpi => kpi.is_active).forEach(kpi => {
-      const value = weekValues[kpi.kpi_id] || 0;
-      const target = kpi.target;
-      let progress;
+    kpis
+      .filter((kpi) => kpi.is_active)
+      .forEach((kpi) => {
+        const value = weekValues[kpi.kpi_id] || 0;
+        const target = kpi.target;
+        let progress;
 
-      if (kpi.equal_is_better) {
-        // For equal is better (being exactly at target is best)
-        const difference = Math.abs(value - target);
-        const tolerance = target * 0.1; // Allow 10% tolerance for perfect score
-        const maxAcceptableDifference = target * 0.5; // 50% difference = 0 score
-        
-        if (difference <= tolerance) {
-          progress = 100; // Perfect score if within tolerance
-        } else {
-          progress = Math.max(0, 100 - ((difference - tolerance) / (maxAcceptableDifference - tolerance)) * 100);
-        }
-      } else if (kpi.reverse_scoring) {
-        // For reverse scoring (lower is better)
-        if (value <= target) {
-          progress = 100; // Perfect score if at or below target
-        } else {
-          const excess = value - target;
-          const maxAcceptableExcess = target * 0.5;
-          progress = Math.max(0, 100 - (excess / maxAcceptableExcess) * 100);
-        }
-      } else {
-        // Normal scoring (higher is better)
-        progress = Math.min(100, (value / target) * 100);
-      }
+        if (kpi.equal_is_better) {
+          // For equal is better (being exactly at target is best)
+          const difference = Math.abs(value - target);
+          const tolerance = target * 0.1; // Allow 10% tolerance for perfect score
+          const maxAcceptableDifference = target * 0.5; // 50% difference = 0 score
 
-      if (progress >= 100) excellent++;
-      else if (progress >= 80) good++;
-      else if (progress >= 50) fair++;
-      else poor++;
-    });
+          if (difference <= tolerance) {
+            progress = 100; // Perfect score if within tolerance
+          } else {
+            progress = Math.max(
+              0,
+              100 -
+                ((difference - tolerance) /
+                  (maxAcceptableDifference - tolerance)) *
+                  100,
+            );
+          }
+        } else if (kpi.reverse_scoring) {
+          // For reverse scoring (lower is better)
+          if (value <= target) {
+            progress = 100; // Perfect score if at or below target
+          } else {
+            const excess = value - target;
+            const maxAcceptableExcess = target * 0.5;
+            progress = Math.max(0, 100 - (excess / maxAcceptableExcess) * 100);
+          }
+        } else {
+          // Normal scoring (higher is better)
+          progress = Math.min(100, (value / target) * 100);
+        }
+
+        if (progress >= 100) excellent++;
+        else if (progress >= 80) good++;
+        else if (progress >= 50) fair++;
+        else poor++;
+      });
 
     return { excellent, good, fair, poor };
   }
@@ -527,22 +597,22 @@ export class ConfigurableKPIManager {
     try {
       const userId = userStorage.getCurrentUserId();
       if (!userId) {
-        console.warn('No user ID set for migration');
+        console.warn("No user ID set for migration");
         return;
       }
 
       const { error } = await supabase
-        .from('user_kpis')
+        .from("user_kpis")
         .update({ is_average: true })
-        .eq('user_id', userId)
-        .in('kpi_id', ['sleepAverage']);
+        .eq("user_id", userId)
+        .in("kpi_id", ["sleepAverage"]);
 
       if (error) {
-        console.error('Failed to migrate average KPIs:', error);
+        console.error("Failed to migrate average KPIs:", error);
       } else {
       }
     } catch (error) {
-      console.error('Error during KPI migration:', error);
+      console.error("Error during KPI migration:", error);
     }
   }
 }

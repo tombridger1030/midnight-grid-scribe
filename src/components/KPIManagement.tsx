@@ -14,12 +14,17 @@ import {
   Link,
   Github,
   Clock,
+  LayoutGrid,
+  Calendar,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   kpiManager,
   ConfigurableKPI,
   AutoSyncSource,
+  DisplayMode,
+  DEFAULT_KPI_TEMPLATES,
+  KPI_CATEGORIES,
 } from "@/lib/configurableKpis";
 import { useToast } from "@/components/ui/use-toast";
 import { REALTIME_EVENTS } from "@/hooks/useRealtimeSync";
@@ -48,6 +53,26 @@ const AUTO_SYNC_OPTIONS: {
     label: "Deep Work Timer",
     icon: <Clock size={14} />,
     description: "Auto-sync from timer",
+  },
+];
+
+const DISPLAY_MODE_OPTIONS: {
+  value: DisplayMode;
+  label: string;
+  icon: React.ReactNode;
+  description: string;
+}[] = [
+  {
+    value: "simple",
+    label: "Simple",
+    icon: <LayoutGrid size={14} />,
+    description: "Basic counter row",
+  },
+  {
+    value: "daily_breakdown",
+    label: "Daily Breakdown",
+    icon: <Calendar size={14} />,
+    description: "Collapsible with daily view",
   },
 ];
 
@@ -85,6 +110,9 @@ const COLOR_PRESETS = [
 
 const KPIManagement: React.FC<KPIManagementProps> = ({ onClose }) => {
   const [kpis, setKpis] = useState<ConfigurableKPI[]>([]);
+  const [availableTemplates, setAvailableTemplates] = useState<
+    typeof DEFAULT_KPI_TEMPLATES
+  >([]);
   const [editingKPI, setEditingKPI] = useState<ConfigurableKPI | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -101,6 +129,7 @@ const KPIManagement: React.FC<KPIManagementProps> = ({ onClose }) => {
     category: "fitness" as ConfigurableKPI["category"],
     color: "#5FE3B3",
     auto_sync_source: null as AutoSyncSource,
+    display_mode: "simple" as DisplayMode,
   });
 
   useEffect(() => {
@@ -112,6 +141,10 @@ const KPIManagement: React.FC<KPIManagementProps> = ({ onClose }) => {
       setIsLoading(true);
       const userKPIs = await kpiManager.getUserKPIs();
       setKpis(userKPIs);
+
+      // Load available templates (ones user hasn't added yet)
+      const templates = await kpiManager.getAvailableTemplates();
+      setAvailableTemplates(templates);
 
       // Extract custom categories from KPIs
       const categories = new Set<string>();
@@ -156,6 +189,31 @@ const KPIManagement: React.FC<KPIManagementProps> = ({ onClose }) => {
     }
   };
 
+  const addTemplate = async (templateKpiId: string) => {
+    try {
+      const template = availableTemplates.find(
+        (t) => t.kpi_id === templateKpiId,
+      );
+      await kpiManager.addTemplateKPI(templateKpiId);
+      await loadKPIs();
+
+      toast({
+        title: "KPI Added",
+        description: `${template?.name || "KPI"} has been added to your KPIs.`,
+      });
+
+      // Dispatch event to notify other components
+      window.dispatchEvent(new CustomEvent(REALTIME_EVENTS.KPI_UPDATED));
+    } catch (error) {
+      console.error("Failed to add template:", error);
+      toast({
+        title: "Error adding KPI",
+        description: "Failed to add KPI. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const startCreating = () => {
     setFormData({
       name: "",
@@ -165,6 +223,7 @@ const KPIManagement: React.FC<KPIManagementProps> = ({ onClose }) => {
       category: "fitness",
       color: "#5FE3B3",
       auto_sync_source: null,
+      display_mode: "simple",
     });
     setIsCreating(true);
     setEditingKPI(null);
@@ -179,6 +238,7 @@ const KPIManagement: React.FC<KPIManagementProps> = ({ onClose }) => {
       category: kpi.category,
       color: kpi.color,
       auto_sync_source: kpi.auto_sync_source || null,
+      display_mode: kpi.display_mode || "simple",
     });
     setEditingKPI(kpi);
     setIsCreating(false);
@@ -195,6 +255,7 @@ const KPIManagement: React.FC<KPIManagementProps> = ({ onClose }) => {
       category: "fitness",
       color: "#5FE3B3",
       auto_sync_source: null,
+      display_mode: "simple",
     });
   };
 
@@ -220,6 +281,7 @@ const KPIManagement: React.FC<KPIManagementProps> = ({ onClose }) => {
           category: formData.category,
           color: formData.color,
           auto_sync_source: formData.auto_sync_source,
+          display_mode: formData.display_mode,
           is_active: true,
           sort_order: kpis.length + 1,
         });
@@ -238,6 +300,7 @@ const KPIManagement: React.FC<KPIManagementProps> = ({ onClose }) => {
           category: formData.category,
           color: formData.color,
           auto_sync_source: formData.auto_sync_source,
+          display_mode: formData.display_mode,
         });
 
         toast({
@@ -590,6 +653,46 @@ const KPIManagement: React.FC<KPIManagementProps> = ({ onClose }) => {
                   </p>
                 )}
               </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-xs text-gray-400 mb-1">
+                  <LayoutGrid size={12} className="inline mr-1" />
+                  Display Style
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {DISPLAY_MODE_OPTIONS.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          display_mode: option.value,
+                        }))
+                      }
+                      className={cn(
+                        "flex items-center gap-2 px-3 py-2 rounded border text-sm transition-all",
+                        formData.display_mode === option.value
+                          ? "border-accent-cyan bg-accent-cyan/10 text-accent-cyan"
+                          : "border-gray-600 text-gray-400 hover:border-gray-500",
+                      )}
+                    >
+                      {option.icon}
+                      <div className="text-left">
+                        <div className="font-medium">{option.label}</div>
+                        <div className="text-[10px] opacity-70">
+                          {option.description}
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+                {formData.display_mode === "daily_breakdown" && (
+                  <p className="text-xs text-gray-500 mt-2">
+                    Shows collapsible daily breakdown like Deep Work Hours
+                  </p>
+                )}
+              </div>
             </div>
 
             <div className="flex gap-2">
@@ -620,6 +723,41 @@ const KPIManagement: React.FC<KPIManagementProps> = ({ onClose }) => {
             <Plus size={16} />
             Add New KPI
           </button>
+        )}
+
+        {/* Quick Add Templates */}
+        {!isCreating && !editingKPI && availableTemplates.length > 0 && (
+          <div className="space-y-2">
+            <h3 className="text-xs text-gray-400 uppercase tracking-wider font-medium">
+              Quick Add
+            </h3>
+            <div className="flex flex-wrap gap-2">
+              {availableTemplates.map((template) => (
+                <button
+                  key={template.kpi_id}
+                  onClick={() => addTemplate(template.kpi_id)}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm transition-all border hover:scale-105"
+                  style={{
+                    backgroundColor: `${template.color}15`,
+                    borderColor: `${template.color}40`,
+                    color: template.color,
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = template.color;
+                    e.currentTarget.style.backgroundColor = `${template.color}25`;
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = `${template.color}40`;
+                    e.currentTarget.style.backgroundColor = `${template.color}15`;
+                  }}
+                >
+                  <span>{KPI_CATEGORIES[template.category]?.icon || "🎯"}</span>
+                  <span>{template.name}</span>
+                  <Plus size={12} />
+                </button>
+              ))}
+            </div>
+          </div>
         )}
 
         {/* KPI List */}

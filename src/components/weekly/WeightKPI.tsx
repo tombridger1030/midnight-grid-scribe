@@ -14,6 +14,8 @@ import {
   Minus,
   ChevronDown,
   ChevronUp,
+  Edit2,
+  Check,
 } from "lucide-react";
 import { colors } from "@/styles/design-tokens";
 import { DailyWeight } from "@/hooks/useWeight";
@@ -33,6 +35,7 @@ interface WeightKPIProps {
   targetLbs: number;
   onUpdateDay: (date: string, data: Partial<DailyWeight>) => void;
   weekDates: { start: Date; end: Date };
+  onUpdateTarget?: (target: number) => void;
 }
 
 const WEIGHT_COLOR = "#00CED1"; // Turquoise/Teal for weight tracking
@@ -44,8 +47,11 @@ export const WeightKPI: React.FC<WeightKPIProps> = ({
   targetLbs,
   onUpdateDay,
   weekDates,
+  onUpdateTarget,
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(true);
+  const [isEditingTarget, setIsEditingTarget] = useState(false);
+  const [editTarget, setEditTarget] = useState<number>(targetLbs);
 
   // Generate all 7 days of the week
   const weekDays = useMemo(() => {
@@ -376,12 +382,78 @@ export const WeightKPI: React.FC<WeightKPIProps> = ({
                 </div>
               </div>
 
-              {/* Target display (read-only) */}
-              <div className="text-xs" style={{ color: colors.text.muted }}>
+              {/* Target display */}
+              <div
+                className="text-xs flex items-center gap-1"
+                style={{ color: colors.text.muted }}
+              >
                 Target:{" "}
-                <span className="font-mono" style={{ color: WEIGHT_COLOR }}>
-                  {targetLbs}lbs
-                </span>
+                {isEditingTarget ? (
+                  <span className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      min="50"
+                      max="400"
+                      step="0.5"
+                      value={editTarget}
+                      onChange={(e) =>
+                        setEditTarget(parseFloat(e.target.value) || 50)
+                      }
+                      onClick={(e) => e.stopPropagation()}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.stopPropagation();
+                          onUpdateTarget?.(editTarget);
+                          setIsEditingTarget(false);
+                        } else if (e.key === "Escape") {
+                          e.stopPropagation();
+                          setEditTarget(targetLbs);
+                          setIsEditingTarget(false);
+                        }
+                      }}
+                      className="w-16 px-1 py-0.5 rounded text-xs font-mono"
+                      style={{
+                        backgroundColor: colors.background.elevated,
+                        border: `1px solid ${colors.primary.DEFAULT}`,
+                        color: colors.text.primary,
+                      }}
+                      autoFocus
+                    />
+                    lbs
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onUpdateTarget?.(editTarget);
+                        setIsEditingTarget(false);
+                      }}
+                      className="p-0.5 rounded hover:bg-white/10"
+                    >
+                      <Check
+                        size={12}
+                        style={{ color: colors.success.DEFAULT }}
+                      />
+                    </button>
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1">
+                    <span className="font-mono" style={{ color: WEIGHT_COLOR }}>
+                      {targetLbs}lbs
+                    </span>
+                    {onUpdateTarget && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditTarget(targetLbs);
+                          setIsEditingTarget(true);
+                        }}
+                        className="p-0.5 rounded hover:bg-white/10 opacity-50 hover:opacity-100"
+                        title="Edit target"
+                      >
+                        <Edit2 size={10} style={{ color: colors.text.muted }} />
+                      </button>
+                    )}
+                  </span>
+                )}
               </div>
             </div>
 

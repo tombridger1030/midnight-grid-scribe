@@ -163,7 +163,7 @@ export function useBooks(weekKey: string): UseBooksReturn {
   // Sync reading pages to weekly KPI system
   useEffect(() => {
     if (user?.id && weekKey && weeklyPagesRead > 0) {
-      updateWeeklyKPIRecord(user.id, weekKey, {
+      updateWeeklyKPIRecord(weekKey, {
         pagesRead: weeklyPagesRead,
       });
     }

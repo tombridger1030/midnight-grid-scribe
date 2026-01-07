@@ -237,7 +237,7 @@ export function useNutrition(weekKey: string): UseNutritionReturn {
   // Sync daily nutrition averages to weekly KPI system
   useEffect(() => {
     if (user?.id && weekKey && daysTracked > 0) {
-      updateWeeklyKPIRecord(user.id, weekKey, {
+      updateWeeklyKPIRecord(weekKey, {
         avg_calories: dailyAverage.calories,
         avg_protein: dailyAverage.protein,
       });

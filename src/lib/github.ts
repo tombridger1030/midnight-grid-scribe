@@ -1066,6 +1066,115 @@ export async function getUserPRs(limit: number = 10): Promise<PRStatus[]> {
 }
 
 /**
+ * Get daily PR counts for a date range
+ * Returns a map of date -> PR count
+ */
+export async function getDailyPRCounts(
+  startDate: string,
+  endDate: string,
+): Promise<Record<string, number>> {
+  const config = getGitHubConfig();
+
+  if (!config.token || !config.username) {
+    return {};
+  }
+
+  const result: Record<string, number> = {};
+
+  // Generate all dates in range
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  const current = new Date(start);
+
+  while (current <= end) {
+    const dateStr = current.toISOString().split("T")[0];
+    result[dateStr] = 0;
+    current.setDate(current.getDate() + 1);
+  }
+
+  try {
+    // Query GitHub for PRs created in the date range
+    const query = encodeURIComponent(
+      `author:${config.username} type:pr created:${startDate}..${endDate}`,
+    );
+
+    const response = await fetch(
+      `${GITHUB_API_BASE}/search/issues?q=${query}&per_page=100`,
+      {
+        headers: {
+          Authorization: `Bearer ${config.token}`,
+          Accept: "application/vnd.github.v3+json",
+          "User-Agent": "NoctisiumTracker/1.0",
+        },
+      },
+    );
+
+    if (!response.ok) {
+      console.error(`GitHub Search API error: ${response.status}`);
+      return result;
+    }
+
+    const data = await response.json();
+
+    // Count PRs per day
+    for (const item of data.items || []) {
+      const createdAt = new Date(item.created_at);
+      const dateStr = createdAt.toISOString().split("T")[0];
+      if (result[dateStr] !== undefined) {
+        result[dateStr]++;
+      }
+    }
+
+    return result;
+  } catch (error) {
+    console.error("Failed to fetch daily PR counts:", error);
+    return result;
+  }
+}
+
+/**
+ * Get the count of PRs created on a specific date
+ * Uses GitHub Search API to query PRs authored by the user on the given date
+ */
+export async function getPRsCreatedOnDate(date: string): Promise<number> {
+  const config = getGitHubConfig();
+
+  if (!config.token || !config.username) {
+    return 0;
+  }
+
+  try {
+    // GitHub Search API for issues/PRs created on a specific date
+    // Format: author:username type:pr created:YYYY-MM-DD
+    const query = encodeURIComponent(
+      `author:${config.username} type:pr created:${date}`,
+    );
+
+    const response = await fetch(
+      `${GITHUB_API_BASE}/search/issues?q=${query}`,
+      {
+        headers: {
+          Authorization: `Bearer ${config.token}`,
+          Accept: "application/vnd.github.v3+json",
+          "User-Agent": "NoctisiumTracker/1.0",
+        },
+      },
+    );
+
+    if (!response.ok) {
+      console.error(`GitHub Search API error: ${response.status}`);
+      return 0;
+    }
+
+    const data = await response.json();
+    return data.total_count || 0;
+  } catch (error) {
+    console.error("Failed to fetch PRs created on date:", error);
+    return 0;
+  }
+}
+
+/**
  * Test GitHub connection and fetch PR status
  */
 export async function testGitHubConnectionWithPRs(): Promise<PRTestResult> {

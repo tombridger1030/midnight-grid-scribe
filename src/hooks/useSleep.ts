@@ -204,7 +204,7 @@ export function useSleep(weekKey: string): UseSleepReturn {
   // Sync daily average sleep to weekly KPI system
   useEffect(() => {
     if (user?.id && weekKey && dailyAverage > 0) {
-      updateWeeklyKPIRecord(user.id, weekKey, {
+      updateWeeklyKPIRecord(weekKey, {
         sleepAverage: dailyAverage,
       });
     }

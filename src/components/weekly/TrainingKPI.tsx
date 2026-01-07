@@ -6,7 +6,14 @@
  */
 
 import React, { useState } from "react";
-import { X, Dumbbell, ChevronDown, ChevronUp } from "lucide-react";
+import {
+  X,
+  Dumbbell,
+  ChevronDown,
+  ChevronUp,
+  Edit2,
+  Check,
+} from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { colors, shadows } from "@/styles/design-tokens";
@@ -23,6 +30,7 @@ interface TrainingKPIProps {
   onAddSession: (typeId: string, date: string) => void;
   onRemoveSession: (sessionId: string) => void;
   onAddType: (name: string, color: string) => void;
+  onUpdateTarget?: (target: number) => void;
 }
 
 export const TrainingKPI: React.FC<TrainingKPIProps> = ({
@@ -35,8 +43,11 @@ export const TrainingKPI: React.FC<TrainingKPIProps> = ({
   onAddSession,
   onRemoveSession,
   onAddType,
+  onUpdateTarget,
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(true);
+  const [isEditingTarget, setIsEditingTarget] = useState(false);
+  const [editTarget, setEditTarget] = useState<number>(target ?? 5);
 
   // Calculate progress
   const progress =
@@ -107,11 +118,72 @@ export const TrainingKPI: React.FC<TrainingKPIProps> = ({
               Training
             </span>
             <div
-              className="text-xs font-mono"
+              className="text-xs font-mono flex items-center gap-1"
               style={{ color: colors.text.muted }}
             >
               {countingSessionCount}
-              {target ? `/${target}` : ""} sessions
+              {isEditingTarget ? (
+                <span className="flex items-center gap-1">
+                  /
+                  <input
+                    type="number"
+                    min="1"
+                    value={editTarget}
+                    onChange={(e) =>
+                      setEditTarget(parseInt(e.target.value) || 1)
+                    }
+                    onClick={(e) => e.stopPropagation()}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.stopPropagation();
+                        onUpdateTarget?.(editTarget);
+                        setIsEditingTarget(false);
+                      } else if (e.key === "Escape") {
+                        e.stopPropagation();
+                        setEditTarget(target ?? 5);
+                        setIsEditingTarget(false);
+                      }
+                    }}
+                    className="w-12 px-1 py-0.5 rounded text-xs font-mono"
+                    style={{
+                      backgroundColor: colors.background.elevated,
+                      border: `1px solid ${colors.primary.DEFAULT}`,
+                      color: colors.text.primary,
+                    }}
+                    autoFocus
+                  />
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onUpdateTarget?.(editTarget);
+                      setIsEditingTarget(false);
+                    }}
+                    className="p-0.5 rounded hover:bg-white/10"
+                  >
+                    <Check
+                      size={12}
+                      style={{ color: colors.success.DEFAULT }}
+                    />
+                  </button>
+                </span>
+              ) : (
+                <>
+                  {target ? `/${target}` : ""} sessions
+                  {onUpdateTarget && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditTarget(target ?? 5);
+                        setIsEditingTarget(true);
+                      }}
+                      className="p-0.5 rounded hover:bg-white/10 ml-1 opacity-50 hover:opacity-100"
+                      title="Edit target"
+                    >
+                      <Edit2 size={10} style={{ color: colors.text.muted }} />
+                    </button>
+                  )}
+                </>
+              )}
             </div>
           </div>
         </div>

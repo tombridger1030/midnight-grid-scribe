@@ -7,7 +7,15 @@
 
 import React, { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Moon, Sun, Clock, ChevronDown, ChevronUp } from "lucide-react";
+import {
+  Moon,
+  Sun,
+  Clock,
+  ChevronDown,
+  ChevronUp,
+  Edit2,
+  Check,
+} from "lucide-react";
 import { colors } from "@/styles/design-tokens";
 import { DailySleep } from "@/hooks/useSleep";
 
@@ -19,6 +27,7 @@ interface SleepKPIProps {
   targetSleep: number;
   onUpdateDay: (date: string, data: Partial<DailySleep>) => void;
   weekDates: { start: Date; end: Date };
+  onUpdateTarget?: (target: number) => void;
 }
 
 export const SleepKPI: React.FC<SleepKPIProps> = ({
@@ -29,8 +38,11 @@ export const SleepKPI: React.FC<SleepKPIProps> = ({
   targetSleep,
   onUpdateDay,
   weekDates,
+  onUpdateTarget,
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(true);
+  const [isEditingTarget, setIsEditingTarget] = useState(false);
+  const [editTarget, setEditTarget] = useState<number>(targetSleep);
   // Generate all 7 days of the week
   const weekDays = useMemo(() => {
     const days: string[] = [];
@@ -239,7 +251,7 @@ export const SleepKPI: React.FC<SleepKPIProps> = ({
               })}
             </div>
 
-            {/* Target line indicator (read-only - edit in KPI Management) */}
+            {/* Target line indicator */}
             <div
               className="flex items-center gap-2 mb-4 text-xs"
               style={{ color: colors.text.muted }}
@@ -248,7 +260,70 @@ export const SleepKPI: React.FC<SleepKPIProps> = ({
                 className="h-0.5 flex-1"
                 style={{ backgroundColor: colors.success.DEFAULT + "50" }}
               />
-              <span className="font-mono">{targetSleep}h target</span>
+              {isEditingTarget ? (
+                <span className="flex items-center gap-1">
+                  <input
+                    type="number"
+                    min="1"
+                    max="12"
+                    step="0.5"
+                    value={editTarget}
+                    onChange={(e) =>
+                      setEditTarget(parseFloat(e.target.value) || 1)
+                    }
+                    onClick={(e) => e.stopPropagation()}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.stopPropagation();
+                        onUpdateTarget?.(editTarget);
+                        setIsEditingTarget(false);
+                      } else if (e.key === "Escape") {
+                        e.stopPropagation();
+                        setEditTarget(targetSleep);
+                        setIsEditingTarget(false);
+                      }
+                    }}
+                    className="w-12 px-1 py-0.5 rounded text-xs font-mono"
+                    style={{
+                      backgroundColor: colors.background.elevated,
+                      border: `1px solid ${colors.primary.DEFAULT}`,
+                      color: colors.text.primary,
+                    }}
+                    autoFocus
+                  />
+                  h target
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onUpdateTarget?.(editTarget);
+                      setIsEditingTarget(false);
+                    }}
+                    className="p-0.5 rounded hover:bg-white/10"
+                  >
+                    <Check
+                      size={12}
+                      style={{ color: colors.success.DEFAULT }}
+                    />
+                  </button>
+                </span>
+              ) : (
+                <span className="font-mono flex items-center gap-1">
+                  {targetSleep}h target
+                  {onUpdateTarget && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditTarget(targetSleep);
+                        setIsEditingTarget(true);
+                      }}
+                      className="p-0.5 rounded hover:bg-white/10 opacity-50 hover:opacity-100"
+                      title="Edit target"
+                    >
+                      <Edit2 size={10} style={{ color: colors.text.muted }} />
+                    </button>
+                  )}
+                </span>
+              )}
               <div
                 className="h-0.5 flex-1"
                 style={{ backgroundColor: colors.success.DEFAULT + "50" }}

@@ -200,10 +200,11 @@ export class UserStorage {
     });
 
     try {
+      // Use kpi_id (string) instead of id (UUID) for the query
       const { data, error } = await supabase
         .from("user_kpis")
         .update(kpiData)
-        .eq("id", kpiId)
+        .eq("kpi_id", kpiId)
         .eq("user_id", this.userId)
         .select()
         .single();
@@ -222,29 +223,19 @@ export class UserStorage {
             const { data: data2, error: error2 } = await supabase
               .from("user_kpis")
               .update(filtered)
-              .eq("id", kpiId)
+              .eq("kpi_id", kpiId)
               .eq("user_id", this.userId)
               .select()
               .single();
             // Persist weight to hybrid config as a temporary overlay
             if (typeof kpiData?.weight === "number") {
-              // We don't know kpi_id here; try to fetch it first
-              try {
-                const { data: row } = await supabase
-                  .from("user_kpis")
-                  .select("kpi_id")
-                  .eq("id", kpiId)
-                  .eq("user_id", this.userId)
-                  .single();
-                if (row?.kpi_id) {
-                  const map = await this.getHybridData(
-                    "kpi_weights",
-                    {} as Record<string, number>,
-                  );
-                  map[row.kpi_id] = kpiData.weight;
-                  await this.setHybridData("kpi_weights", map);
-                }
-              } catch {}
+              // kpiId is already the kpi_id string, use it directly
+              const map = await this.getHybridData(
+                "kpi_weights",
+                {} as Record<string, number>,
+              );
+              map[kpiId] = kpiData.weight;
+              await this.setHybridData("kpi_weights", map);
             }
             if (!error2) return data2;
           } catch {}
@@ -276,10 +267,11 @@ export class UserStorage {
     });
 
     try {
+      // Use kpi_id (string) instead of id (UUID) for the query
       const { data, error, count } = await supabase
         .from("user_kpis")
         .delete()
-        .eq("id", kpiId)
+        .eq("kpi_id", kpiId)
         .eq("user_id", this.userId)
         .select();
 

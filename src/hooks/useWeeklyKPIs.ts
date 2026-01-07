@@ -248,6 +248,70 @@ export function useWeeklyKPIs(initialWeekKey?: string): UseWeeklyKPIsReturn {
 
         if (upsertError) throw upsertError;
 
+        // Sync to localStorage for consistency with weeklyKpi.ts library
+        // This ensures loadWeeklyEntriesForWeek() doesn't overwrite with stale data
+        try {
+          const localData = JSON.parse(
+            localStorage.getItem("noctisium-weekly-kpis") || '{"records":[]}',
+          );
+          let localRecord = localData.records.find(
+            (r: any) => r.weekKey === weekKey,
+          );
+          if (!localRecord) {
+            localRecord = {
+              weekKey,
+              values: {},
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            };
+            localData.records.push(localRecord);
+          }
+          localRecord.values = { ...localRecord.values, ...newValues };
+          localRecord.updatedAt = new Date().toISOString();
+          localStorage.setItem(
+            "noctisium-weekly-kpis",
+            JSON.stringify(localData),
+          );
+        } catch (localStorageError) {
+          console.warn("Failed to sync to localStorage:", localStorageError);
+        }
+
+        // ALSO update weekly_kpi_entries so the value persists across page reloads
+        // The entries table is used as the source of truth for calculating weekly values
+        // When incrementing, we add the increment to today's entry
+        const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+
+        // Calculate the increment (or decrement) amount
+        const increment = value - previousValue;
+
+        if (increment !== 0) {
+          // Get existing entry for today to add to it
+          const { data: existingEntry } = await supabase
+            .from("weekly_kpi_entries")
+            .select("value")
+            .eq("user_id", user.id)
+            .eq("week_key", weekKey)
+            .eq("kpi_id", kpiId)
+            .eq("date", today)
+            .maybeSingle();
+
+          const existingValue = existingEntry?.value
+            ? Number(existingEntry.value)
+            : 0;
+          const newValue = Math.max(0, existingValue + increment);
+
+          await supabase.from("weekly_kpi_entries").upsert(
+            {
+              user_id: user.id,
+              week_key: weekKey,
+              kpi_id: kpiId,
+              date: today,
+              value: newValue,
+            },
+            { onConflict: "user_id,date,kpi_id" },
+          );
+        }
+
         // Dispatch event for other components to refresh (for non-React-Query consumers)
         window.dispatchEvent(
           new CustomEvent(REALTIME_EVENTS.KPI_UPDATED, {
