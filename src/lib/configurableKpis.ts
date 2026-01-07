@@ -24,6 +24,7 @@ export interface ConfigurableKPI {
   equal_is_better?: boolean; // If true, being exactly at target is best, scores decrease as you move away in either direction
   auto_sync_source?: AutoSyncSource; // External data source for auto-sync
   display_mode?: DisplayMode; // 'simple' for basic counter, 'daily_breakdown' for collapsible daily view
+  is_specialized?: boolean; // If true, this KPI is rendered by a specialized module (limited controls in Manage KPIs)
   sort_order: number;
   weight?: number; // Weight for weekly completion contribution (default 1)
   created_at?: string;
@@ -71,6 +72,7 @@ export const DEFAULT_KPI_TEMPLATES: Omit<
     color: "#9D4EDD",
     is_active: true,
     is_average: true,
+    is_specialized: true,
     sort_order: 2,
   },
   {
@@ -125,7 +127,9 @@ export const DEFAULT_KPI_TEMPLATES: Omit<
     category: "learning",
     color: "#FFA500",
     is_active: true,
+    is_specialized: true,
     sort_order: 7,
+    weight: 0, // Non-impactable KPI - tracked for fun, doesn't affect weekly completion
   },
   {
     kpi_id: "audiobookPercent",
@@ -136,6 +140,47 @@ export const DEFAULT_KPI_TEMPLATES: Omit<
     color: "#DA70D6",
     is_active: true,
     sort_order: 8,
+  },
+
+  // NUTRITION KPI (combined score: average of calories % + protein %)
+  {
+    kpi_id: "nutrition",
+    name: "Nutrition",
+    target: 100, // Combined % score (0-100)
+    unit: "%",
+    category: "health",
+    color: "#FF6B6B",
+    is_active: true,
+    is_specialized: true,
+    sort_order: 20,
+  },
+
+  // COMBINED TRAINING KPI (all training types)
+  {
+    kpi_id: "trainingSessions",
+    name: "Training Sessions",
+    target: 4,
+    min_target: 3,
+    unit: "sessions",
+    category: "fitness",
+    color: "#FF073A",
+    is_active: true,
+    is_specialized: true,
+    sort_order: 21,
+  },
+
+  // WEIGHT KPI (consistency tracking)
+  {
+    kpi_id: "weightDaysTracked",
+    name: "Weight Tracking",
+    target: 7,
+    min_target: 5,
+    unit: "days",
+    category: "health",
+    color: "#10B981",
+    is_active: true,
+    is_specialized: true,
+    sort_order: 22,
   },
 ];
 
@@ -614,6 +659,53 @@ export class ConfigurableKPIManager {
     } catch (error) {
       console.error("Error during KPI migration:", error);
     }
+  }
+
+  // Set a KPI's weight (0 = non-impactable, won't affect weekly completion %)
+  async setKPIWeight(kpiId: string, weight: number): Promise<boolean> {
+    try {
+      const userId = userStorage.getCurrentUserId();
+      if (!userId) {
+        console.warn("No user ID set for weight update");
+        return false;
+      }
+
+      // Update in Supabase
+      const { error } = await supabase
+        .from("user_kpis")
+        .update({ weight })
+        .eq("user_id", userId)
+        .eq("kpi_id", kpiId);
+
+      if (error) {
+        console.error(`Failed to set weight for ${kpiId}:`, error);
+        return false;
+      }
+
+      // Also update in hybrid storage as backup
+      try {
+        const weights = (await userStorage.getHybridData(
+          "kpi_weights",
+          {},
+        )) as Record<string, number>;
+        weights[kpiId] = weight;
+        await userStorage.setHybridData("kpi_weights", weights);
+      } catch (e) {
+        console.warn("Failed to update hybrid storage weights:", e);
+      }
+
+      console.log(`✅ Set ${kpiId} weight to ${weight}`);
+      return true;
+    } catch (error) {
+      console.error("Error setting KPI weight:", error);
+      return false;
+    }
+  }
+
+  // Migration: Set reading KPI to non-impactable (weight = 0)
+  async makeReadingNonImpactable(): Promise<boolean> {
+    console.log("📚 Making reading KPI non-impactable...");
+    return this.setKPIWeight("pagesRead", 0);
   }
 }
 

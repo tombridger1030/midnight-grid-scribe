@@ -9,6 +9,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { X, Calendar, Clock, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { getCurrentLocalDate, formatLocalDate } from "@/lib/dateUtils";
 import { deepWorkService } from "@/lib/deepWorkService";
 import { ActivityCategory } from "@/lib/deepWorkService";
 
@@ -42,9 +43,7 @@ export const ManualSessionEntry: React.FC<ManualSessionEntryProps> = ({
     taskName: "",
     categoryId: defaultCategoryId,
     activityLabel: "",
-    date: initialDate
-      ? initialDate.toISOString().split("T")[0]
-      : new Date().toISOString().split("T")[0],
+    date: initialDate ? formatLocalDate(initialDate) : getCurrentLocalDate(),
     startTime: "09:00",
     endTime: "10:00",
   });
@@ -58,8 +57,8 @@ export const ManualSessionEntry: React.FC<ManualSessionEntryProps> = ({
         categoryId: defaultCategoryId,
         activityLabel: "",
         date: initialDate
-          ? initialDate.toISOString().split("T")[0]
-          : new Date().toISOString().split("T")[0],
+          ? formatLocalDate(initialDate)
+          : getCurrentLocalDate(),
         startTime: "09:00",
         endTime: "10:00",
       });

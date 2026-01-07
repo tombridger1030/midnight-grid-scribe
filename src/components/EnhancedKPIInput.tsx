@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from "react";
 import {
   WeeklyKPIValues,
   getCurrentWeek,
@@ -12,20 +12,40 @@ import {
   getWeeklyDailyValues,
   updateWeeklyDailyValue,
   getWeekDayDates,
-  clearWeeklyTargetCache
-} from '@/lib/weeklyKpi';
-import { kpiManager, ConfigurableKPI } from '@/lib/configurableKpis';
-import { userStorage } from '@/lib/userStorage';
-import { characterService, STAT_CONFIG } from '@/lib/characterSystem';
-import { questService } from '@/lib/questSystem';
+  clearWeeklyTargetCache,
+  clearAllWeekData,
+} from "@/lib/weeklyKpi";
+import { kpiManager, ConfigurableKPI } from "@/lib/configurableKpis";
+import { userStorage } from "@/lib/userStorage";
+import { characterService, STAT_CONFIG } from "@/lib/characterSystem";
+import { questService } from "@/lib/questSystem";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  ChevronLeft, ChevronRight, Target, TrendingUp, Plus, Minus, Edit3, Trash2, Save, X, PlusCircle,
-  Sword, Shield, Zap, Brain, Heart, Footprints, Eye, Sparkles, Flame, Crown
-} from 'lucide-react';
+  ChevronLeft,
+  ChevronRight,
+  Target,
+  TrendingUp,
+  Plus,
+  Minus,
+  Edit3,
+  Trash2,
+  Save,
+  X,
+  PlusCircle,
+  Sword,
+  Shield,
+  Zap,
+  Brain,
+  Heart,
+  Footprints,
+  Eye,
+  Sparkles,
+  Flame,
+  Crown,
+} from "lucide-react";
 
 interface EnhancedKPIInputProps {
   onWeekChange?: (weekKey: string) => void;
@@ -34,7 +54,7 @@ interface EnhancedKPIInputProps {
 
 const EnhancedKPIInput: React.FC<EnhancedKPIInputProps> = ({
   onWeekChange,
-  enableQuestMode = true
+  enableQuestMode = true,
 }) => {
   const [currentWeek, setCurrentWeek] = useState(getCurrentWeek());
   const [values, setValues] = useState<WeeklyKPIValues>({});
@@ -43,30 +63,44 @@ const EnhancedKPIInput: React.FC<EnhancedKPIInputProps> = ({
   const [userKPIs, setUserKPIs] = useState<ConfigurableKPI[]>([]);
   const [dailyRefresh, setDailyRefresh] = useState(0);
   const [editingKPI, setEditingKPI] = useState<string | null>(null);
-  const [editingDaily, setEditingDaily] = useState<{kpiId: string, dayIndex: number} | null>(null);
-  const [viewMode, setViewMode] = useState<'classic' | 'quest'>('quest');
+  const [editingDaily, setEditingDaily] = useState<{
+    kpiId: string;
+    dayIndex: number;
+  } | null>(null);
+  const [viewMode, setViewMode] = useState<"classic" | "quest">("quest");
 
   // Quest-specific states
   const [characterStats, setCharacterStats] = useState<any>(null);
-  const [criticalHitChances, setCriticalHitChances] = useState<Record<string, number>>({});
+  const [criticalHitChances, setCriticalHitChances] = useState<
+    Record<string, number>
+  >({});
   const [currentStreak, setCurrentStreak] = useState(0);
-  const [potentialRewards, setPotentialRewards] = useState<Record<string, any>>({});
+  const [potentialRewards, setPotentialRewards] = useState<Record<string, any>>(
+    {},
+  );
 
   // Existing state management from original component
   const [isCreatingKPI, setIsCreatingKPI] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({
-    name: '',
+    name: "",
     target: 0,
     minTarget: 0,
-    unit: '',
-    weight: 1
+    unit: "",
+    weight: 1,
   });
-  const [weekTargets, setWeekTargets] = useState<Record<string, { target: number; minTarget?: number }>>({});
+  const [weekTargets, setWeekTargets] = useState<
+    Record<string, { target: number; minTarget?: number }>
+  >({});
   const [weekNames, setWeekNames] = useState<Record<string, string>>({});
-  const [editingWeekTarget, setEditingWeekTarget] = useState<string | null>(null);
-  const [weekTargetForm, setWeekTargetForm] = useState<{ target: number; minTarget?: number }>({ target: 0, minTarget: undefined });
+  const [editingWeekTarget, setEditingWeekTarget] = useState<string | null>(
+    null,
+  );
+  const [weekTargetForm, setWeekTargetForm] = useState<{
+    target: number;
+    minTarget?: number;
+  }>({ target: 0, minTarget: undefined });
   const [editingWeekName, setEditingWeekName] = useState<string | null>(null);
-  const [weekNameForm, setWeekNameForm] = useState<string>('');
+  const [weekNameForm, setWeekNameForm] = useState<string>("");
 
   // Load data including quest enhancements
   useEffect(() => {
@@ -76,6 +110,19 @@ const EnhancedKPIInput: React.FC<EnhancedKPIInputProps> = ({
 
         await kpiManager.initializeDefaultKPIs();
         await kpiManager.migrateAverageKPIs();
+        await kpiManager.makeReadingNonImpactable(); // Reading KPI is just for fun
+
+        // One-time migration: Clear old fiscal year week data (switched to calendar year Jan 2026)
+        const calendarYearMigrationKey = "calendar_year_migration_2026";
+        if (!localStorage.getItem(calendarYearMigrationKey)) {
+          console.log("🗓️ Running calendar year migration...");
+          await clearAllWeekData();
+          localStorage.setItem(
+            calendarYearMigrationKey,
+            new Date().toISOString(),
+          );
+          console.log("✅ Calendar year migration complete");
+        }
 
         const activeKPIs = await kpiManager.getActiveKPIs();
         setUserKPIs(activeKPIs);
@@ -87,11 +134,11 @@ const EnhancedKPIInput: React.FC<EnhancedKPIInputProps> = ({
         onWeekChange?.(currentWeek);
 
         // Load quest-related data
-        if (enableQuestMode && viewMode === 'quest') {
+        if (enableQuestMode && viewMode === "quest") {
           const [stats, quests, streak] = await Promise.all([
             characterService.getCharacterStats(),
             questService.getActiveQuests(),
-            calculateCurrentStreak()
+            calculateCurrentStreak(),
           ]);
 
           setCharacterStats(stats);
@@ -101,20 +148,28 @@ const EnhancedKPIInput: React.FC<EnhancedKPIInputProps> = ({
 
         // Load week-specific target overrides
         try {
-          const overrides = await userStorage.getWeeklyTargetOverrides(currentWeek);
-          const map: Record<string, { target: number; minTarget?: number }> = {};
+          const overrides =
+            await userStorage.getWeeklyTargetOverrides(currentWeek);
+          const map: Record<string, { target: number; minTarget?: number }> =
+            {};
           const nameMap: Record<string, string> = {};
-          overrides.forEach(o => {
-            map[o.kpi_id] = { target: Number(o.target_value) || 0, minTarget: o.min_target_value !== null ? Number(o.min_target_value) : undefined };
+          overrides.forEach((o) => {
+            map[o.kpi_id] = {
+              target: Number(o.target_value) || 0,
+              minTarget:
+                o.min_target_value !== null
+                  ? Number(o.min_target_value)
+                  : undefined,
+            };
             if (o.name_override) nameMap[o.kpi_id] = o.name_override;
           });
           setWeekTargets(map);
           setWeekNames(nameMap);
         } catch (e) {
-          console.warn('Failed to load weekly target overrides:', e);
+          console.warn("Failed to load weekly target overrides:", e);
         }
       } catch (error) {
-        console.error('Failed to load weekly KPI data:', error);
+        console.error("Failed to load weekly KPI data:", error);
         const record = getWeeklyKPIRecord(currentWeek);
         setValues(record?.values || {});
       } finally {
@@ -129,22 +184,30 @@ const EnhancedKPIInput: React.FC<EnhancedKPIInputProps> = ({
   const calculateCurrentStreak = async (): Promise<number> => {
     try {
       const questStats = await questService.getQuestStatistics();
-      return questStats.completion_rate > 0 ? Math.floor(questStats.completion_rate / 10) : 0;
+      return questStats.completion_rate > 0
+        ? Math.floor(questStats.completion_rate / 10)
+        : 0;
     } catch {
       return 0;
     }
   };
 
-  const calculateQuestRewards = (kpis: ConfigurableKPI[], currentValues: WeeklyKPIValues) => {
+  const calculateQuestRewards = (
+    kpis: ConfigurableKPI[],
+    currentValues: WeeklyKPIValues,
+  ) => {
     const rewards: Record<string, any> = {};
     const chances: Record<string, number> = {};
 
-    kpis.forEach(kpi => {
+    kpis.forEach((kpi) => {
       const value = currentValues[kpi.kpi_id] || 0;
       const progress = (value / kpi.target) * 100;
 
       // Calculate stat XP gains
-      const statGains = characterService.calculateStatXPFromKPI(kpi.category, progress);
+      const statGains = characterService.calculateStatXPFromKPI(
+        kpi.category,
+        progress,
+      );
 
       // Calculate critical hit chance (15% base + performance bonus)
       const baseChance = 15;
@@ -154,7 +217,7 @@ const EnhancedKPIInput: React.FC<EnhancedKPIInputProps> = ({
       rewards[kpi.kpi_id] = {
         statXP: statGains,
         rr: Math.round(progress / 10), // 1 RR per 10% completion
-        criticalHitChance: finalChance
+        criticalHitChance: finalChance,
       };
 
       chances[kpi.kpi_id] = finalChance;
@@ -174,11 +237,14 @@ const EnhancedKPIInput: React.FC<EnhancedKPIInputProps> = ({
       await updateWeeklyKPIRecord(currentWeek, { [kpiId]: Math.max(0, value) });
 
       // Apply quest rewards if in quest mode
-      if (enableQuestMode && viewMode === 'quest') {
-        const kpi = userKPIs.find(k => k.kpi_id === kpiId);
+      if (enableQuestMode && viewMode === "quest") {
+        const kpi = userKPIs.find((k) => k.kpi_id === kpiId);
         if (kpi) {
           const progress = (value / kpi.target) * 100;
-          const statGains = characterService.calculateStatXPFromKPI(kpi.category, progress);
+          const statGains = characterService.calculateStatXPFromKPI(
+            kpi.category,
+            progress,
+          );
 
           // Apply stat XP gains
           await characterService.applyKPIStatXP(kpi.category, progress);
@@ -192,7 +258,7 @@ const EnhancedKPIInput: React.FC<EnhancedKPIInputProps> = ({
         }
       }
     } catch (error) {
-      console.error('Failed to sync KPI update:', error);
+      console.error("Failed to sync KPI update:", error);
     } finally {
       setIsSyncing(false);
     }
@@ -206,7 +272,7 @@ const EnhancedKPIInput: React.FC<EnhancedKPIInputProps> = ({
       wisdom: <Eye className="w-4 h-4" />,
       constitution: <Shield className="w-4 h-4" />,
       agility: <Footprints className="w-4 h-4" />,
-      all_stats: <Crown className="w-4 h-4" />
+      all_stats: <Crown className="w-4 h-4" />,
     };
     return icons[statName] || <Sparkles className="w-4 h-4" />;
   };
@@ -215,14 +281,16 @@ const EnhancedKPIInput: React.FC<EnhancedKPIInputProps> = ({
   const getPerformanceRarity = (kpi: ConfigurableKPI, value: number) => {
     const progress = (value / kpi.target) * 100;
 
-    if (progress >= 100) return { text: 'MASTER', color: '#f59e0b' };
-    if (progress >= 90) return { text: 'EXPERT', color: '#8b5cf6' };
-    if (progress >= 75) return { text: 'SKILLED', color: '#3b82f6' };
-    if (progress >= 50) return { text: 'ADEPT', color: '#10b981' };
-    return { text: 'NOVICE', color: '#94a3b8' };
+    if (progress >= 100) return { text: "MASTER", color: "#f59e0b" };
+    if (progress >= 90) return { text: "EXPERT", color: "#8b5cf6" };
+    if (progress >= 75) return { text: "SKILLED", color: "#3b82f6" };
+    if (progress >= 50) return { text: "ADEPT", color: "#10b981" };
+    return { text: "NOVICE", color: "#94a3b8" };
   };
 
-  const overallCompletion = Math.round(kpiManager.calculateWeekCompletion(values, userKPIs));
+  const overallCompletion = Math.round(
+    kpiManager.calculateWeekCompletion(values, userKPIs),
+  );
 
   if (isLoading) {
     return (
@@ -237,13 +305,22 @@ const EnhancedKPIInput: React.FC<EnhancedKPIInputProps> = ({
       {/* Mode Toggle */}
       {enableQuestMode && (
         <div className="flex justify-center">
-          <Tabs value={viewMode} onValueChange={(value) => setViewMode(value as 'classic' | 'quest')}>
+          <Tabs
+            value={viewMode}
+            onValueChange={(value) => setViewMode(value as "classic" | "quest")}
+          >
             <TabsList className="grid w-full grid-cols-2 bg-terminal-bg/50 border border-terminal-accent/30">
-              <TabsTrigger value="classic" className="data-[state=active]:bg-terminal-accent data-[state=active]:text-terminal-bg">
+              <TabsTrigger
+                value="classic"
+                className="data-[state=active]:bg-terminal-accent data-[state=active]:text-terminal-bg"
+              >
                 <Target className="w-4 h-4 mr-2" />
                 Classic KPI
               </TabsTrigger>
-              <TabsTrigger value="quest" className="data-[state=active]:bg-terminal-accent data-[state=active]:text-terminal-bg">
+              <TabsTrigger
+                value="quest"
+                className="data-[state=active]:bg-terminal-accent data-[state=active]:text-terminal-bg"
+              >
                 <Sword className="w-4 h-4 mr-2" />
                 Quest Mode
               </TabsTrigger>
@@ -253,19 +330,26 @@ const EnhancedKPIInput: React.FC<EnhancedKPIInputProps> = ({
       )}
 
       {/* Enhanced Header for Quest Mode */}
-      {viewMode === 'quest' && enableQuestMode && (
+      {viewMode === "quest" && enableQuestMode && (
         <div className="border border-terminal-accent/30 bg-terminal-bg/50 p-6 rounded-lg">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {/* Character Level */}
             {characterStats && (
               <div className="text-center">
-                <h3 className="text-sm font-medium text-terminal-accent/80 mb-2">Character Level</h3>
+                <h3 className="text-sm font-medium text-terminal-accent/80 mb-2">
+                  Character Level
+                </h3>
                 <div className="text-3xl font-bold text-terminal-text cyberpunk-header">
                   {Object.values(characterStats)
-                    .filter((stat: any) => stat.stat_name !== 'all_stats')
-                    .reduce((sum: number, stat: any) => sum + stat.current_level, 0)}
+                    .filter((stat: any) => stat.stat_name !== "all_stats")
+                    .reduce(
+                      (sum: number, stat: any) => sum + stat.current_level,
+                      0,
+                    )}
                 </div>
-                <div className="text-xs text-terminal-accent/60 mt-1">Total Levels</div>
+                <div className="text-xs text-terminal-accent/60 mt-1">
+                  Total Levels
+                </div>
               </div>
             )}
 
@@ -278,7 +362,9 @@ const EnhancedKPIInput: React.FC<EnhancedKPIInputProps> = ({
               <div className="text-3xl font-bold text-terminal-accent cyberpunk-glow-neon-red">
                 {currentStreak}
               </div>
-              <div className="text-xs text-terminal-accent/60 mt-1">Days Active</div>
+              <div className="text-xs text-terminal-accent/60 mt-1">
+                Days Active
+              </div>
             </div>
 
             {/* Critical Hit Power */}
@@ -288,9 +374,15 @@ const EnhancedKPIInput: React.FC<EnhancedKPIInputProps> = ({
                 Critical Power
               </h3>
               <div className="text-3xl font-bold text-terminal-accent cyberpunk-glow-yellow">
-                {Object.values(criticalHitChances).reduce((sum, chance) => sum + chance, 0) / Object.keys(criticalHitChances).length || 0}%
+                {Object.values(criticalHitChances).reduce(
+                  (sum, chance) => sum + chance,
+                  0,
+                ) / Object.keys(criticalHitChances).length || 0}
+                %
               </div>
-              <div className="text-xs text-terminal-accent/60 mt-1">Avg. Chance</div>
+              <div className="text-xs text-terminal-accent/60 mt-1">
+                Avg. Chance
+              </div>
             </div>
           </div>
         </div>
@@ -300,14 +392,14 @@ const EnhancedKPIInput: React.FC<EnhancedKPIInputProps> = ({
       <div className="flex items-center justify-between p-4 border border-terminal-accent/30 bg-terminal-bg/50">
         <button
           onClick={() => {
-            const [year, week] = currentWeek.split('-W').map(Number);
+            const [year, week] = currentWeek.split("-W").map(Number);
             let newWeek = week - 1;
             let newYear = year;
             if (newWeek < 1) {
               newWeek = 52;
               newYear -= 1;
             }
-            const newWeekKey = `${newYear}-W${newWeek.toString().padStart(2, '0')}`;
+            const newWeekKey = `${newYear}-W${newWeek.toString().padStart(2, "0")}`;
             setCurrentWeek(newWeekKey);
           }}
           className="terminal-button p-2"
@@ -318,24 +410,26 @@ const EnhancedKPIInput: React.FC<EnhancedKPIInputProps> = ({
         <div className="text-center">
           <h2 className="text-lg text-terminal-accent font-medium">
             {formatWeekKey(currentWeek)}
-            {viewMode === 'quest' && ' - Training Week'}
+            {viewMode === "quest" && " - Training Week"}
           </h2>
           <div className="text-sm text-terminal-accent/70">
             Week {currentWeek}
-            {isSyncing && <span className="ml-2 text-terminal-accent/50">• Syncing...</span>}
+            {isSyncing && (
+              <span className="ml-2 text-terminal-accent/50">• Syncing...</span>
+            )}
           </div>
         </div>
 
         <button
           onClick={() => {
-            const [year, week] = currentWeek.split('-W').map(Number);
+            const [year, week] = currentWeek.split("-W").map(Number);
             let newWeek = week + 1;
             let newYear = year;
             if (newWeek > 52) {
               newWeek = 1;
               newYear += 1;
             }
-            const newWeekKey = `${newYear}-W${newWeek.toString().padStart(2, '0')}`;
+            const newWeekKey = `${newYear}-W${newWeek.toString().padStart(2, "0")}`;
             setCurrentWeek(newWeekKey);
           }}
           className="terminal-button p-2"
@@ -350,28 +444,28 @@ const EnhancedKPIInput: React.FC<EnhancedKPIInputProps> = ({
           <div className="flex items-center gap-2">
             <Target size={16} className="text-terminal-accent" />
             <span className="text-terminal-accent font-medium">
-              {viewMode === 'quest' ? 'Training Progress' : 'Week Completion'}
+              {viewMode === "quest" ? "Training Progress" : "Week Completion"}
             </span>
           </div>
-          <div className="text-2xl font-bold text-terminal-accent">{overallCompletion}%</div>
+          <div className="text-2xl font-bold text-terminal-accent">
+            {overallCompletion}%
+          </div>
         </div>
-        <Progress
-          value={overallCompletion}
-          className="h-3"
-        />
+        <Progress value={overallCompletion} className="h-3" />
         <div className="text-xs text-terminal-accent/70 mt-2">
-          {viewMode === 'quest'
-            ? 'Overall training progress across all disciplines'
-            : 'Overall progress across all KPIs'
-          }
+          {viewMode === "quest"
+            ? "Overall training progress across all disciplines"
+            : "Overall progress across all KPIs"}
         </div>
 
         {/* Critical Hit Indicators for Quest Mode */}
-        {viewMode === 'quest' && enableQuestMode && (
+        {viewMode === "quest" && enableQuestMode && (
           <div className="mt-4 space-y-2">
-            <div className="text-xs text-terminal-accent/60 uppercase tracking-wider">Critical Hit Potential</div>
+            <div className="text-xs text-terminal-accent/60 uppercase tracking-wider">
+              Critical Hit Potential
+            </div>
             <div className="flex flex-wrap gap-2">
-              {userKPIs.slice(0, 5).map(kpi => {
+              {userKPIs.slice(0, 5).map((kpi) => {
                 const chance = criticalHitChances[kpi.kpi_id] || 0;
                 const value = values[kpi.kpi_id] || 0;
                 const progress = (value / kpi.target) * 100;
@@ -381,15 +475,22 @@ const EnhancedKPIInput: React.FC<EnhancedKPIInputProps> = ({
                     key={kpi.kpi_id}
                     className="flex items-center gap-2 px-2 py-1 rounded border border-terminal-accent/20"
                     style={{
-                      backgroundColor: chance > 20 ? `${kpi.color}20` : 'transparent',
-                      borderColor: chance > 20 ? kpi.color : undefined
+                      backgroundColor:
+                        chance > 20 ? `${kpi.color}20` : "transparent",
+                      borderColor: chance > 20 ? kpi.color : undefined,
                     }}
                   >
-                    <span className="text-xs text-terminal-accent/80">{kpi.name}</span>
-                    <span className={cn(
-                      "text-xs font-mono",
-                      chance > 20 ? "text-terminal-accent cyberpunk-glow-neon-red" : "text-terminal-accent/60"
-                    )}>
+                    <span className="text-xs text-terminal-accent/80">
+                      {kpi.name}
+                    </span>
+                    <span
+                      className={cn(
+                        "text-xs font-mono",
+                        chance > 20
+                          ? "text-terminal-accent cyberpunk-glow-neon-red"
+                          : "text-terminal-accent/60",
+                      )}
+                    >
                       {chance.toFixed(1)}%
                     </span>
                   </div>
@@ -411,7 +512,7 @@ const EnhancedKPIInput: React.FC<EnhancedKPIInputProps> = ({
 
         <TabsContent value="all" className="mt-6">
           <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-            {userKPIs.map(kpi => {
+            {userKPIs.map((kpi) => {
               const value = values[kpi.kpi_id] || 0;
               const progress = Math.min(100, (value / kpi.target) * 100);
               const status = getKPIStatus(kpi.kpi_id, value);
@@ -421,17 +522,17 @@ const EnhancedKPIInput: React.FC<EnhancedKPIInputProps> = ({
                 <div
                   key={kpi.kpi_id}
                   className="space-y-3 border-2 p-4 relative overflow-hidden"
-                  style={{ borderColor: kpi.color + '40' }}
+                  style={{ borderColor: kpi.color + "40" }}
                 >
                   {/* Quest Mode Elements */}
-                  {viewMode === 'quest' && enableQuestMode && (
+                  {viewMode === "quest" && enableQuestMode && (
                     <div className="absolute top-2 right-2">
                       <Badge
                         variant="outline"
                         className="text-xs"
                         style={{
                           borderColor: rarity.color,
-                          color: rarity.color
+                          color: rarity.color,
                         }}
                       >
                         {rarity.text}
@@ -446,11 +547,15 @@ const EnhancedKPIInput: React.FC<EnhancedKPIInputProps> = ({
                         {weekNames[kpi.kpi_id] || kpi.name}
                       </div>
                       <div className="text-xs text-terminal-accent/70">
-                        Target: {weekTargets[kpi.kpi_id]?.target || kpi.target} {kpi.unit}
+                        Target: {weekTargets[kpi.kpi_id]?.target || kpi.target}{" "}
+                        {kpi.unit}
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className="text-lg font-bold" style={{ color: kpi.color }}>
+                      <div
+                        className="text-lg font-bold"
+                        style={{ color: kpi.color }}
+                      >
                         {value}
                       </div>
                       <div className="text-xs text-terminal-accent/70">
@@ -468,47 +573,66 @@ const EnhancedKPIInput: React.FC<EnhancedKPIInputProps> = ({
                         width: `${progress}%`,
                         backgroundColor: kpi.color,
                         opacity: 0.9,
-                        boxShadow: progress >= 80 ? `0 0 8px ${kpi.color}80` : undefined
+                        boxShadow:
+                          progress >= 80 ? `0 0 8px ${kpi.color}80` : undefined,
                       }}
                     />
                   </div>
 
                   {/* Quest Rewards */}
-                  {viewMode === 'quest' && enableQuestMode && potentialRewards[kpi.kpi_id] && (
-                    <div className="space-y-2 pt-2 border-t border-terminal-accent/20">
-                      <div className="text-xs text-terminal-accent/60 uppercase tracking-wider">Potential Rewards</div>
-                      <div className="flex flex-wrap gap-1">
-                        {Object.entries(potentialRewards[kpi.kpi_id].statXP).map(([stat, xp]) => (
-                          <div
-                            key={stat}
-                            className="flex items-center gap-1 px-2 py-1 rounded text-xs"
-                            style={{
-                              backgroundColor: `${STAT_CONFIG[stat]?.color || '#FF073A'}20`,
-                              borderColor: `${STAT_CONFIG[stat]?.color || '#FF073A'}40`,
-                              borderWidth: '1px'
-                            }}
-                          >
-                            {getStatIcon(stat)}
-                            <span style={{ color: STAT_CONFIG[stat]?.color || '#FF073A' }}>
-                              +{xp} {stat}
+                  {viewMode === "quest" &&
+                    enableQuestMode &&
+                    potentialRewards[kpi.kpi_id] && (
+                      <div className="space-y-2 pt-2 border-t border-terminal-accent/20">
+                        <div className="text-xs text-terminal-accent/60 uppercase tracking-wider">
+                          Potential Rewards
+                        </div>
+                        <div className="flex flex-wrap gap-1">
+                          {Object.entries(
+                            potentialRewards[kpi.kpi_id].statXP,
+                          ).map(([stat, xp]) => (
+                            <div
+                              key={stat}
+                              className="flex items-center gap-1 px-2 py-1 rounded text-xs"
+                              style={{
+                                backgroundColor: `${STAT_CONFIG[stat]?.color || "#FF073A"}20`,
+                                borderColor: `${STAT_CONFIG[stat]?.color || "#FF073A"}40`,
+                                borderWidth: "1px",
+                              }}
+                            >
+                              {getStatIcon(stat)}
+                              <span
+                                style={{
+                                  color: STAT_CONFIG[stat]?.color || "#FF073A",
+                                }}
+                              >
+                                +{xp} {stat}
+                              </span>
+                            </div>
+                          ))}
+                          <div className="flex items-center gap-1 px-2 py-1 rounded text-xs bg-terminal-bg/30 border border-terminal-accent/20">
+                            <span className="text-terminal-accent">
+                              +{potentialRewards[kpi.kpi_id].rr} RR
                             </span>
                           </div>
-                        ))}
-                        <div className="flex items-center gap-1 px-2 py-1 rounded text-xs bg-terminal-bg/30 border border-terminal-accent/20">
-                          <span className="text-terminal-accent">
-                            +{potentialRewards[kpi.kpi_id].rr} RR
-                          </span>
                         </div>
                       </div>
-                    </div>
-                  )}
+                    )}
 
                   {/* Controls */}
                   <div className="flex items-center gap-3">
                     <button
-                      onClick={() => updateKPI(kpi.kpi_id, Math.max(0, value - (kpi.unit === 'hours' ? 0.5 : 1)))}
+                      onClick={() =>
+                        updateKPI(
+                          kpi.kpi_id,
+                          Math.max(0, value - (kpi.unit === "hours" ? 0.5 : 1)),
+                        )
+                      }
                       className="w-8 h-8 rounded border border-terminal-accent/30 hover:border-terminal-accent/60 bg-terminal-bg hover:bg-terminal-accent/10 flex items-center justify-center transition-colors"
-                      style={{ borderColor: kpi.color + '40', color: kpi.color }}
+                      style={{
+                        borderColor: kpi.color + "40",
+                        color: kpi.color,
+                      }}
                       disabled={value <= 0}
                     >
                       <Minus size={14} />
@@ -516,7 +640,7 @@ const EnhancedKPIInput: React.FC<EnhancedKPIInputProps> = ({
                     <input
                       type="number"
                       min="0"
-                      step={kpi.unit === 'hours' ? '0.5' : '1'}
+                      step={kpi.unit === "hours" ? "0.5" : "1"}
                       value={value}
                       onChange={async (e) => {
                         const raw = parseFloat(e.target.value);
@@ -526,9 +650,17 @@ const EnhancedKPIInput: React.FC<EnhancedKPIInputProps> = ({
                       className="terminal-input w-16 text-center text-sm"
                     />
                     <button
-                      onClick={() => updateKPI(kpi.kpi_id, value + (kpi.unit === 'hours' ? 0.5 : 1))}
+                      onClick={() =>
+                        updateKPI(
+                          kpi.kpi_id,
+                          value + (kpi.unit === "hours" ? 0.5 : 1),
+                        )
+                      }
                       className="w-8 h-8 rounded border border-terminal-accent/30 hover:border-terminal-accent/60 bg-terminal-bg hover:bg-terminal-accent/10 flex items-center justify-center transition-colors"
-                      style={{ borderColor: kpi.color + '40', color: kpi.color }}
+                      style={{
+                        borderColor: kpi.color + "40",
+                        color: kpi.color,
+                      }}
                     >
                       <Plus size={14} />
                     </button>
