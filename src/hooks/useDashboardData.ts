@@ -5,7 +5,7 @@
  * Consolidates week progress, rank, level, streak, and history.
  */
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { kpiManager } from "@/lib/configurableKpis";
 import {
@@ -17,6 +17,10 @@ import {
 import { rankingManager, RANK_CONFIG, RankTier } from "@/lib/rankingSystem";
 import { useProgressionStore } from "@/stores/progressionStore";
 import { REALTIME_EVENTS } from "@/hooks/useRealtimeSync";
+import { useTraining } from "@/hooks/useTraining";
+import { useSleep } from "@/hooks/useSleep";
+import { useNutrition } from "@/hooks/useNutrition";
+import { useWeight } from "@/hooks/useWeight";
 
 // Types
 export type Rank = "bronze" | "silver" | "gold" | "platinum" | "diamond";
@@ -117,6 +121,67 @@ export function useDashboardData() {
   const progression = useProgressionStore((state) => state.progression);
   const progressionLoading = useProgressionStore((state) => state.isLoading);
 
+  // Get current week key for specialized hooks
+  const currentWeekKey = useMemo(() => getCurrentWeek(), []);
+
+  // Load specialized KPI data
+  const { countingSessionCount, isLoading: trainingLoading } =
+    useTraining(currentWeekKey);
+  const { dailyAverage: sleepAverage, isLoading: sleepLoading } =
+    useSleep(currentWeekKey);
+  const {
+    dailyAverage: nutritionAverage,
+    daysTracked: nutritionDaysTracked,
+    isLoading: nutritionLoading,
+  } = useNutrition(currentWeekKey);
+  const { daysTracked: weightDaysTracked, isLoading: weightLoading } =
+    useWeight(currentWeekKey);
+
+  // Get targets from localStorage
+  const { targetSleep, targetCalories, targetProtein } = useMemo(() => {
+    try {
+      const sleepTarget = parseFloat(
+        localStorage.getItem("noctisium-sleep-target") || "7",
+      );
+      const nutritionTargets = JSON.parse(
+        localStorage.getItem("noctisium-nutrition-targets") ||
+          '{"calories": 2000, "protein": 150}',
+      );
+      return {
+        targetSleep: sleepTarget,
+        targetCalories: nutritionTargets.calories || 2000,
+        targetProtein: nutritionTargets.protein || 150,
+      };
+    } catch {
+      return { targetSleep: 7, targetCalories: 2000, targetProtein: 150 };
+    }
+  }, []);
+
+  // Calculate nutrition score (0-100)
+  const nutritionScore = useMemo(() => {
+    if (nutritionDaysTracked === 0) return 0;
+    const calorieScore = Math.min(
+      100,
+      (nutritionAverage.calories / targetCalories) * 100,
+    );
+    const proteinScore = Math.min(
+      100,
+      (nutritionAverage.protein / targetProtein) * 100,
+    );
+    return Math.round((calorieScore + proteinScore) / 2);
+  }, [nutritionAverage, nutritionDaysTracked, targetCalories, targetProtein]);
+
+  // Specialized KPI values
+  const specializedKpiValues = useMemo(
+    () => ({
+      trainingSessions: countingSessionCount,
+      sleepAverage: sleepAverage,
+      nutrition: nutritionScore,
+      weightDaysTracked: weightDaysTracked,
+    }),
+    [countingSessionCount, sleepAverage, nutritionScore, weightDaysTracked],
+  );
+
   const loadData = useCallback(async () => {
     if (!user?.id) return;
 
@@ -131,27 +196,73 @@ export function useDashboardData() {
       ]);
 
       const weeklyData = loadWeeklyKPIs();
-      const currentWeekKey = getCurrentWeek();
+      const weekKey = getCurrentWeek();
 
       // Get current week's record
       const currentWeekRecord = weeklyData.records.find(
-        (r) => r.weekKey === currentWeekKey,
+        (r) => r.weekKey === weekKey,
       );
 
-      // Calculate current week percentage
-      const currentWeekPercentage = currentWeekRecord
-        ? Math.round(
-            kpiManager.calculateWeekCompletion(
-              currentWeekRecord.values,
-              activeKPIs,
-            ),
-          )
-        : 0;
+      // Create specialized KPI configs with display info
+      const trainingKpiForTarget = activeKPIs.find(
+        (k: any) => k.kpi_type === "training",
+      );
+      const specializedKpiConfigs = [
+        {
+          kpi_id: "trainingSessions",
+          name: "Training",
+          target: trainingKpiForTarget?.target ?? 4,
+          color: "#FF073A",
+          is_active: true,
+          weight: 1,
+        },
+        {
+          kpi_id: "sleepAverage",
+          name: "Sleep",
+          target: targetSleep,
+          color: "#8B5CF6",
+          is_active: true,
+          weight: 1,
+        },
+        {
+          kpi_id: "nutrition",
+          name: "Nutrition",
+          target: 100,
+          color: "#10B981",
+          is_active: true,
+          weight: 1,
+        },
+        {
+          kpi_id: "weightDaysTracked",
+          name: "Weight Tracking",
+          target: 7,
+          color: "#F97316",
+          is_active: true,
+          weight: 1,
+        },
+      ];
 
-      // Build KPI breakdown
-      const kpiBreakdown: KPIBreakdown[] = activeKPIs.map((kpi) => {
-        // Use kpi.kpi_id (string identifier like "deepWorkHours") not kpi.id (UUID)
-        const value = currentWeekRecord?.values[kpi.kpi_id] ?? 0;
+      // Merge specialized values with database values
+      const mergedValues = {
+        ...(currentWeekRecord?.values || {}),
+        ...specializedKpiValues,
+      };
+
+      // Combine KPIs (avoid duplicates)
+      const kpiIds = new Set(activeKPIs.map((k: any) => k.kpi_id));
+      const uniqueSpecialized = specializedKpiConfigs.filter(
+        (k) => !kpiIds.has(k.kpi_id),
+      );
+      const combinedKpis = [...activeKPIs, ...uniqueSpecialized];
+
+      // Calculate current week percentage with merged data
+      const currentWeekPercentage = Math.round(
+        kpiManager.calculateWeekCompletion(mergedValues, combinedKpis),
+      );
+
+      // Build KPI breakdown from combined KPIs (database + specialized)
+      const kpiBreakdown: KPIBreakdown[] = combinedKpis.map((kpi: any) => {
+        const value = mergedValues[kpi.kpi_id] ?? 0;
         const percentage =
           kpi.target > 0
             ? Math.min(100, Math.round((value / kpi.target) * 100))
@@ -241,7 +352,7 @@ export function useDashboardData() {
 
       setData({
         currentWeekPercentage,
-        currentWeekKey,
+        currentWeekKey: weekKey,
         kpiBreakdown,
         rank,
         rrPoints,
@@ -267,7 +378,7 @@ export function useDashboardData() {
     } finally {
       setIsLoading(false);
     }
-  }, [user?.id, progression]);
+  }, [user?.id, progression, specializedKpiValues, targetSleep]);
 
   useEffect(() => {
     loadData();
@@ -302,7 +413,13 @@ export function useDashboardData() {
 
   return {
     data,
-    isLoading: isLoading || progressionLoading,
+    isLoading:
+      isLoading ||
+      progressionLoading ||
+      trainingLoading ||
+      sleepLoading ||
+      nutritionLoading ||
+      weightLoading,
     error,
     refresh,
   };
