@@ -96,8 +96,16 @@ export const TrainingKPI: React.FC<TrainingKPIProps> = ({
       transition={{ duration: 0.4 }}
     >
       {/* Header - Clickable to toggle collapse */}
-      <button
+      <div
+        role="button"
+        tabIndex={0}
         onClick={() => setIsCollapsed(!isCollapsed)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            setIsCollapsed(!isCollapsed);
+          }
+        }}
         className="w-full flex items-center justify-between mb-3 cursor-pointer"
       >
         <div className="flex items-center gap-3">
@@ -207,7 +215,7 @@ export const TrainingKPI: React.FC<TrainingKPIProps> = ({
             <ChevronUp size={18} style={{ color: colors.text.muted }} />
           )}
         </div>
-      </button>
+      </div>
 
       {/* Progress bar - always visible */}
       {target && target > 0 && (
