@@ -762,96 +762,170 @@ const KPIManagement: React.FC<KPIManagementProps> = ({ onClose }) => {
 
         {/* KPI List */}
         <div className="space-y-2">
-          {kpis.map((kpi, index) => (
-            <div
-              key={kpi.id}
-              className={cn(
-                "bg-sidebar border rounded-sm p-4 transition-all",
-                kpi.is_active
-                  ? "border-gray-600"
-                  : "border-gray-700 opacity-60",
-              )}
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div
-                    className="w-4 h-4 rounded-full border-2"
-                    style={{
-                      backgroundColor: kpi.color,
-                      borderColor: kpi.color,
-                    }}
-                  />
-                  <div>
-                    <h4 className="font-medium text-sm flex items-center gap-2">
-                      {kpi.name}
-                      {kpi.auto_sync_source && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent-cyan/20 text-accent-cyan flex items-center gap-1">
-                          {kpi.auto_sync_source === "github_prs" && (
-                            <Github size={10} />
-                          )}
-                          {kpi.auto_sync_source === "deep_work_timer" && (
-                            <Clock size={10} />
-                          )}
-                          Auto-sync
-                        </span>
-                      )}
-                    </h4>
-                    <div className="text-xs text-gray-400">
-                      Target: {kpi.target} {kpi.unit}
-                      {kpi.min_target && ` (min: ${kpi.min_target})`}
-                      {" • "}{" "}
-                      {DEFAULT_CATEGORY_OPTIONS.find(
-                        (c) => c.value === kpi.category,
-                      )?.label ||
-                        kpi.category.charAt(0).toUpperCase() +
-                          kpi.category.slice(1)}
-                      {!kpi.is_active && " • DISABLED"}
+          {/* Regular KPIs (full controls) */}
+          {kpis
+            .filter((k) => !k.is_specialized)
+            .map((kpi, index) => (
+              <div
+                key={kpi.id}
+                className={cn(
+                  "bg-sidebar border rounded-sm p-4 transition-all",
+                  kpi.is_active
+                    ? "border-gray-600"
+                    : "border-gray-700 opacity-60",
+                )}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div
+                      className="w-4 h-4 rounded-full border-2"
+                      style={{
+                        backgroundColor: kpi.color,
+                        borderColor: kpi.color,
+                      }}
+                    />
+                    <div>
+                      <h4 className="font-medium text-sm flex items-center gap-2">
+                        {kpi.name}
+                        {kpi.auto_sync_source && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent-cyan/20 text-accent-cyan flex items-center gap-1">
+                            {kpi.auto_sync_source === "github_prs" && (
+                              <Github size={10} />
+                            )}
+                            {kpi.auto_sync_source === "deep_work_timer" && (
+                              <Clock size={10} />
+                            )}
+                            Auto-sync
+                          </span>
+                        )}
+                      </h4>
+                      <div className="text-xs text-gray-400">
+                        Target: {kpi.target} {kpi.unit}
+                        {kpi.min_target && ` (min: ${kpi.min_target})`}
+                        {" • "}{" "}
+                        {DEFAULT_CATEGORY_OPTIONS.find(
+                          (c) => c.value === kpi.category,
+                        )?.label ||
+                          kpi.category.charAt(0).toUpperCase() +
+                            kpi.category.slice(1)}
+                        {!kpi.is_active && " • DISABLED"}
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => moveKPI(kpi, "up")}
-                    disabled={index === 0}
-                    className="p-1 text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
-                  >
-                    <ArrowUp size={16} />
-                  </button>
-                  <button
-                    onClick={() => moveKPI(kpi, "down")}
-                    disabled={index === kpis.length - 1}
-                    className="p-1 text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
-                  >
-                    <ArrowDown size={16} />
-                  </button>
-                  <button
-                    onClick={() => toggleKPIActive(kpi)}
-                    className={cn(
-                      "px-2 py-1 text-xs rounded transition-colors",
-                      kpi.is_active
-                        ? "bg-yellow-600 text-white hover:bg-yellow-700"
-                        : "bg-green-600 text-white hover:bg-green-700",
-                    )}
-                  >
-                    {kpi.is_active ? "Disable" : "Enable"}
-                  </button>
-                  <button
-                    onClick={() => startEditing(kpi)}
-                    className="p-1 text-gray-400 hover:text-accent-cyan"
-                  >
-                    <Edit size={16} />
-                  </button>
-                  <button
-                    onClick={() => deleteKPI(kpi)}
-                    className="p-1 text-gray-400 hover:text-accent-pink"
-                  >
-                    <Trash2 size={16} />
-                  </button>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => moveKPI(kpi, "up")}
+                      disabled={index === 0}
+                      className="p-1 text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
+                    >
+                      <ArrowUp size={16} />
+                    </button>
+                    <button
+                      onClick={() => moveKPI(kpi, "down")}
+                      disabled={
+                        index ===
+                        kpis.filter((k) => !k.is_specialized).length - 1
+                      }
+                      className="p-1 text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
+                    >
+                      <ArrowDown size={16} />
+                    </button>
+                    <button
+                      onClick={() => toggleKPIActive(kpi)}
+                      className={cn(
+                        "px-2 py-1 text-xs rounded transition-colors",
+                        kpi.is_active
+                          ? "bg-yellow-600 text-white hover:bg-yellow-700"
+                          : "bg-green-600 text-white hover:bg-green-700",
+                      )}
+                    >
+                      {kpi.is_active ? "Disable" : "Enable"}
+                    </button>
+                    <button
+                      onClick={() => startEditing(kpi)}
+                      className="p-1 text-gray-400 hover:text-accent-cyan"
+                    >
+                      <Edit size={16} />
+                    </button>
+                    <button
+                      onClick={() => deleteKPI(kpi)}
+                      className="p-1 text-gray-400 hover:text-accent-pink"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            ))}
+
+          {/* Specialized KPIs (limited controls) */}
+          {kpis.filter((k) => k.is_specialized).length > 0 && (
+            <>
+              <h3 className="text-xs text-gray-400 uppercase tracking-wider font-medium mt-6 pt-4 border-t border-gray-700">
+                Specialized Modules
+              </h3>
+              <p className="text-xs text-gray-500 mb-2">
+                These KPIs have dedicated UI components. Configure targets in
+                their respective cards.
+              </p>
+              {kpis
+                .filter((k) => k.is_specialized)
+                .map((kpi) => (
+                  <div
+                    key={kpi.id}
+                    className={cn(
+                      "bg-sidebar border rounded-sm p-4 transition-all",
+                      kpi.is_active
+                        ? "border-gray-600"
+                        : "border-gray-700 opacity-60",
+                    )}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div
+                          className="w-4 h-4 rounded-full border-2"
+                          style={{
+                            backgroundColor: kpi.color,
+                            borderColor: kpi.color,
+                          }}
+                        />
+                        <div>
+                          <h4 className="font-medium text-sm flex items-center gap-2">
+                            {kpi.name}
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400">
+                              Specialized
+                            </span>
+                          </h4>
+                          <div className="text-xs text-gray-400">
+                            {DEFAULT_CATEGORY_OPTIONS.find(
+                              (c) => c.value === kpi.category,
+                            )?.label ||
+                              kpi.category.charAt(0).toUpperCase() +
+                                kpi.category.slice(1)}
+                            {!kpi.is_active && " • DISABLED"}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => toggleKPIActive(kpi)}
+                          className={cn(
+                            "px-2 py-1 text-xs rounded transition-colors",
+                            kpi.is_active
+                              ? "bg-yellow-600 text-white hover:bg-yellow-700"
+                              : "bg-green-600 text-white hover:bg-green-700",
+                          )}
+                        >
+                          {kpi.is_active ? "Disable" : "Enable"}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+            </>
+          )}
 
           {kpis.length === 0 && (
             <div className="text-center py-8 text-gray-400">

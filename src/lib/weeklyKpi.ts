@@ -1381,3 +1381,122 @@ const getDayIndexFromDate = (dateStr: string): number => {
     (toMidnight(date).getTime() - toMidnight(start).getTime()) / msPerDay,
   );
 };
+
+/**
+ * Clear all KPI data for a specific week (localStorage + Supabase)
+ * Use this to reset a week and start fresh
+ */
+export const clearWeekData = async (weekKey?: string): Promise<boolean> => {
+  const targetWeek = weekKey || getCurrentWeek();
+  console.log(`🗑️ Clearing week data for: ${targetWeek}`);
+
+  try {
+    // 1. Clear from localStorage
+    const data = loadWeeklyKPIs();
+    const originalLength = data.records.length;
+    data.records = data.records.filter((r) => r.weekKey !== targetWeek);
+    await saveWeeklyKPIs(data);
+    console.log(
+      `✅ Removed ${originalLength - data.records.length} record(s) from localStorage`,
+    );
+
+    // 2. Clear from Supabase
+    const userId = userStorage.getCurrentUserId();
+    if (userId) {
+      // Delete from weekly_kpis table
+      const { error: weeklyError } = await supabase
+        .from("weekly_kpis")
+        .delete()
+        .eq("user_id", userId)
+        .eq("week_key", targetWeek);
+
+      if (weeklyError) {
+        console.error("Failed to delete from weekly_kpis:", weeklyError);
+      } else {
+        console.log("✅ Deleted from weekly_kpis table");
+      }
+
+      // Delete from weekly_kpi_entries table
+      const { error: entriesError } = await supabase
+        .from("weekly_kpi_entries")
+        .delete()
+        .eq("user_id", userId)
+        .eq("week_key", targetWeek);
+
+      if (entriesError) {
+        console.error(
+          "Failed to delete from weekly_kpi_entries:",
+          entriesError,
+        );
+      } else {
+        console.log("✅ Deleted from weekly_kpi_entries table");
+      }
+    }
+
+    // 3. Clear target cache for this week
+    clearWeeklyTargetCache(targetWeek);
+
+    console.log(`✅ Week ${targetWeek} data cleared successfully`);
+    return true;
+  } catch (error) {
+    console.error("Failed to clear week data:", error);
+    return false;
+  }
+};
+
+/**
+ * Clear ALL week KPI data (localStorage + Supabase)
+ * Use this when switching week systems (e.g., fiscal to calendar year)
+ */
+export const clearAllWeekData = async (): Promise<boolean> => {
+  console.log("🗑️ Clearing ALL week data...");
+
+  try {
+    // 1. Clear all records from localStorage
+    const data = loadWeeklyKPIs();
+    const originalLength = data.records.length;
+    data.records = [];
+    await saveWeeklyKPIs(data);
+    console.log(`✅ Removed ${originalLength} record(s) from localStorage`);
+
+    // 2. Clear all from Supabase
+    const userId = userStorage.getCurrentUserId();
+    if (userId) {
+      // Delete ALL from weekly_kpis table for this user
+      const { error: weeklyError } = await supabase
+        .from("weekly_kpis")
+        .delete()
+        .eq("user_id", userId);
+
+      if (weeklyError) {
+        console.error("Failed to delete from weekly_kpis:", weeklyError);
+      } else {
+        console.log("✅ Deleted all from weekly_kpis table");
+      }
+
+      // Delete ALL from weekly_kpi_entries table for this user
+      const { error: entriesError } = await supabase
+        .from("weekly_kpi_entries")
+        .delete()
+        .eq("user_id", userId);
+
+      if (entriesError) {
+        console.error(
+          "Failed to delete from weekly_kpi_entries:",
+          entriesError,
+        );
+      } else {
+        console.log("✅ Deleted all from weekly_kpi_entries table");
+      }
+    }
+
+    // 3. Clear all target caches
+    clearWeeklyTargetCache();
+
+    console.log("✅ All week data cleared successfully");
+    return true;
+  } catch (error) {
+    console.error("Failed to clear all week data:", error);
+    return false;
+  }
+};

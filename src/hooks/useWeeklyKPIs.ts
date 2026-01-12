@@ -140,11 +140,21 @@ export function useWeeklyKPIs(initialWeekKey?: string): UseWeeklyKPIsReturn {
     }
   }, [user?.id]);
 
-  // Load weekly values
+  // Load weekly values - reads from localStorage first (source of truth for specialized KPIs)
   const loadWeeklyValues = useCallback(async () => {
     if (!user?.id) return {};
 
     try {
+      // First try localStorage (source of truth for specialized KPIs like nutrition, sleep, training)
+      const localData = JSON.parse(
+        localStorage.getItem("noctisium-weekly-kpis") || '{"records":[]}',
+      );
+      const localRecord = localData.records?.find(
+        (r: { weekKey: string }) => r.weekKey === weekKey,
+      );
+      const localValues = localRecord?.values || {};
+
+      // Then try Supabase for any additional data
       const { data, error: fetchError } = await supabase
         .from("weekly_kpis")
         .select("data")
@@ -154,16 +164,29 @@ export function useWeeklyKPIs(initialWeekKey?: string): UseWeeklyKPIsReturn {
 
       if (fetchError) throw fetchError;
 
+      let supabaseValues: Record<string, number> = {};
       if (data?.data) {
         // Handle both old format (values nested) and new format
         const values = data.data.values || data.data;
-        return typeof values === "object" ? values : {};
+        supabaseValues = typeof values === "object" ? values : {};
       }
 
-      return {};
+      // Merge: localStorage takes precedence (has latest specialized KPI data)
+      return { ...supabaseValues, ...localValues };
     } catch (err) {
       console.error("Failed to load weekly values:", err);
-      return {};
+      // Fallback to localStorage only
+      try {
+        const localData = JSON.parse(
+          localStorage.getItem("noctisium-weekly-kpis") || '{"records":[]}',
+        );
+        const localRecord = localData.records?.find(
+          (r: { weekKey: string }) => r.weekKey === weekKey,
+        );
+        return localRecord?.values || {};
+      } catch {
+        return {};
+      }
     }
   }, [user?.id, weekKey]);
 

@@ -224,8 +224,22 @@ export function useNutrition(weekKey: string): UseNutritionReturn {
     { calories: 0, protein: 0 },
   );
 
-  // Calculate daily average
-  const daysTracked = Object.keys(weekData).length;
+  // Calculate days with actual data (calories > 0 or protein > 0)
+  const daysTracked = Object.values(weekData).filter((day) => {
+    const totalCals =
+      (day.breakfast_calories || 0) +
+      (day.lunch_calories || 0) +
+      (day.dinner_calories || 0) +
+      (day.snacks_calories || 0);
+    const totalProtein =
+      (day.breakfast_protein || 0) +
+      (day.lunch_protein || 0) +
+      (day.dinner_protein || 0) +
+      (day.snacks_protein || 0);
+    return totalCals > 0 || totalProtein > 0;
+  }).length;
+
+  // Calculate daily average (over days with actual data only)
   const dailyAverage =
     daysTracked > 0
       ? {
@@ -234,12 +248,34 @@ export function useNutrition(weekKey: string): UseNutritionReturn {
         }
       : { calories: 0, protein: 0 };
 
-  // Sync daily nutrition averages to weekly KPI system
+  // Sync combined nutrition score to weekly KPI system
   useEffect(() => {
     if (user?.id && weekKey && daysTracked > 0) {
+      // Get targets from localStorage (or defaults)
+      const nutritionTargets = JSON.parse(
+        localStorage.getItem("noctisium-nutrition-targets") ||
+          '{"calories": 2000, "protein": 150}',
+      );
+
+      // Calculate combined nutrition score (avg of calories % + protein %)
+      const caloriesPercent =
+        nutritionTargets.calories > 0
+          ? Math.min(
+              100,
+              (dailyAverage.calories / nutritionTargets.calories) * 100,
+            )
+          : 0;
+      const proteinPercent =
+        nutritionTargets.protein > 0
+          ? Math.min(
+              100,
+              (dailyAverage.protein / nutritionTargets.protein) * 100,
+            )
+          : 0;
+      const combinedScore = Math.round((caloriesPercent + proteinPercent) / 2);
+
       updateWeeklyKPIRecord(weekKey, {
-        avg_calories: dailyAverage.calories,
-        avg_protein: dailyAverage.protein,
+        nutrition: combinedScore, // Single combined score (0-100)
       });
     }
   }, [dailyAverage, user?.id, weekKey, daysTracked]);

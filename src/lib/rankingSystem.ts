@@ -4,7 +4,9 @@ import {
   loadWeeklyKPIs,
   getCurrentWeek,
   getWeeklyKPIRecord,
+  getWeekDates,
 } from "./weeklyKpi";
+import { supabase } from "./supabase";
 
 // Ranking system types
 export type RankTier =
@@ -311,6 +313,176 @@ export class RankingManager {
     return "bronze";
   }
 
+  // Load specialized KPI data for any given week
+  async loadSpecializedKPIsForWeek(
+    weekKey: string,
+    userId: string,
+  ): Promise<{
+    trainingSessions: number;
+    sleepAverage: number;
+    nutrition: number;
+    weightDaysTracked: number;
+  }> {
+    const { start, end } = getWeekDates(weekKey);
+    const startDate = start.toISOString().split("T")[0];
+    const endDate = end.toISOString().split("T")[0];
+
+    try {
+      // Query all specialized KPI tables in parallel
+      const [trainingResult, sleepResult, nutritionResult, weightResult] =
+        await Promise.all([
+          // Training sessions that count toward target
+          supabase
+            .from("training_sessions")
+            .select("id, training_type:training_types(counts_toward_target)")
+            .eq("user_id", userId)
+            .gte("date", startDate)
+            .lte("date", endDate),
+
+          // Sleep entries
+          supabase
+            .from("sleep_entries")
+            .select("hours")
+            .eq("user_id", userId)
+            .gte("date", startDate)
+            .lte("date", endDate),
+
+          // Nutrition entries
+          supabase
+            .from("nutrition_entries")
+            .select("*")
+            .eq("user_id", userId)
+            .gte("date", startDate)
+            .lte("date", endDate),
+
+          // Weight entries
+          supabase
+            .from("weight_entries")
+            .select("id")
+            .eq("user_id", userId)
+            .gte("date", startDate)
+            .lte("date", endDate),
+        ]);
+
+      // Calculate training sessions (only those that count toward target)
+      const trainingSessions =
+        trainingResult.data?.filter(
+          (s: any) => s.training_type?.counts_toward_target !== false,
+        ).length || 0;
+
+      // Calculate sleep average
+      const sleepEntries = sleepResult.data || [];
+      const sleepAverage =
+        sleepEntries.length > 0
+          ? sleepEntries.reduce(
+              (sum: number, e: any) => sum + (e.hours || 0),
+              0,
+            ) / sleepEntries.length
+          : 0;
+
+      // Calculate nutrition score
+      const nutritionEntries = nutritionResult.data || [];
+      let nutritionScore = 0;
+      if (nutritionEntries.length > 0) {
+        // Get targets from a default (can't access localStorage here)
+        const targetCalories = 2000;
+        const targetProtein = 150;
+
+        // Calculate daily totals and averages
+        let totalCalories = 0;
+        let totalProtein = 0;
+        for (const entry of nutritionEntries) {
+          totalCalories +=
+            (entry.breakfast_calories || 0) +
+            (entry.lunch_calories || 0) +
+            (entry.dinner_calories || 0) +
+            (entry.snacks_calories || 0);
+          totalProtein +=
+            (entry.breakfast_protein || 0) +
+            (entry.lunch_protein || 0) +
+            (entry.dinner_protein || 0) +
+            (entry.snacks_protein || 0);
+        }
+
+        const avgCalories = totalCalories / nutritionEntries.length;
+        const avgProtein = totalProtein / nutritionEntries.length;
+
+        const calorieScore = Math.min(
+          100,
+          (avgCalories / targetCalories) * 100,
+        );
+        const proteinScore = Math.min(100, (avgProtein / targetProtein) * 100);
+        nutritionScore = Math.round((calorieScore + proteinScore) / 2);
+      }
+
+      // Count weight days tracked
+      const weightDaysTracked = weightResult.data?.length || 0;
+
+      return {
+        trainingSessions,
+        sleepAverage,
+        nutrition: nutritionScore,
+        weightDaysTracked,
+      };
+    } catch (error) {
+      console.error("Failed to load specialized KPIs for week:", error);
+      return {
+        trainingSessions: 0,
+        sleepAverage: 0,
+        nutrition: 0,
+        weightDaysTracked: 0,
+      };
+    }
+  }
+
+  // Reset rank history and user rank to initial state
+  async resetRankHistory(): Promise<void> {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        console.error("No authenticated user for rank reset");
+        return;
+      }
+
+      // Delete all rank history for this user
+      const { error: deleteError } = await supabase
+        .from("rank_history")
+        .delete()
+        .eq("user_id", user.id);
+
+      if (deleteError) {
+        console.error("Failed to delete rank history:", deleteError);
+      }
+
+      // Reset user rank to initial state
+      const initialRank: Omit<UserRank, "created_at" | "updated_at"> = {
+        current_rank: "bronze",
+        rr_points: 100,
+        total_weeks: 0,
+        weeks_completed: 0,
+        last_assessment: new Date().toISOString(),
+      };
+
+      await userStorage.setUserRank(initialRank);
+      console.log("Rank history reset complete");
+    } catch (error) {
+      console.error("Failed to reset rank history:", error);
+      throw error;
+    }
+  }
+
+  // Full reset and regenerate rank history with specialized KPIs
+  async resetAndRegenerateRankHistory(): Promise<void> {
+    console.log("Starting full rank history reset and regeneration...");
+    await this.resetRankHistory();
+    // Small delay to ensure database operations complete
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    await this.generateRankHistoryFromKPIs();
+    console.log("Rank history reset and regeneration complete!");
+  }
+
   // Assess weekly performance and update rank
   async assessWeeklyPerformance(weekKey: string): Promise<WeeklyAssessment> {
     try {
@@ -464,6 +636,15 @@ export class RankingManager {
   // Generate rank history retroactively from existing KPI data
   async generateRankHistoryFromKPIs(): Promise<void> {
     try {
+      // Get current user
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        console.error("No authenticated user for rank generation");
+        return;
+      }
+
       // Get all weekly KPI records from local storage first (more complete data)
       const localData = loadWeeklyKPIs();
       let weeklyRecords = localData.records || [];
@@ -512,9 +693,6 @@ export class RankingManager {
         return;
       }
 
-      // Debug: Show what data we're working with
-      sortedWeeks.forEach((week) => {});
-
       // Initialize with starting rank
       let currentRank = await this.getUserRank();
       if (!currentRank) {
@@ -525,28 +703,101 @@ export class RankingManager {
       let runningRank: RankTier = "bronze";
       let runningRR = 100;
 
+      // Get active KPIs once (reuse for all weeks)
+      const activeKPIs = await kpiManager.getActiveKPIs();
+
+      // Specialized KPI configs (same targets as dashboard)
+      const trainingKpiForTarget = activeKPIs.find(
+        (k: any) => k.kpi_type === "training",
+      );
+      const specializedKpiConfigs = [
+        {
+          kpi_id: "trainingSessions",
+          name: "Training",
+          target: trainingKpiForTarget?.target ?? 4,
+          is_active: true,
+          weight: 1,
+        },
+        {
+          kpi_id: "sleepAverage",
+          name: "Sleep",
+          target: 7,
+          is_active: true,
+          weight: 1,
+        },
+        {
+          kpi_id: "nutrition",
+          name: "Nutrition",
+          target: 100,
+          is_active: true,
+          weight: 1,
+        },
+        {
+          kpi_id: "weightDaysTracked",
+          name: "Weight Tracking",
+          target: 7,
+          is_active: true,
+          weight: 1,
+        },
+      ];
+
+      // Combine KPIs (avoid duplicates)
+      const kpiIds = new Set(activeKPIs.map((k: any) => k.kpi_id));
+      const uniqueSpecialized = specializedKpiConfigs.filter(
+        (k) => !kpiIds.has(k.kpi_id),
+      );
+      const combinedKpis = [...activeKPIs, ...uniqueSpecialized];
+
       for (const weekRecord of sortedWeeks) {
         try {
           const weekKey = weekRecord.weekKey;
 
-          // Extract values from the record
-          const values = weekRecord.values || {};
-
-          // Skip if no values
-          if (Object.keys(values).length === 0) {
+          // Validate week key format (should be YYYY-WXX)
+          if (!weekKey || !/^\d{4}-W\d{2}$/.test(weekKey)) {
+            console.warn(`Skipping invalid week key: ${weekKey}`);
             continue;
           }
 
-          // Calculate what the completion percentage would have been using proper KPI logic
-          const activeKPIs = await kpiManager.getActiveKPIs();
+          // Extract database KPI values from the record
+          const dbValues = weekRecord.values || {};
+
+          // Load specialized KPI values for this week
+          const specializedValues = await this.loadSpecializedKPIsForWeek(
+            weekKey,
+            user.id,
+          );
+
+          // Merge values (specialized values override database values if both exist)
+          const mergedValues = {
+            ...dbValues,
+            trainingSessions: specializedValues.trainingSessions,
+            sleepAverage: specializedValues.sleepAverage,
+            nutrition: specializedValues.nutrition,
+            weightDaysTracked: specializedValues.weightDaysTracked,
+          };
+
+          // Skip if no meaningful values
+          const hasDbValues = Object.keys(dbValues).length > 0;
+          const hasSpecializedValues =
+            specializedValues.trainingSessions > 0 ||
+            specializedValues.sleepAverage > 0 ||
+            specializedValues.nutrition > 0 ||
+            specializedValues.weightDaysTracked > 0;
+
+          if (!hasDbValues && !hasSpecializedValues) {
+            continue;
+          }
+
+          // Calculate completion percentage using merged data
           let completionPercentage = 0;
 
-          if (activeKPIs.length > 0) {
+          if (combinedKpis.length > 0) {
             completionPercentage = Math.round(
-              kpiManager.calculateWeekCompletion(values, activeKPIs),
+              kpiManager.calculateWeekCompletion(mergedValues, combinedKpis),
             );
           }
 
+          // Skip weeks with 0% completion
           if (completionPercentage === 0) {
             continue;
           }
@@ -559,8 +810,7 @@ export class RankingManager {
           const newRR = Math.max(0, runningRR + rrChange);
           const newRank = this.getRankFromRR(newRR);
 
-          // Create rank change record if rank actually changed or if it's significant RR change
-          // ALWAYS save rank changes for debugging - removed threshold
+          // Create rank change record
           const rankChange: RankChange = {
             week_key: weekKey,
             old_rank: runningRank,
@@ -576,10 +826,6 @@ export class RankingManager {
 
           // Save this rank change
           await this.saveRankChange(rankChange);
-
-          // Also check if the change should have been significant
-          if (newRank === runningRank && Math.abs(rrChange) < 10) {
-          }
 
           // Update running totals for next iteration
           runningRank = newRank;
@@ -607,6 +853,9 @@ export class RankingManager {
       };
 
       await userStorage.setUserRank(updatedRank);
+      console.log(
+        `Rank history regenerated: ${runningRank} with ${runningRR} RR`,
+      );
     } catch (error) {
       console.error("Failed to generate rank history from KPIs:", error);
     }
@@ -920,4 +1169,9 @@ if (typeof window !== "undefined") {
   };
 
   (window as any).showRRTable = () => {};
+
+  // Full reset and regenerate with specialized KPIs
+  (window as any).resetRankHistory = async () => {
+    await rankingManager.resetAndRegenerateRankHistory();
+  };
 }

@@ -333,12 +333,11 @@ export function useTraining(weekKey: string): UseTrainingReturn {
     (s) => s.training_type?.counts_toward_target !== false,
   ).length;
 
-  // Sync training sessions count to weekly KPI system
+  // Sync combined training sessions count to weekly KPI system
   useEffect(() => {
     if (user?.id && weekKey) {
       updateWeeklyKPIRecord(weekKey, {
-        strengthSessions: countingSessionCount,
-        bjjSessions: countingSessionCount,
+        trainingSessions: countingSessionCount, // Combined total of all training types
       });
     }
   }, [countingSessionCount, user?.id, weekKey]);

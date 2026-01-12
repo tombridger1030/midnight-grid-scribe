@@ -128,13 +128,22 @@ export const WeeklyKPIs: React.FC<WeeklyKPIsProps> = ({ className }) => {
   } = useWeight(weekKey);
 
   // Read targets from KPIs array (database-backed)
-  const avgCaloriesKpi = kpis.find((k) => k.kpi_id === "avg_calories");
-  const avgProteinKpi = kpis.find((k) => k.kpi_id === "avg_protein");
   const sleepTargetKpi = kpis.find((k) => k.kpi_id === "sleepTarget");
   const weightTargetKpi = kpis.find((k) => k.kpi_id === "weightTarget");
 
-  const targetCalories = avgCaloriesKpi?.target ?? 1900;
-  const targetProtein = avgProteinKpi?.target ?? 150;
+  // Nutrition targets stored in localStorage for combined score calculation
+  const [nutritionTargets, setNutritionTargets] = useState(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("noctisium-nutrition-targets");
+      if (stored) {
+        return JSON.parse(stored);
+      }
+    }
+    return { calories: 2000, protein: 150 };
+  });
+
+  const targetCalories = nutritionTargets.calories;
+  const targetProtein = nutritionTargets.protein;
   const targetSleep = sleepTargetKpi?.target ?? 7;
   const targetWeight = weightTargetKpi?.target ?? 180;
 
@@ -166,31 +175,29 @@ export const WeeklyKPIs: React.FC<WeeklyKPIsProps> = ({ className }) => {
   );
 
   const handleUpdateCaloriesTarget = useCallback(
-    async (target: number) => {
-      try {
-        await kpiManager.updateKPI("avg_calories", { target });
-        toast.success("Calories target updated");
-        refreshData();
-      } catch (error) {
-        console.error("Failed to update calories target:", error);
-        toast.error("Failed to update target");
-      }
+    (target: number) => {
+      const updated = { ...nutritionTargets, calories: target };
+      setNutritionTargets(updated);
+      localStorage.setItem(
+        "noctisium-nutrition-targets",
+        JSON.stringify(updated),
+      );
+      toast.success("Calories target updated");
     },
-    [refreshData],
+    [nutritionTargets],
   );
 
   const handleUpdateProteinTarget = useCallback(
-    async (target: number) => {
-      try {
-        await kpiManager.updateKPI("avg_protein", { target });
-        toast.success("Protein target updated");
-        refreshData();
-      } catch (error) {
-        console.error("Failed to update protein target:", error);
-        toast.error("Failed to update target");
-      }
+    (target: number) => {
+      const updated = { ...nutritionTargets, protein: target };
+      setNutritionTargets(updated);
+      localStorage.setItem(
+        "noctisium-nutrition-targets",
+        JSON.stringify(updated),
+      );
+      toast.success("Protein target updated");
     },
-    [refreshData],
+    [nutritionTargets],
   );
 
   const handleUpdateSleepTarget = useCallback(
@@ -224,14 +231,105 @@ export const WeeklyKPIs: React.FC<WeeklyKPIsProps> = ({ className }) => {
   // Auto-sync data
   const { kpiValueMapping, isSyncing, syncNow } = useAutoSync(weekKey);
 
-  // Merge synced values with manual values
+  // Calculate nutrition score (combined % of calories + protein targets)
+  const calculateNutritionScore = useCallback(() => {
+    if (nutritionDaysTracked === 0) return 0;
+    const calorieScore = Math.min(
+      100,
+      (nutritionAverage.calories / targetCalories) * 100,
+    );
+    const proteinScore = Math.min(
+      100,
+      (nutritionAverage.protein / targetProtein) * 100,
+    );
+    return Math.round((calorieScore + proteinScore) / 2);
+  }, [nutritionAverage, nutritionDaysTracked, targetCalories, targetProtein]);
+
+  // Map specialized KPI values from their respective hooks
+  // These KPIs have their own UI components and store data in separate tables
+  const specializedKpiValues = useMemo(
+    () => ({
+      trainingSessions: countingSessionCount,
+      sleepAverage: sleepAverage,
+      nutrition: calculateNutritionScore(),
+      weightDaysTracked: weightDaysTracked,
+      pagesRead: weeklyPagesRead,
+    }),
+    [
+      countingSessionCount,
+      sleepAverage,
+      calculateNutritionScore,
+      weightDaysTracked,
+      weeklyPagesRead,
+    ],
+  );
+
+  // Merge synced values with manual values and specialized KPI values
   const mergedValues = useMemo(
     () => ({
       ...values,
       ...kpiValueMapping, // Auto-synced values override manual ones
+      ...specializedKpiValues, // Specialized KPI values from their hooks
     }),
-    [values, kpiValueMapping],
+    [values, kpiValueMapping, specializedKpiValues],
   );
+
+  // Recalculate overall progress using merged values (includes auto-synced)
+  // This fixes the bug where overallProgress from hook uses empty database values
+  const calculatedProgress = useMemo(() => {
+    // Get training target from kpis for specialized config
+    const trainingKpiForTarget = kpis.find((k) => k.kpi_type === "training");
+
+    // Define specialized KPI configs for progress calculation
+    // These KPIs exist as components but may not be in the database kpis array
+    const specializedKpiConfigs = [
+      {
+        kpi_id: "trainingSessions",
+        target: trainingKpiForTarget?.target ?? 4,
+        is_active: true,
+        weight: 1,
+      },
+      {
+        kpi_id: "sleepAverage",
+        target: targetSleep,
+        is_active: true,
+        weight: 1,
+      },
+      {
+        kpi_id: "nutrition",
+        target: 100,
+        is_active: true,
+        weight: 1,
+      },
+      {
+        kpi_id: "weightDaysTracked",
+        target: 7,
+        is_active: true,
+        weight: 1,
+      },
+    ];
+
+    // Combine database KPIs with specialized KPI configs (avoid duplicates)
+    const kpiIds = new Set(kpis.map((k) => k.kpi_id));
+    const uniqueSpecialized = specializedKpiConfigs.filter(
+      (k) => !kpiIds.has(k.kpi_id),
+    );
+    const combinedKpis = [...kpis, ...uniqueSpecialized];
+
+    const activeKpis = combinedKpis.filter(
+      (k) => k.is_active && k.target && k.target > 0 && (k.weight ?? 1) > 0,
+    );
+    if (activeKpis.length === 0) return 0;
+
+    let totalProgress = 0;
+    for (const kpi of activeKpis) {
+      const value = mergedValues[kpi.kpi_id] || 0;
+      const progress = Math.min(100, (value / kpi.target!) * 100);
+      totalProgress += progress;
+    }
+
+    return Math.round(totalProgress / activeKpis.length);
+  }, [kpis, mergedValues, targetSleep]);
 
   // Persist auto-synced values based on KPI auto_sync_source configuration
   useEffect(() => {
@@ -375,8 +473,8 @@ export const WeeklyKPIs: React.FC<WeeklyKPIsProps> = ({ className }) => {
     );
   }
 
-  const progressColor = getProgressColor(overallProgress);
-  const isComplete = overallProgress >= 100;
+  const progressColor = getProgressColor(calculatedProgress);
+  const isComplete = calculatedProgress >= 100;
 
   return (
     <motion.div
@@ -457,7 +555,7 @@ export const WeeklyKPIs: React.FC<WeeklyKPIsProps> = ({ className }) => {
         }}
       >
         {/* Background glow effect for high progress */}
-        {overallProgress >= 70 && (
+        {calculatedProgress >= 70 && (
           <div
             className="absolute inset-0 opacity-10"
             style={{
@@ -467,7 +565,7 @@ export const WeeklyKPIs: React.FC<WeeklyKPIsProps> = ({ className }) => {
         )}
 
         <motion.div
-          key={overallProgress}
+          key={calculatedProgress}
           initial={{ scale: 0.8, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ type: "spring", stiffness: 200, damping: 15 }}
@@ -477,7 +575,7 @@ export const WeeklyKPIs: React.FC<WeeklyKPIsProps> = ({ className }) => {
             textShadow: isComplete ? `0 0 20px ${progressColor}` : undefined,
           }}
         >
-          {overallProgress}%
+          {calculatedProgress}%
         </motion.div>
 
         <div
@@ -487,7 +585,7 @@ export const WeeklyKPIs: React.FC<WeeklyKPIsProps> = ({ className }) => {
           <motion.div
             className="h-full rounded-full"
             initial={{ width: 0 }}
-            animate={{ width: `${overallProgress}%` }}
+            animate={{ width: `${calculatedProgress}%` }}
             transition={{ duration: 0.7, ease: "easeOut" }}
             style={{
               backgroundColor: progressColor,

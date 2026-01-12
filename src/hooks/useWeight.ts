@@ -8,7 +8,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/contexts/AuthContext";
-import { getWeekDates } from "@/lib/weeklyKpi";
+import { getWeekDates, updateWeeklyKPIRecord } from "@/lib/weeklyKpi";
 import { useProgressionStore } from "@/stores/progressionStore";
 
 export interface DailyWeight {
@@ -186,6 +186,15 @@ export function useWeight(weekKey: string): UseWeightReturn {
   const maxWeight = weightArray.length > 0 ? Math.max(...weightArray) : 0;
 
   const daysTracked = weightArray.length;
+
+  // Sync weight tracking days to weekly KPI system
+  useEffect(() => {
+    if (user?.id && weekKey && daysTracked > 0) {
+      updateWeeklyKPIRecord(weekKey, {
+        weightDaysTracked: daysTracked,
+      });
+    }
+  }, [daysTracked, user?.id, weekKey]);
 
   return {
     weekData,
