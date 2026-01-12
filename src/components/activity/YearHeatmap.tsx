@@ -49,13 +49,24 @@ function getColorLevel(
   maxValue: number,
   colors: string[],
 ): string {
-  if (value === 0) return colors[0];
-  if (maxValue === 0) return colors[0];
+  if (value === 0 || maxValue === 0) return colors[0];
   const ratio = value / maxValue;
   if (ratio <= 0.25) return colors[1];
   if (ratio <= 0.5) return colors[2];
   if (ratio <= 0.75) return colors[3];
   return colors[4];
+}
+
+function getCellColorClass(
+  isCurrentYear: boolean,
+  isFuture: boolean,
+  value: number,
+  maxValue: number,
+  colorScale: string[],
+): string {
+  if (!isCurrentYear) return "bg-transparent";
+  if (isFuture) return colorScale[0];
+  return getColorLevel(value, maxValue, colorScale);
 }
 
 function formatDate(date: Date): string {
@@ -83,11 +94,10 @@ export function YearHeatmap({
   onDayClick,
 }: YearHeatmapProps) {
   const dataMap = useMemo(() => {
-    const map: Record<string, number> = {};
-    data.forEach((d) => {
+    return data.reduce<Record<string, number>>((map, d) => {
       map[d.date] = d.value;
-    });
-    return map;
+      return map;
+    }, {});
   }, [data]);
 
   const maxValue = useMemo(() => {
@@ -95,9 +105,10 @@ export function YearHeatmap({
     return Math.max(...data.map((d) => d.value));
   }, [data]);
 
-  const totalValue = useMemo(() => {
-    return data.reduce((sum, d) => sum + d.value, 0);
-  }, [data]);
+  const totalValue = useMemo(
+    () => data.reduce((sum, d) => sum + d.value, 0),
+    [data],
+  );
 
   const weeks = useMemo(() => {
     const result: Date[][] = [];
@@ -191,14 +202,15 @@ export function YearHeatmap({
                 today.setHours(0, 0, 0, 0);
                 const isFuture = day > today;
                 const isToday = formatDate(new Date()) === dateStr;
-                // Future dates show empty color, past dates show actual data color
-                const colorClass = !isCurrentYear
-                  ? "bg-transparent"
-                  : isFuture
-                    ? colorScale[0] // Empty color for future dates
-                    : getColorLevel(value, maxValue, colorScale);
-
                 const isInteractive = isCurrentYear && !isFuture;
+
+                const colorClass = getCellColorClass(
+                  isCurrentYear,
+                  isFuture,
+                  value,
+                  maxValue,
+                  colorScale,
+                );
 
                 return (
                   <Tooltip key={dayIdx}>

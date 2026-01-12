@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, type ReactNode } from "react";
 import { githubIntegration, GitHubCommit } from "@/lib/githubIntegration";
 import { Card } from "@/components/ui/card";
 import {
@@ -24,40 +24,42 @@ interface DayStats {
   commits: GitHubCommit[];
 }
 
-const GitHubCommitsFeed: React.FC<GitHubCommitsFeedProps> = ({
+function GitHubCommitsFeed({
   days = 7,
   maxCommits = 100,
   onCommitsLoaded,
-}) => {
+}: GitHubCommitsFeedProps) {
   const [commits, setCommits] = useState<GitHubCommit[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedDay, setExpandedDay] = useState<string | null>(null);
 
-  const loadCommits = async () => {
+  async function loadCommits(): Promise<void> {
     setLoading(true);
     setError(null);
 
+    githubIntegration.loadSettings();
+
+    if (!githubIntegration.isConfigured()) {
+      setError("GitHub not configured. Go to Settings to set it up.");
+      setLoading(false);
+      return;
+    }
+
     try {
-      githubIntegration.loadSettings();
-
-      if (!githubIntegration.isConfigured()) {
-        setError("GitHub not configured. Go to Settings to set it up.");
-        setLoading(false);
-        return;
-      }
-
       const recentCommits = await githubIntegration.getRecentCommits(days);
       const slicedCommits = recentCommits.slice(0, maxCommits);
       setCommits(slicedCommits);
       onCommitsLoaded?.(slicedCommits);
-    } catch (err: any) {
-      setError(err.message || "Failed to load commits");
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Failed to load commits";
+      setError(message);
       console.error("Failed to load GitHub commits:", err);
     } finally {
       setLoading(false);
     }
-  };
+  }
 
   useEffect(() => {
     loadCommits();
@@ -121,28 +123,36 @@ const GitHubCommitsFeed: React.FC<GitHubCommitsFeedProps> = ({
       .slice(0, 4); // Top 4 repos for pills
   }, [commits]);
 
-  // Color scale for hourly cells
-  const getHourColor = (count: number) => {
+  function getHourColor(count: number): string {
     if (count === 0) return "bg-[#161b22]";
-    const intensity = count / maxHourlyCount;
-    if (intensity < 0.25) return "bg-[#0e4429]";
-    if (intensity < 0.5) return "bg-[#006d32]";
-    if (intensity < 0.75) return "bg-[#26a641]";
+    const ratio = count / maxHourlyCount;
+    if (ratio <= 0.25) return "bg-[#0e4429]";
+    if (ratio <= 0.5) return "bg-[#006d32]";
+    if (ratio <= 0.75) return "bg-[#26a641]";
     return "bg-[#39d353]";
-  };
+  }
 
-  const toggleDay = (date: string) => {
-    setExpandedDay(expandedDay === date ? null : date);
-  };
+  function toggleDay(date: string): void {
+    setExpandedDay((current) => (current === date ? null : date));
+  }
 
-  const formatTime = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleTimeString("en-US", {
+  function formatTime(dateString: string): string {
+    return new Date(dateString).toLocaleTimeString("en-US", {
       hour: "numeric",
       minute: "2-digit",
       hour12: true,
     });
-  };
+  }
+
+  function renderDayIcon(total: number, date: string): ReactNode {
+    if (total === 0) {
+      return <div className="w-3" />;
+    }
+    if (expandedDay === date) {
+      return <ChevronDown size={12} className="text-terminal-accent" />;
+    }
+    return <ChevronRight size={12} className="text-terminal-accent/50" />;
+  }
 
   if (loading) {
     return (
@@ -217,18 +227,7 @@ const GitHubCommitsFeed: React.FC<GitHubCommitsFeedProps> = ({
                 }`}
               >
                 <div className="flex items-center gap-1.5">
-                  {day.total > 0 ? (
-                    expandedDay === day.date ? (
-                      <ChevronDown size={12} className="text-terminal-accent" />
-                    ) : (
-                      <ChevronRight
-                        size={12}
-                        className="text-terminal-accent/50"
-                      />
-                    )
-                  ) : (
-                    <div className="w-3" />
-                  )}
+                  {renderDayIcon(day.total, day.date)}
                   <span className="text-xs text-terminal-accent/70">
                     {day.dayLabel}
                   </span>
@@ -314,6 +313,6 @@ const GitHubCommitsFeed: React.FC<GitHubCommitsFeedProps> = ({
       )}
     </Card>
   );
-};
+}
 
 export default GitHubCommitsFeed;

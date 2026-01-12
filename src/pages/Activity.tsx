@@ -52,11 +52,11 @@ export default function Activity() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const handleRefresh = async () => {
+  async function handleRefresh(): Promise<void> {
     setIsRefreshing(true);
     await refresh();
     setIsRefreshing(false);
-  };
+  }
 
   return (
     <div className="p-4">
