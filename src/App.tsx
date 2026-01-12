@@ -35,7 +35,13 @@ import { useProgressionStore } from "@/stores/progressionStore";
 import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 import { syncWeeklyKPIsWithSupabase } from "@/lib/weeklyKpi";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false,
+    },
+  },
+});
 
 // Inner App component that uses auth context
 const AppContent = () => {
@@ -79,7 +85,7 @@ const AppContent = () => {
 
       initializeUser();
     }
-  }, [user]); // Removed isInitializing from dependencies to prevent infinite loop
+  }, [user?.id]); // Use user.id instead of user object to prevent re-init on tab focus
 
   if (loading || isInitializing) {
     return (
