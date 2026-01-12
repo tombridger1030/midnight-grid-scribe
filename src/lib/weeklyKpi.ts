@@ -392,6 +392,25 @@ export async function getEffectiveKPIName(
   }
 }
 
+// Throttled rank history regeneration to batch multiple updates
+function scheduleRankRegeneration(): void {
+  const global = globalThis as unknown as Record<
+    string,
+    NodeJS.Timeout | undefined
+  >;
+  if (global._rankRegenTimeout) {
+    clearTimeout(global._rankRegenTimeout);
+  }
+  global._rankRegenTimeout = setTimeout(async () => {
+    try {
+      const { rankingManager } = await import("./rankingSystem");
+      await rankingManager.regenerateRankHistory();
+    } catch (error) {
+      console.error("Failed to regenerate rank history:", error);
+    }
+  }, 1000);
+}
+
 // Storage functions (localStorage + Supabase hybrid)
 export const loadWeeklyKPIs = (): WeeklyKPIData => {
   try {
@@ -699,27 +718,9 @@ export const updateWeeklyKPIRecord = async (
   // Save to both localStorage and Supabase
   await saveWeeklyKPIs(data);
 
-  // If updating old data, regenerate rank history to reflect changes (with throttling)
+  // If updating old data, regenerate rank history to reflect changes
   if (isUpdatingOldData && weekKey !== getCurrentWeek()) {
-    // Throttle regeneration calls to prevent multiple simultaneous runs
-    const global = globalThis as unknown as Record<
-      string,
-      NodeJS.Timeout | undefined
-    >;
-    if (global._rankRegenTimeout) {
-      clearTimeout(global._rankRegenTimeout);
-    }
-    global._rankRegenTimeout = setTimeout(async () => {
-      try {
-        const { rankingManager } = await import("./rankingSystem");
-        await rankingManager.regenerateRankHistory();
-      } catch (error) {
-        console.error(
-          "Failed to regenerate rank history after KPI update:",
-          error,
-        );
-      }
-    }, 1000); // Wait 1 second before regenerating to batch multiple updates
+    scheduleRankRegeneration();
   }
 };
 
@@ -795,27 +796,9 @@ export const updateWeeklyDailyValue = async (
 
   await saveWeeklyKPIs(data);
 
-  // If updating old data, regenerate rank history to reflect changes (with throttling)
+  // If updating old data, regenerate rank history to reflect changes
   if (weekKey !== getCurrentWeek()) {
-    // Throttle regeneration calls to prevent multiple simultaneous runs
-    const global = globalThis as unknown as Record<
-      string,
-      NodeJS.Timeout | undefined
-    >;
-    if (global._rankRegenTimeout) {
-      clearTimeout(global._rankRegenTimeout);
-    }
-    global._rankRegenTimeout = setTimeout(async () => {
-      try {
-        const { rankingManager } = await import("./rankingSystem");
-        await rankingManager.regenerateRankHistory();
-      } catch (error) {
-        console.error(
-          "Failed to regenerate rank history after daily KPI update:",
-          error,
-        );
-      }
-    }, 1000); // Wait 1 second before regenerating to batch multiple updates
+    scheduleRankRegeneration();
   }
 
   // Persist a per-date entry row for analytics/reporting
@@ -884,27 +867,9 @@ export const setWeeklyDailyValues = async (
 
   await saveWeeklyKPIs(data);
 
-  // If updating old data, regenerate rank history to reflect changes (with throttling)
+  // If updating old data, regenerate rank history to reflect changes
   if (weekKey !== getCurrentWeek()) {
-    // Throttle regeneration calls to prevent multiple simultaneous runs
-    const global = globalThis as unknown as Record<
-      string,
-      NodeJS.Timeout | undefined
-    >;
-    if (global._rankRegenTimeout) {
-      clearTimeout(global._rankRegenTimeout);
-    }
-    global._rankRegenTimeout = setTimeout(async () => {
-      try {
-        const { rankingManager } = await import("./rankingSystem");
-        await rankingManager.regenerateRankHistory();
-      } catch (error) {
-        console.error(
-          "Failed to regenerate rank history after weekly daily values update:",
-          error,
-        );
-      }
-    }, 1000); // Wait 1 second before regenerating to batch multiple updates
+    scheduleRankRegeneration();
   }
 };
 
