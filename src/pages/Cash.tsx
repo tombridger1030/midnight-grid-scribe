@@ -1,186 +1,178 @@
 /**
  * Cash Page
- * 
- * Simplified financial tracking with two tabs:
- * - Expenses: Fast daily expense logging + runway display
- * - Investments: Portfolio management (Phase 2)
- * 
+ *
+ * AI-powered expense tracking with upload-only approach:
+ * - Upload CSV/PDF bank statements
+ * - AI parses transactions, categorizes, detects subscriptions
+ * - Four views: Daily, Weekly, Monthly, Subscriptions
+ *
  * All values in CAD.
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
-import { motion } from 'framer-motion';
-import { Eye, EyeOff, Receipt, TrendingUp } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { ExpensesTab, InvestmentsTab } from '@/components/cash';
-import type { Expense } from '@/components/cash';
-import { 
-  loadCashConsoleData, 
-  saveCashConsoleData, 
-  defaultCashConsoleData,
-  CashConsoleData 
-} from '@/lib/storage';
+import React, { useState, useEffect, useMemo, useCallback } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  Eye,
+  EyeOff,
+  Calendar,
+  BarChart2,
+  CalendarDays,
+  CreditCard,
+  TrendingUp,
+  Loader2,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import {
+  InvestmentsTab,
+  BankStatementImporter,
+  DailySpendingView,
+  SubscriptionReview,
+} from "@/components/cash";
+import { SummaryCards } from "@/components/cash/SummaryCards";
+import { WeeklyView } from "@/components/cash/WeeklyView";
+import { MonthlyView } from "@/components/cash/MonthlyView";
+import type { ParsedTransaction } from "@/lib/ai/bankStatementParser";
+import { detectSubscriptions } from "@/lib/ai/subscriptionDetector";
+import {
+  rankSubscriptionsWithAI,
+  type RankedSubscription,
+} from "@/lib/ai/subscriptionRanker";
+import {
+  saveSubscriptions,
+  loadSubscriptions,
+  saveAnalysisMetadata,
+  loadAnalysisMetadata,
+} from "@/lib/subscriptionStorage";
 
-// Default accounts to pre-seed
-const DEFAULT_ACCOUNTS = ['BMO', 'Wealthsimple', 'Cash'];
-
-// Default cash reserve for runway calculation
-const DEFAULT_CASH_RESERVE = 12000; // CAD
-
-// Migration function: Convert old data format to new simplified format
-function migrateOldExpenses(oldData: CashConsoleData): Expense[] {
-  const expenses: Expense[] = [];
-  const fxRate = oldData.fx?.usdToCad || 1.35;
-  
-  // Migrate old lifestyle expenses
-  if (oldData.expenses?.items) {
-    oldData.expenses.items.forEach(item => {
-      expenses.push({
-        id: item.id,
-        amount: Math.round(item.amountUsd * fxRate * 100) / 100, // Convert to CAD
-        account: 'Imported', // Default account for migrated items
-        item: item.item || item.category || 'Unknown',
-        category: item.category,
-        date: item.date || new Date().toISOString().slice(0, 10),
-      });
-    });
-  }
-  
-  // Migrate old cortal/burn expenses
-  if (oldData.cortal?.items) {
-    oldData.cortal.items.forEach(item => {
-      expenses.push({
-        id: item.id,
-        amount: Math.round(item.amountUsd * fxRate * 100) / 100, // Convert to CAD
-        account: 'Business',
-        item: item.category,
-        category: item.category,
-        date: item.date,
-      });
-    });
-  }
-  
-  return expenses;
-}
-
-// Calculate total investments in CAD
-function calculateTotalInvestmentsCAD(data: CashConsoleData): number {
-  const fxRate = data.fx?.usdToCad || 1.35;
-  
-  return data.investments.holdings.reduce((sum, h) => {
-    if (h.type === 'equity') {
-      const valueUsd = h.currentValueUsd || (h.lastPriceUsd || 0) * h.quantity;
-      return sum + (valueUsd * fxRate);
-    }
-    if (h.type === 'cash') {
-      return sum + ((h.amountUsd || 0) * fxRate);
-    }
-    return sum;
-  }, 0);
-}
-
-type TabType = 'expenses' | 'investments';
+type ViewTab = "daily" | "weekly" | "monthly" | "subscriptions";
+type MainTab = "expenses" | "investments";
 
 const Cash: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<TabType>('expenses');
-  const [data, setData] = useState<CashConsoleData>(defaultCashConsoleData());
-  const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [accounts, setAccounts] = useState<string[]>(DEFAULT_ACCOUNTS);
-  const [cashReserve, setCashReserve] = useState<number>(DEFAULT_CASH_RESERVE);
+  const [mainTab, setMainTab] = useState<MainTab>("expenses");
+  const [viewTab, setViewTab] = useState<ViewTab>("daily");
+  const [transactions, setTransactions] = useState<ParsedTransaction[]>([]);
+  const [subscriptions, setSubscriptions] = useState<RankedSubscription[]>([]);
   const [hideBalances, setHideBalances] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [processingStep, setProcessingStep] = useState("");
   const [isLoading, setIsLoading] = useState(true);
 
-  // Load data on mount
+  // Load cached data on mount
   useEffect(() => {
     const loadData = async () => {
       setIsLoading(true);
       try {
-        const loaded = await loadCashConsoleData();
-        setData(loaded);
-        
-        // Check if we have new-format expenses stored
-        const storedExpenses = localStorage.getItem('noctisium-expenses');
-        const storedAccounts = localStorage.getItem('noctisium-accounts');
-        
-        if (storedExpenses) {
-          // Use new format
-          setExpenses(JSON.parse(storedExpenses));
-        } else {
-          // Migrate from old format
-          const migrated = migrateOldExpenses(loaded);
-          setExpenses(migrated);
-          // Save migrated data
-          localStorage.setItem('noctisium-expenses', JSON.stringify(migrated));
+        // Load cached subscriptions
+        const cachedSubs = loadSubscriptions();
+        if (cachedSubs.length > 0) {
+          const restored: RankedSubscription[] = cachedSubs.map((s) => ({
+            ...s,
+            confidence: 0.95,
+            transactions: [],
+            source: "cache" as const,
+          }));
+          setSubscriptions(restored);
         }
-        
-        if (storedAccounts) {
-          setAccounts(JSON.parse(storedAccounts));
-        } else {
-          // Include 'Imported' and 'Business' if we migrated data
-          const migratedAccounts = new Set([...DEFAULT_ACCOUNTS]);
-          const migrated = migrateOldExpenses(loaded);
-          migrated.forEach(e => migratedAccounts.add(e.account));
-          const accountList = Array.from(migratedAccounts);
-          setAccounts(accountList);
-          localStorage.setItem('noctisium-accounts', JSON.stringify(accountList));
-        }
-        
-        // Load cash reserve
-        const storedCashReserve = localStorage.getItem('noctisium-cash-reserve');
-        if (storedCashReserve) {
-          setCashReserve(parseFloat(storedCashReserve));
+
+        // Load cached transactions
+        const cachedTransactions = localStorage.getItem(
+          "noctisium-transactions",
+        );
+        if (cachedTransactions) {
+          setTransactions(JSON.parse(cachedTransactions));
         }
       } catch (error) {
-        console.error('Failed to load cash data:', error);
+        console.error("Failed to load cached data:", error);
       } finally {
         setIsLoading(false);
       }
     };
-    
+
     loadData();
   }, []);
 
-  // Calculate total investments
-  const totalInvestmentsCAD = useMemo(() => calculateTotalInvestmentsCAD(data), [data]);
+  // Handle imported transactions from bank statement
+  const handleImportTransactions = useCallback(
+    async (newTransactions: ParsedTransaction[]) => {
+      if (newTransactions.length === 0) return;
 
-  // Save expenses
-  const saveExpenses = (newExpenses: Expense[]) => {
-    setExpenses(newExpenses);
-    localStorage.setItem('noctisium-expenses', JSON.stringify(newExpenses));
-  };
+      setIsProcessing(true);
 
-  // Save accounts
-  const saveAccounts = (newAccounts: string[]) => {
-    setAccounts(newAccounts);
-    localStorage.setItem('noctisium-accounts', JSON.stringify(newAccounts));
-  };
+      try {
+        // Merge with existing transactions (avoid duplicates by date+description+amount)
+        const existingKeys = new Set(
+          transactions.map((t) => `${t.date}-${t.description}-${t.amount}`),
+        );
+        const uniqueNew = newTransactions.filter(
+          (t) => !existingKeys.has(`${t.date}-${t.description}-${t.amount}`),
+        );
+        const merged = [...uniqueNew, ...transactions];
 
-  // Add expense
-  const handleAddExpense = (expense: Omit<Expense, 'id'>) => {
-    const newExpense: Expense = {
-      ...expense,
-      id: `exp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    };
-    saveExpenses([newExpense, ...expenses]);
-  };
+        setTransactions(merged);
+        localStorage.setItem("noctisium-transactions", JSON.stringify(merged));
 
-  // Delete expense
-  const handleDeleteExpense = (id: string) => {
-    saveExpenses(expenses.filter(e => e.id !== id));
-  };
+        // Detect subscriptions from all transactions
+        setProcessingStep("Detecting subscriptions...");
+        const detected = await detectSubscriptions(merged);
 
-  // Add account
-  const handleAddAccount = (account: string) => {
-    if (!accounts.includes(account)) {
-      saveAccounts([...accounts, account]);
-    }
-  };
+        // Rank with AI
+        setProcessingStep("Analyzing importance with AI...");
+        const ranked = await rankSubscriptionsWithAI(detected);
 
-  // Update cash reserve
-  const handleUpdateCashReserve = (amount: number) => {
-    setCashReserve(amount);
-    localStorage.setItem('noctisium-cash-reserve', amount.toString());
-  };
+        // Save to storage
+        setProcessingStep("Saving results...");
+        saveSubscriptions(ranked);
+        setSubscriptions(ranked);
+
+        const metadata = {
+          timestamp: new Date().toISOString(),
+          totalSubscriptions: ranked.length,
+          totalAnnualCost: ranked.reduce((sum, s) => sum + s.annualCost, 0),
+          potentialSavings: ranked
+            .filter((s) => s.importance <= 2)
+            .reduce((sum, s) => sum + s.annualCost, 0),
+        };
+        saveAnalysisMetadata(metadata);
+      } catch (error) {
+        console.error("Error processing transactions:", error);
+      } finally {
+        setIsProcessing(false);
+        setProcessingStep("");
+      }
+    },
+    [transactions],
+  );
+
+  // Convert transactions to expenses format for DailySpendingView
+  // Only outflow (negative amounts) for expense views
+  const expensesForDaily = useMemo(() => {
+    return transactions
+      .filter((t) => t.amount < 0) // Only outflow
+      .map((t) => ({
+        id: `tx-${t.date}-${Math.random().toString(36).slice(2, 8)}`,
+        amount: t.amount, // Keep negative sign
+        account: "Bank Import",
+        item: t.description,
+        category: t.category,
+        date: t.date,
+        isInflow: false,
+      }));
+  }, [transactions]);
+
+  // Get income transactions for income tracking
+  const incomeTransactions = useMemo(() => {
+    return transactions
+      .filter((t) => t.amount > 0) // Only inflow
+      .map((t) => ({
+        id: `tx-${t.date}-${Math.random().toString(36).slice(2, 8)}`,
+        amount: t.amount, // Keep positive sign
+        account: "Bank Import",
+        item: t.description,
+        category: t.category,
+        date: t.date,
+        isInflow: true,
+      }));
+  }, [transactions]);
 
   if (isLoading) {
     return (
@@ -191,79 +183,262 @@ const Cash: React.FC = () => {
   }
 
   return (
-    <div className="min-h-full p-6 max-w-4xl mx-auto">
+    <div className="min-h-full p-6 max-w-5xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-terminal-accent mb-1">Cash</h1>
-          <p className="text-terminal-accent/60 text-sm">
-            Track expenses and monitor runway
+          <h1 className="text-3xl font-bold text-terminal-accent mb-1">Cash</h1>
+          <p className="text-terminal-accent/50 text-sm">
+            AI-powered expense tracking
           </p>
         </div>
         <button
           onClick={() => setHideBalances(!hideBalances)}
-          className="flex items-center gap-2 px-3 py-2 
-                     bg-surface-secondary border border-line rounded
+          className="flex items-center gap-2 px-4 py-2.5
+                     bg-surface-secondary border border-line/50 rounded-lg
                      text-terminal-accent/70 hover:text-terminal-accent
-                     transition-colors"
+                     hover:border-terminal-accent/30 transition-all"
         >
-          {hideBalances ? <Eye size={16} /> : <EyeOff size={16} />}
-          <span className="text-sm">{hideBalances ? 'Show' : 'Hide'}</span>
+          {hideBalances ? <Eye size={18} /> : <EyeOff size={18} />}
+          <span className="text-sm font-medium">
+            {hideBalances ? "Show" : "Hide"}
+          </span>
         </button>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-1 mb-6 p-1 bg-surface-secondary rounded-lg w-fit">
+      {/* Main Tabs - Expenses / Investments */}
+      <div className="flex gap-2 mb-8 p-1.5 bg-surface-secondary rounded-xl w-fit">
         <button
-          onClick={() => setActiveTab('expenses')}
+          onClick={() => setMainTab("expenses")}
           className={cn(
-            "flex items-center gap-2 px-4 py-2 rounded-md transition-all",
-            activeTab === 'expenses'
-              ? "bg-terminal-accent text-black font-medium"
-              : "text-terminal-accent/70 hover:text-terminal-accent hover:bg-surface-hover"
+            "flex items-center gap-2 px-5 py-2.5 rounded-lg transition-all font-medium",
+            mainTab === "expenses"
+              ? "bg-terminal-accent text-black"
+              : "text-terminal-accent/70 hover:text-terminal-accent hover:bg-surface-hover",
           )}
         >
-          <Receipt size={16} />
+          <CreditCard size={18} />
           Expenses
         </button>
         <button
-          onClick={() => setActiveTab('investments')}
+          onClick={() => setMainTab("investments")}
           className={cn(
-            "flex items-center gap-2 px-4 py-2 rounded-md transition-all",
-            activeTab === 'investments'
-              ? "bg-terminal-accent text-black font-medium"
-              : "text-terminal-accent/70 hover:text-terminal-accent hover:bg-surface-hover"
+            "flex items-center gap-2 px-5 py-2.5 rounded-lg transition-all font-medium",
+            mainTab === "investments"
+              ? "bg-terminal-accent text-black"
+              : "text-terminal-accent/70 hover:text-terminal-accent hover:bg-surface-hover",
           )}
         >
-          <TrendingUp size={16} />
+          <TrendingUp size={18} />
           Investments
         </button>
       </div>
 
-      {/* Tab Content */}
-      <motion.div
-        key={activeTab}
-        initial={{ opacity: 0, x: activeTab === 'expenses' ? -20 : 20 }}
-        animate={{ opacity: 1, x: 0 }}
-        transition={{ duration: 0.2 }}
-      >
-        {activeTab === 'expenses' ? (
-          <ExpensesTab
-            expenses={expenses}
-            accounts={accounts}
-            cashReserveCAD={cashReserve}
-            hideBalances={hideBalances}
-            onAddExpense={handleAddExpense}
-            onDeleteExpense={handleDeleteExpense}
-            onAddAccount={handleAddAccount}
-            onUpdateCashReserve={handleUpdateCashReserve}
-          />
-        ) : (
-          <InvestmentsTab
-            hideBalances={hideBalances}
-          />
-        )}
-      </motion.div>
+      {mainTab === "expenses" ? (
+        <div className="space-y-8">
+          {/* Hero Upload Zone */}
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <BankStatementImporter
+              onImportExpenses={(exps) => {
+                const txs: ParsedTransaction[] = exps.map((e) => ({
+                  date: e.date,
+                  description: e.item,
+                  amount: e.amount, // Sign already correct: negative=outflow, positive=inflow
+                  category: e.category,
+                  confidence: 0.9,
+                }));
+                handleImportTransactions(txs);
+              }}
+              existingExpenses={expensesForDaily}
+            />
+          </motion.div>
+
+          {/* Processing State */}
+          <AnimatePresence>
+            {isProcessing && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="p-6 rounded-xl bg-surface-secondary border border-terminal-accent/30 text-center"
+              >
+                <Loader2
+                  size={32}
+                  className="mx-auto mb-3 animate-spin text-terminal-accent"
+                />
+                <p className="text-terminal-accent font-medium">
+                  {processingStep}
+                </p>
+                <p className="text-sm text-terminal-accent/50 mt-1">
+                  This may take a moment...
+                </p>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Summary Cards - Only show when we have data */}
+          {transactions.length > 0 && !isProcessing && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+            >
+              <SummaryCards
+                transactions={transactions}
+                subscriptions={subscriptions}
+                hideBalances={hideBalances}
+              />
+            </motion.div>
+          )}
+
+          {/* View Tabs */}
+          {transactions.length > 0 && !isProcessing && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+            >
+              <div className="flex gap-1 mb-6 p-1 bg-surface-secondary rounded-lg w-fit">
+                <button
+                  onClick={() => setViewTab("daily")}
+                  className={cn(
+                    "flex items-center gap-2 px-4 py-2 rounded-md transition-all text-sm font-medium",
+                    viewTab === "daily"
+                      ? "bg-terminal-accent text-black"
+                      : "text-terminal-accent/70 hover:text-terminal-accent hover:bg-surface-hover",
+                  )}
+                >
+                  <Calendar size={16} />
+                  Daily
+                </button>
+                <button
+                  onClick={() => setViewTab("weekly")}
+                  className={cn(
+                    "flex items-center gap-2 px-4 py-2 rounded-md transition-all text-sm font-medium",
+                    viewTab === "weekly"
+                      ? "bg-terminal-accent text-black"
+                      : "text-terminal-accent/70 hover:text-terminal-accent hover:bg-surface-hover",
+                  )}
+                >
+                  <BarChart2 size={16} />
+                  Weekly
+                </button>
+                <button
+                  onClick={() => setViewTab("monthly")}
+                  className={cn(
+                    "flex items-center gap-2 px-4 py-2 rounded-md transition-all text-sm font-medium",
+                    viewTab === "monthly"
+                      ? "bg-terminal-accent text-black"
+                      : "text-terminal-accent/70 hover:text-terminal-accent hover:bg-surface-hover",
+                  )}
+                >
+                  <CalendarDays size={16} />
+                  Monthly
+                </button>
+                <button
+                  onClick={() => setViewTab("subscriptions")}
+                  className={cn(
+                    "flex items-center gap-2 px-4 py-2 rounded-md transition-all text-sm font-medium",
+                    viewTab === "subscriptions"
+                      ? "bg-terminal-accent text-black"
+                      : "text-terminal-accent/70 hover:text-terminal-accent hover:bg-surface-hover",
+                  )}
+                >
+                  <CreditCard size={16} />
+                  Subscriptions
+                </button>
+              </div>
+
+              {/* View Content */}
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={viewTab}
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  {viewTab === "daily" && (
+                    <DailySpendingView
+                      expenses={expensesForDaily}
+                      hideBalances={hideBalances}
+                    />
+                  )}
+                  {viewTab === "weekly" && (
+                    <WeeklyView
+                      transactions={transactions}
+                      hideBalances={hideBalances}
+                    />
+                  )}
+                  {viewTab === "monthly" && (
+                    <MonthlyView
+                      transactions={transactions}
+                      hideBalances={hideBalances}
+                    />
+                  )}
+                  {viewTab === "subscriptions" && (
+                    <SubscriptionReview
+                      subscriptions={subscriptions}
+                      hideBalances={hideBalances}
+                      isLoading={isProcessing}
+                      onUpdateName={(id, name) => {
+                        setSubscriptions((prev) =>
+                          prev.map((s) =>
+                            s.id === id ? { ...s, displayName: name } : s,
+                          ),
+                        );
+                      }}
+                      onUpdateImportance={(id, importance) => {
+                        setSubscriptions((prev) =>
+                          prev.map((s) =>
+                            s.id === id ? { ...s, importance } : s,
+                          ),
+                        );
+                      }}
+                      onDismissSuggestion={(id) => {
+                        setSubscriptions((prev) =>
+                          prev.map((s) =>
+                            s.id === id
+                              ? { ...s, cancelRecommendation: undefined }
+                              : s,
+                          ),
+                        );
+                      }}
+                    />
+                  )}
+                </motion.div>
+              </AnimatePresence>
+            </motion.div>
+          )}
+
+          {/* Empty State */}
+          {transactions.length === 0 && !isProcessing && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="text-center py-12"
+            >
+              <p className="text-terminal-accent/40 text-lg mb-2">
+                No transactions yet
+              </p>
+              <p className="text-terminal-accent/30 text-sm">
+                Upload a bank statement to get started
+              </p>
+            </motion.div>
+          )}
+        </div>
+      ) : (
+        <motion.div
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.2 }}
+        >
+          <InvestmentsTab hideBalances={hideBalances} />
+        </motion.div>
+      )}
     </div>
   );
 };
