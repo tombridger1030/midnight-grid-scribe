@@ -62,72 +62,65 @@ const TRANSACTION_CATEGORIES = [
 export type TransactionCategory = (typeof TRANSACTION_CATEGORIES)[number];
 
 /**
- * Extract JSON array from AI response that may be wrapped in markdown or text
+ * Try to parse a string as a JSON array
+ */
+function tryParseArray(jsonString: string): unknown[] | null {
+  try {
+    const parsed = JSON.parse(jsonString);
+    return Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Extract JSON array from AI response that may be wrapped in markdown or text.
+ * Attempts multiple extraction strategies in order of likelihood.
  */
 function extractJSONFromResponse(content: string): unknown[] {
-  // Clean content - remove BOM and trim whitespace
   const cleanContent = content.replace(/^\uFEFF/, "").trim();
 
-  // 1. Try direct parse first
-  try {
-    const parsed = JSON.parse(cleanContent);
-    if (Array.isArray(parsed)) return parsed;
-  } catch (e) {
-    console.log("Direct parse failed:", (e as Error).message);
-  }
+  // Strategy 1: Direct parse
+  const direct = tryParseArray(cleanContent);
+  if (direct) return direct;
 
-  // 2. Try extracting from markdown code blocks (```json ... ``` or ``` ... ```)
+  // Strategy 2: Extract from markdown code blocks (```json ... ``` or ``` ... ```)
   const markdownMatch = cleanContent.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (markdownMatch) {
-    try {
-      const parsed = JSON.parse(markdownMatch[1].trim());
-      if (Array.isArray(parsed)) return parsed;
-    } catch {
-      // Continue to other methods
-    }
+    const fromMarkdown = tryParseArray(markdownMatch[1].trim());
+    if (fromMarkdown) return fromMarkdown;
   }
 
-  // 3. Try finding a raw JSON array in the text (greedy match for outermost array)
+  // Strategy 3: Find raw JSON array pattern in text
   const arrayMatch = cleanContent.match(/\[\s*\{[\s\S]*\}\s*\]/);
   if (arrayMatch) {
-    try {
-      const parsed = JSON.parse(arrayMatch[0]);
-      if (Array.isArray(parsed)) return parsed;
-    } catch (e) {
-      console.log("Array regex match failed:", (e as Error).message);
-    }
+    const fromArrayPattern = tryParseArray(arrayMatch[0]);
+    if (fromArrayPattern) return fromArrayPattern;
   }
 
-  // 4. Try to salvage truncated JSON by finding the last complete object
+  // Strategy 4: Salvage truncated JSON by reconstructing from complete objects
   if (cleanContent.startsWith("[")) {
-    // Find all complete objects and reconstruct array
     const objectMatches = cleanContent.match(/\{\s*"date"[^}]+\}/g);
     if (objectMatches && objectMatches.length > 0) {
-      try {
-        const reconstructed = "[" + objectMatches.join(",") + "]";
-        const parsed = JSON.parse(reconstructed);
-        if (Array.isArray(parsed)) {
-          console.log(
-            `Salvaged ${parsed.length} transactions from truncated response`,
-          );
-          return parsed;
-        }
-      } catch {
-        // Salvage attempt failed
+      const reconstructed = "[" + objectMatches.join(",") + "]";
+      const salvaged = tryParseArray(reconstructed);
+      if (salvaged) {
+        console.log(
+          `Salvaged ${salvaged.length} transactions from truncated response`,
+        );
+        return salvaged;
       }
     }
   }
 
-  // 5. Log the actual content for debugging
-  console.error(
-    "Failed to extract JSON from AI response. Content preview:",
-    cleanContent.substring(0, 500),
-  );
+  // All strategies failed - log details for debugging
+  console.error("Failed to extract JSON from AI response.");
+  console.error("Content preview:", cleanContent.slice(0, 500));
   console.error("Content length:", cleanContent.length);
-  console.error("Content ends with:", cleanContent.substring(-100));
+  console.error("Content ending:", cleanContent.slice(-100));
 
   throw new Error(
-    `Could not find valid JSON array in AI response. Response started with: "${cleanContent.substring(0, 100)}..."`,
+    `Could not find valid JSON array in AI response. Response started with: "${cleanContent.slice(0, 100)}..."`,
   );
 }
 
