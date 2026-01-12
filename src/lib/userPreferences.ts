@@ -41,9 +41,7 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   enabled_modules: [
     "dashboard",
     "kpis",
-    "ships",
-    "analytics",
-    "roadmap",
+    "activity",
     "cash",
     "content",
     "daily-review",
@@ -88,22 +86,10 @@ export const AVAILABLE_MODULES = [
     description: "Track weekly performance indicators",
   },
   {
-    id: "ships",
-    name: "Ships",
-    icon: "Ship",
-    description: "Track shipped work and commits",
-  },
-  {
-    id: "analytics",
-    name: "Analytics",
-    icon: "TrendingUp",
-    description: "Comprehensive analytics and insights",
-  },
-  {
-    id: "roadmap",
-    name: "Roadmap",
-    icon: "GitBranch",
-    description: "Goals and milestone tracking",
+    id: "activity",
+    name: "Activity",
+    icon: "Activity",
+    description: "Yearly activity heatmaps",
   },
   {
     id: "cash",
@@ -134,10 +120,31 @@ export class UserPreferencesManager {
         DEFAULT_PREFERENCES,
       );
 
+      // Migrate enabled_modules: remove old modules, add new ones
+      let enabledModules = preferences.enabled_modules || [];
+
+      // Remove deleted modules (analytics, ships, roadmap)
+      const deletedModules = ["analytics", "ships", "roadmap", "visualizer"];
+      enabledModules = enabledModules.filter(
+        (m: string) => !deletedModules.includes(m),
+      );
+
+      // Add activity if not present (new module replacing deleted ones)
+      if (!enabledModules.includes("activity")) {
+        // Insert after kpis if possible, otherwise add to list
+        const kpisIndex = enabledModules.indexOf("kpis");
+        if (kpisIndex !== -1) {
+          enabledModules.splice(kpisIndex + 1, 0, "activity");
+        } else {
+          enabledModules.push("activity");
+        }
+      }
+
       // Merge with defaults to ensure all keys exist
       return {
         ...DEFAULT_PREFERENCES,
         ...preferences,
+        enabled_modules: enabledModules,
         theme_settings: {
           ...DEFAULT_PREFERENCES.theme_settings,
           ...preferences.theme_settings,

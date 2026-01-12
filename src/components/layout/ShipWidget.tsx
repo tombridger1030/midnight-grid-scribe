@@ -18,11 +18,11 @@ import { cn } from "@/lib/utils";
 import {
   getShipSummary,
   formatTimeSinceShip,
-  isGitHubConfigured,
   invalidateShipCache,
   Ship,
   ShipSummary,
 } from "@/lib/github";
+import { userStorage } from "@/lib/userStorage";
 import { ExpandablePanel } from "./ExpandablePanel";
 
 interface ShipWidgetProps {
@@ -40,7 +40,9 @@ export const ShipWidget: React.FC<ShipWidgetProps> = ({ className }) => {
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const configured = isGitHubConfigured();
+      // Check GitHub settings from Supabase (async) instead of localStorage only
+      const settings = await userStorage.getGithubSettings();
+      const configured = !!(settings?.api_token && settings?.username);
       setIsConfigured(configured);
 
       if (configured) {

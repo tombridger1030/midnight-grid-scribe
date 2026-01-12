@@ -7,8 +7,7 @@ import TerminalLayout from "@/components/TerminalLayout";
 import Index from "./pages/Index";
 import Dashboard from "./pages/Dashboard";
 import Visualizer from "./pages/Visualizer";
-import Analytics from "./pages/Analytics";
-import Roadmap from "./pages/Roadmap";
+import Activity from "./pages/Activity";
 import Cash from "./pages/Cash";
 import NotFound from "./pages/NotFound";
 import Content from "./pages/Content";
@@ -19,7 +18,6 @@ import ContentInput from "./pages/ContentInput";
 import ContentMetrics from "./pages/ContentMetrics";
 import Settings from "./pages/Settings";
 import KPIManage from "./pages/KPIManage";
-import Ships from "./pages/Ships";
 import DailyReview from "./pages/DailyReview";
 import { useState, useEffect } from "react";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
@@ -69,6 +67,17 @@ const AppContent = () => {
 
           // Sync weekly KPIs from Supabase to localStorage (ensures source of truth is up to date)
           await syncWeeklyKPIsWithSupabase();
+
+          // Sync GitHub settings from Supabase to localStorage (so GitHub functions work immediately)
+          const githubSettings = await userStorage.getGithubSettings();
+          if (githubSettings?.api_token) {
+            localStorage.setItem("github_api_token", githubSettings.api_token);
+            localStorage.setItem(
+              "github_username",
+              githubSettings.username || "",
+            );
+            localStorage.setItem("github_repos", githubSettings.repos || "");
+          }
 
           // Initialize progression system
           await initializeProgression(user.id);
@@ -120,8 +129,7 @@ const AppContent = () => {
             <Route path="kpis" element={<Index />} />
             <Route path="dashboard" element={<Dashboard />} />
             <Route path="visualizer" element={<Visualizer />} />
-            <Route path="analytics" element={<Analytics />} />
-            <Route path="roadmap" element={<Roadmap />} />
+            <Route path="activity" element={<Activity />} />
             <Route path="cash" element={<Cash />} />
             <Route path="settings" element={<Settings />} />
             <Route path="kpis/manage" element={<KPIManage />} />
@@ -129,7 +137,6 @@ const AppContent = () => {
               path="profile"
               element={<Navigate to="/settings" replace />}
             />
-            <Route path="ships" element={<Ships />} />
             <Route path="daily-review" element={<DailyReview />} />
             <Route path="content" element={<Content />}>
               <Route index element={<ContentDashboard />} />

@@ -9,13 +9,12 @@ import { motion } from "framer-motion";
 import {
   LayoutDashboard,
   BarChart3,
-  TrendingUp,
-  GitBranch,
+  Activity,
   Network,
   FileText,
   Settings,
-  Ship,
   Calendar,
+  TrendingUp,
   LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -38,12 +37,10 @@ interface SidebarProps {
 const iconMap: Record<string, LucideIcon> = {
   dashboard: LayoutDashboard,
   kpis: BarChart3,
-  analytics: TrendingUp,
+  activity: Activity,
   visualizer: TrendingUp,
-  roadmap: GitBranch,
   cash: Network,
   content: FileText,
-  ships: Ship,
   "daily-review": Calendar,
 };
 
@@ -51,12 +48,10 @@ const iconMap: Record<string, LucideIcon> = {
 const pathMap: Record<string, string> = {
   dashboard: "/",
   kpis: "/kpis",
-  analytics: "/analytics",
+  activity: "/activity",
   visualizer: "/visualizer",
-  roadmap: "/roadmap",
   cash: "/cash",
   content: "/content",
-  ships: "/ships",
   "daily-review": "/daily-review",
 };
 
