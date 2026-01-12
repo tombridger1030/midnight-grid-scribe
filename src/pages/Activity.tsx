@@ -3,7 +3,7 @@
  *
  * Consolidated view replacing Analytics, Ships, and Roadmap pages.
  * Shows 4 GitHub-style heatmaps for yearly activity tracking.
- * Right sidebar shows recent GitHub commits.
+ * Right panel shows commit activity with repo breakdown.
  */
 
 import { useState } from "react";
@@ -84,9 +84,9 @@ export default function Activity() {
       )}
 
       {/* Two-column layout */}
-      <div className="flex flex-col lg:flex-row gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-[auto_1fr] gap-4 items-start">
         {/* Left column: Heatmaps */}
-        <div className="flex-1 min-w-0">
+        <div className="overflow-hidden">
           {isLoading ? (
             <div className="text-center text-[#6e7681] py-12">
               Loading activity data...
@@ -136,11 +136,9 @@ export default function Activity() {
           )}
         </div>
 
-        {/* Right column: GitHub Commits Feed */}
-        <div className="lg:w-80 lg:flex-shrink-0">
-          <div className="lg:sticky lg:top-4">
-            <GitHubCommitsFeed days={7} maxCommits={15} />
-          </div>
+        {/* Right column: Commit Activity */}
+        <div className="min-w-0">
+          <GitHubCommitsFeed days={7} maxCommits={100} />
         </div>
       </div>
 

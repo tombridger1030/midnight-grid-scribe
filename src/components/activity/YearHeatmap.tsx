@@ -140,7 +140,7 @@ export function YearHeatmap({
   const weekWidth = cellSize + cellGap;
 
   return (
-    <div className="bg-[#0d0d0d] border border-[#222] rounded-lg p-4">
+    <div className="bg-[#0d0d0d] border border-[#222] rounded-lg p-4 overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-medium text-[#e0e0e0]">{title}</h3>
@@ -150,7 +150,7 @@ export function YearHeatmap({
       </div>
 
       {/* Month labels row */}
-      <div className="relative h-4 ml-6 mb-1">
+      <div className="relative h-4 ml-6 mb-1 overflow-hidden">
         {monthLabels.map(({ month, weekIndex }, idx) => (
           <span
             key={idx}
@@ -187,10 +187,18 @@ export function YearHeatmap({
                 const dateStr = formatDate(day);
                 const value = dataMap[dateStr] || 0;
                 const isCurrentYear = day.getFullYear() === year;
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const isFuture = day > today;
                 const isToday = formatDate(new Date()) === dateStr;
-                const colorClass = isCurrentYear
-                  ? getColorLevel(value, maxValue, colorScale)
-                  : "bg-transparent";
+                // Future dates show empty color, past dates show actual data color
+                const colorClass = !isCurrentYear
+                  ? "bg-transparent"
+                  : isFuture
+                    ? colorScale[0] // Empty color for future dates
+                    : getColorLevel(value, maxValue, colorScale);
+
+                const isInteractive = isCurrentYear && !isFuture;
 
                 return (
                   <Tooltip key={dayIdx}>
@@ -201,15 +209,15 @@ export function YearHeatmap({
                           height: `${cellSize}px`,
                         }}
                         className={`rounded-[2px] ${colorClass} ${
-                          isCurrentYear
+                          isInteractive
                             ? "hover:ring-1 hover:ring-[#555] cursor-pointer"
                             : ""
                         } ${isToday ? "ring-1 ring-cyan-500" : ""}`}
-                        onClick={() => isCurrentYear && onDayClick?.(dateStr)}
-                        disabled={!isCurrentYear}
+                        onClick={() => isInteractive && onDayClick?.(dateStr)}
+                        disabled={!isInteractive}
                       />
                     </TooltipTrigger>
-                    {isCurrentYear && (
+                    {isInteractive && (
                       <TooltipContent
                         side="top"
                         className="bg-[#1c1c1c] border-[#333] text-[#e0e0e0] text-xs px-2 py-1"
