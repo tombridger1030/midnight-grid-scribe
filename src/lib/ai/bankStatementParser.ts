@@ -9,14 +9,16 @@
 
 import * as pdfjsLib from "pdfjs-dist";
 import { supabase, SUPABASE_URL } from "@/lib/supabase";
+import { parseCSVFile, isCSVContent } from "./csvParser";
+import { applyTransferDetection } from "./transferDetector";
 
-// Set worker path - use full https URL and avoid query parameter issues
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+// Set worker path - use unpkg which has all npm versions available
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 
 // Edge Function URL
 const EDGE_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/ai-proxy`;
 
-export type FileType = "pdf" | "png" | "jpg" | "jpeg";
+export type FileType = "pdf" | "png" | "jpg" | "jpeg" | "csv";
 
 export interface ParsedTransaction {
   date: string; // YYYY-MM-DD
@@ -53,6 +55,7 @@ const TRANSACTION_CATEGORIES = [
   "Subscriptions",
   "Income",
   "Transfer",
+  "Investment",
   "Other",
 ] as const;
 
@@ -167,7 +170,7 @@ async function parseTransactionsFromText(text: string): Promise<ParseResult> {
 For each transaction, identify:
 1. Date (convert to YYYY-MM-DD format)
 2. Description (merchant name or transaction description)
-3. Amount (positive for expenses/debits, negative for income/credits)
+3. Amount (NEGATIVE for expenses/debits/money out, POSITIVE for income/credits/money in)
 4. Category (choose from: ${categoriesList})
 
 IMPORTANT RULES:
@@ -183,10 +186,17 @@ Return ONLY a JSON array in this exact format:
 [
   {
     "date": "2025-01-15",
-    "description": "Merchant Name",
-    "amount": -45.50,
+    "description": "Starbucks",
+    "amount": -12.50,
     "category": "Food & Dining",
     "confidence": 0.95
+  },
+  {
+    "date": "2025-01-15",
+    "description": "PAYROLL DEPOSIT",
+    "amount": 3500.00,
+    "category": "Income",
+    "confidence": 0.98
   }
 ]`,
       messages: [
@@ -236,18 +246,23 @@ Return ONLY a JSON array in this exact format:
       t.description.trim().length > 0,
   );
 
-  const totalAmount = validTransactions.reduce(
+  // Apply transfer/investment pattern detection to override categories
+  const enhancedTransactions = applyTransferDetection(validTransactions);
+
+  const totalAmount = enhancedTransactions.reduce(
     (sum, t) => sum + Math.abs(t.amount),
     0,
   );
   const avgConfidence =
-    validTransactions.length > 0
-      ? validTransactions.reduce((sum, t) => sum + (t.confidence || 0.5), 0) /
-        validTransactions.length
+    enhancedTransactions.length > 0
+      ? enhancedTransactions.reduce(
+          (sum, t) => sum + (t.confidence || 0.5),
+          0,
+        ) / enhancedTransactions.length
       : 0.5;
 
   return {
-    transactions: validTransactions,
+    transactions: enhancedTransactions,
     totalAmount,
     confidence: avgConfidence,
     rawText: text.substring(0, 1000), // Store first 1000 chars for reference
@@ -268,6 +283,37 @@ export async function parseBankStatement(
     const fileType = file.type.toLowerCase();
     const fileName = file.name.toLowerCase();
 
+    // Check for CSV files first
+    if (
+      fileType.includes("csv") ||
+      fileType.includes("text/csv") ||
+      fileType.includes("text/plain") ||
+      fileName.endsWith(".csv")
+    ) {
+      // Try CSV parsing
+      const csvResult = await parseCSVFile(file);
+      if (csvResult.transactions.length > 0) {
+        // Apply transfer/investment pattern detection
+        const enhancedTransactions = applyTransferDetection(
+          csvResult.transactions.map((t) => ({
+            ...t,
+            confidence: csvResult.confidence,
+          })),
+        );
+        const totalAmount = enhancedTransactions.reduce(
+          (sum, t) => sum + Math.abs(t.amount),
+          0,
+        );
+        return {
+          transactions: enhancedTransactions,
+          totalAmount,
+          confidence: csvResult.confidence,
+          rawText: `CSV parsed from ${csvResult.format} format`,
+          errors,
+        };
+      }
+    }
+
     if (fileType.includes("pdf") || fileName.endsWith(".pdf")) {
       extractedText = await extractTextFromPDF(file);
     } else if (
@@ -280,9 +326,16 @@ export async function parseBankStatement(
     ) {
       const imageData = await imageToBase64(file);
       extractedText = await extractTextFromImage(imageData);
+    } else if (
+      fileType.includes("csv") ||
+      fileType.includes("text") ||
+      fileName.endsWith(".csv")
+    ) {
+      // CSV parsing failed above, try AI extraction
+      extractedText = await file.text();
     } else {
       throw new Error(
-        "Unsupported file type. Please upload a PDF or image file.",
+        "Unsupported file type. Please upload a PDF, CSV, or image file.",
       );
     }
 
@@ -313,6 +366,7 @@ export async function parseBankStatement(
 
 /**
  * Convert parsed transactions to expense format
+ * Preserves sign: negative = outflow, positive = inflow
  */
 export function transactionsToExpenses(
   transactions: ParsedTransaction[],
@@ -323,14 +377,16 @@ export function transactionsToExpenses(
   item: string;
   category?: string;
   date: string;
+  isInflow: boolean;
 }> {
   return transactions.map((t) => ({
     id: `bank-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    amount: Math.abs(t.amount), // Store as positive (expenses are always outgoing)
-    account: "Imported", // Default account for imported expenses
+    amount: t.amount, // Preserve sign: negative = outflow, positive = inflow
+    account: "Imported",
     item: t.description,
     category: t.category,
     date: t.date,
+    isInflow: t.amount > 0,
   }));
 }
 
