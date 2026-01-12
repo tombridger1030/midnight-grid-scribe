@@ -201,9 +201,11 @@ export interface WeeklyKPIData {
   records: WeeklyKPIRecord[];
 }
 
-// Helper functions for calendar-year week calculations (Week 1 = Jan 1–Jan 7)
-const FISCAL_START_MONTH = 0; // 0-based (0 = January) - Calendar year
-const FISCAL_START_DAY = 1;
+// Week system: Monday-based weeks where 2026-W01 starts Monday Dec 29, 2025
+// Each year has 52 weeks, with W01 starting on the last Monday of December
+const WEEK_EPOCH = new Date(2025, 11, 29); // Monday Dec 29, 2025 = start of 2026-W01
+const EPOCH_YEAR = 2026;
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 function toMidnight(date: Date): Date {
   const d = new Date(date);
@@ -211,20 +213,24 @@ function toMidnight(date: Date): Date {
   return d;
 }
 
-function getFiscalYearStart(date: Date): Date {
-  const y = date.getFullYear();
-  const sepFirstThisYear = new Date(y, FISCAL_START_MONTH, FISCAL_START_DAY);
-  return toMidnight(
-    date >= sepFirstThisYear
-      ? sepFirstThisYear
-      : new Date(y - 1, FISCAL_START_MONTH, FISCAL_START_DAY),
-  );
+// Get the Monday of the week containing the given date
+function getMondayOfWeek(date: Date): Date {
+  const d = toMidnight(date);
+  const day = d.getDay();
+  // Sunday = 0, Monday = 1, etc. We want Monday as start
+  const diff = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diff);
+  return d;
 }
 
-function getFiscalYearLabel(date: Date): number {
-  const y = date.getFullYear();
-  const sepFirstThisYear = new Date(y, FISCAL_START_MONTH, FISCAL_START_DAY);
-  return date >= sepFirstThisYear ? y : y - 1;
+// Get the start of W01 for a given year
+function getYearW01Start(year: number): Date {
+  // W01 of each year starts on the last Monday of December of the previous year
+  // 2026-W01 = Dec 29, 2025, 2027-W01 = Dec 28, 2026, etc.
+  const yearOffset = year - EPOCH_YEAR;
+  const w01Start = new Date(WEEK_EPOCH);
+  w01Start.setDate(w01Start.getDate() + yearOffset * 52 * 7);
+  return toMidnight(w01Start);
 }
 
 export const getCurrentWeek = (): string => {
@@ -238,22 +244,31 @@ export const getPreviousWeek = (): string => {
 };
 
 export const getWeekKey = (date: Date): string => {
-  const midnight = toMidnight(date);
-  const fiscalStart = getFiscalYearStart(midnight);
-  const msPerDay = 24 * 60 * 60 * 1000;
-  const dayIndex = Math.floor(
-    (midnight.getTime() - fiscalStart.getTime()) / msPerDay,
+  const monday = getMondayOfWeek(date);
+  const epochMonday = toMidnight(WEEK_EPOCH);
+
+  // Calculate total weeks since epoch (can be negative for dates before epoch)
+  const daysDiff = Math.round(
+    (monday.getTime() - epochMonday.getTime()) / MS_PER_DAY,
   );
-  const weekNumber = Math.floor(dayIndex / 7) + 1; // Week 1 = Sep 1–Sep 7
-  const yearLabel = getFiscalYearLabel(midnight);
-  return `${yearLabel}-W${weekNumber.toString().padStart(2, "0")}`;
+  const totalWeeks = Math.floor(daysDiff / 7);
+
+  // Use proper modulo for negative numbers: ((n % m) + m) % m
+  // This ensures weekInYearRaw is always 0-51
+  const weekInYearRaw = ((totalWeeks % 52) + 52) % 52;
+  const yearOffset = Math.floor(totalWeeks / 52);
+  const weekInYear = weekInYearRaw + 1; // Convert to 1-52
+  const year = EPOCH_YEAR + yearOffset;
+
+  return `${year}-W${weekInYear.toString().padStart(2, "0")}`;
 };
 
 export const getWeekDates = (weekKey: string): { start: Date; end: Date } => {
   const [year, week] = weekKey.split("-W").map(Number);
-  const fiscalStart = new Date(year, FISCAL_START_MONTH, FISCAL_START_DAY);
-  const start = new Date(fiscalStart);
-  start.setDate(fiscalStart.getDate() + (week - 1) * 7);
+  // Get W01 start for the given year, then add (week - 1) weeks
+  const w01Start = getYearW01Start(year);
+  const start = new Date(w01Start);
+  start.setDate(w01Start.getDate() + (week - 1) * 7);
   const end = new Date(start);
   end.setDate(start.getDate() + 6);
   return { start: toMidnight(start), end: toMidnight(end) };
@@ -375,6 +390,25 @@ export async function getEffectiveKPIName(
   } catch {
     return kpiId;
   }
+}
+
+// Throttled rank history regeneration to batch multiple updates
+function scheduleRankRegeneration(): void {
+  const global = globalThis as unknown as Record<
+    string,
+    NodeJS.Timeout | undefined
+  >;
+  if (global._rankRegenTimeout) {
+    clearTimeout(global._rankRegenTimeout);
+  }
+  global._rankRegenTimeout = setTimeout(async () => {
+    try {
+      const { rankingManager } = await import("./rankingSystem");
+      await rankingManager.regenerateRankHistory();
+    } catch (error) {
+      console.error("Failed to regenerate rank history:", error);
+    }
+  }, 1000);
 }
 
 // Storage functions (localStorage + Supabase hybrid)
@@ -684,27 +718,9 @@ export const updateWeeklyKPIRecord = async (
   // Save to both localStorage and Supabase
   await saveWeeklyKPIs(data);
 
-  // If updating old data, regenerate rank history to reflect changes (with throttling)
+  // If updating old data, regenerate rank history to reflect changes
   if (isUpdatingOldData && weekKey !== getCurrentWeek()) {
-    // Throttle regeneration calls to prevent multiple simultaneous runs
-    const global = globalThis as unknown as Record<
-      string,
-      NodeJS.Timeout | undefined
-    >;
-    if (global._rankRegenTimeout) {
-      clearTimeout(global._rankRegenTimeout);
-    }
-    global._rankRegenTimeout = setTimeout(async () => {
-      try {
-        const { rankingManager } = await import("./rankingSystem");
-        await rankingManager.regenerateRankHistory();
-      } catch (error) {
-        console.error(
-          "Failed to regenerate rank history after KPI update:",
-          error,
-        );
-      }
-    }, 1000); // Wait 1 second before regenerating to batch multiple updates
+    scheduleRankRegeneration();
   }
 };
 
@@ -780,27 +796,9 @@ export const updateWeeklyDailyValue = async (
 
   await saveWeeklyKPIs(data);
 
-  // If updating old data, regenerate rank history to reflect changes (with throttling)
+  // If updating old data, regenerate rank history to reflect changes
   if (weekKey !== getCurrentWeek()) {
-    // Throttle regeneration calls to prevent multiple simultaneous runs
-    const global = globalThis as unknown as Record<
-      string,
-      NodeJS.Timeout | undefined
-    >;
-    if (global._rankRegenTimeout) {
-      clearTimeout(global._rankRegenTimeout);
-    }
-    global._rankRegenTimeout = setTimeout(async () => {
-      try {
-        const { rankingManager } = await import("./rankingSystem");
-        await rankingManager.regenerateRankHistory();
-      } catch (error) {
-        console.error(
-          "Failed to regenerate rank history after daily KPI update:",
-          error,
-        );
-      }
-    }, 1000); // Wait 1 second before regenerating to batch multiple updates
+    scheduleRankRegeneration();
   }
 
   // Persist a per-date entry row for analytics/reporting
@@ -869,27 +867,9 @@ export const setWeeklyDailyValues = async (
 
   await saveWeeklyKPIs(data);
 
-  // If updating old data, regenerate rank history to reflect changes (with throttling)
+  // If updating old data, regenerate rank history to reflect changes
   if (weekKey !== getCurrentWeek()) {
-    // Throttle regeneration calls to prevent multiple simultaneous runs
-    const global = globalThis as unknown as Record<
-      string,
-      NodeJS.Timeout | undefined
-    >;
-    if (global._rankRegenTimeout) {
-      clearTimeout(global._rankRegenTimeout);
-    }
-    global._rankRegenTimeout = setTimeout(async () => {
-      try {
-        const { rankingManager } = await import("./rankingSystem");
-        await rankingManager.regenerateRankHistory();
-      } catch (error) {
-        console.error(
-          "Failed to regenerate rank history after weekly daily values update:",
-          error,
-        );
-      }
-    }, 1000); // Wait 1 second before regenerating to batch multiple updates
+    scheduleRankRegeneration();
   }
 };
 

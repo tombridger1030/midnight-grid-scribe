@@ -20,6 +20,15 @@ export type AutoSyncSource =
   | "twitter"
   | null;
 
+export type KPICategory =
+  | "fitness"
+  | "health"
+  | "productivity"
+  | "social"
+  | "learning"
+  | "discipline"
+  | "engineering";
+
 export interface DefaultKPI {
   kpi_id: string;
   name: string;
@@ -28,6 +37,7 @@ export interface DefaultKPI {
   color: string;
   kpi_type: KPIType;
   auto_sync_source: AutoSyncSource;
+  category: KPICategory;
   sort_order: number;
   is_active: boolean;
 }
@@ -41,6 +51,7 @@ export const DEFAULT_KPIS: DefaultKPI[] = [
     color: "#5FE3B3",
     kpi_type: "hours",
     auto_sync_source: "deep_work_timer",
+    category: "discipline",
     sort_order: 1,
     is_active: true,
   },
@@ -52,6 +63,7 @@ export const DEFAULT_KPIS: DefaultKPI[] = [
     color: "#4A90E2",
     kpi_type: "counter",
     auto_sync_source: "github_prs",
+    category: "engineering",
     sort_order: 2,
     is_active: true,
   },
@@ -63,6 +75,7 @@ export const DEFAULT_KPIS: DefaultKPI[] = [
     color: "#FF073A",
     kpi_type: "training",
     auto_sync_source: null,
+    category: "fitness",
     sort_order: 3,
     is_active: true,
   },
@@ -74,6 +87,7 @@ export const DEFAULT_KPIS: DefaultKPI[] = [
     color: "#FFA500",
     kpi_type: "reading",
     auto_sync_source: null,
+    category: "learning",
     sort_order: 4,
     is_active: true,
   },

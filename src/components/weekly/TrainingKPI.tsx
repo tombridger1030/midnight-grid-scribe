@@ -15,8 +15,7 @@ import {
   Check,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { cn } from "@/lib/utils";
-import { colors, shadows } from "@/styles/design-tokens";
+import { colors } from "@/styles/design-tokens";
 import { TrainingType, TrainingSession } from "@/lib/kpiDefaults";
 import { AddSessionDropdown } from "./AddSessionDropdown";
 
@@ -56,14 +55,7 @@ export const TrainingKPI: React.FC<TrainingKPIProps> = ({
       : 0;
   const isComplete = progress >= 100;
 
-  // Get progress color
-  const getProgressColor = (pct: number): string => {
-    if (pct >= 100) return colors.success.DEFAULT;
-    if (pct >= 70) return color;
-    return color;
-  };
-
-  const progressColor = getProgressColor(progress);
+  const progressColor = isComplete ? colors.success.DEFAULT : color;
 
   // Format date for display
   const formatDate = (dateStr: string): string => {
@@ -96,8 +88,16 @@ export const TrainingKPI: React.FC<TrainingKPIProps> = ({
       transition={{ duration: 0.4 }}
     >
       {/* Header - Clickable to toggle collapse */}
-      <button
+      <div
+        role="button"
+        tabIndex={0}
         onClick={() => setIsCollapsed(!isCollapsed)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            setIsCollapsed(!isCollapsed);
+          }
+        }}
         className="w-full flex items-center justify-between mb-3 cursor-pointer"
       >
         <div className="flex items-center gap-3">
@@ -207,7 +207,7 @@ export const TrainingKPI: React.FC<TrainingKPIProps> = ({
             <ChevronUp size={18} style={{ color: colors.text.muted }} />
           )}
         </div>
-      </button>
+      </div>
 
       {/* Progress bar - always visible */}
       {target && target > 0 && (
