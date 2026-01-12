@@ -41,9 +41,7 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   enabled_modules: [
     "dashboard",
     "kpis",
-    "ships",
-    "analytics",
-    "roadmap",
+    "activity",
     "cash",
     "content",
     "daily-review",
@@ -88,22 +86,10 @@ export const AVAILABLE_MODULES = [
     description: "Track weekly performance indicators",
   },
   {
-    id: "ships",
-    name: "Ships",
-    icon: "Ship",
-    description: "Track shipped work and commits",
-  },
-  {
-    id: "analytics",
-    name: "Analytics",
-    icon: "TrendingUp",
-    description: "Comprehensive analytics and insights",
-  },
-  {
-    id: "roadmap",
-    name: "Roadmap",
-    icon: "GitBranch",
-    description: "Goals and milestone tracking",
+    id: "activity",
+    name: "Activity",
+    icon: "Activity",
+    description: "Yearly activity heatmaps",
   },
   {
     id: "cash",
