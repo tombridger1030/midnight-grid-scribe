@@ -12,6 +12,7 @@ import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/contexts/AuthContext";
 import { getGitHubConfig } from "@/lib/github";
+import { formatLocalDate } from "@/lib/dateUtils";
 
 export interface DayData {
   date: string; // YYYY-MM-DD
@@ -38,13 +39,6 @@ function getYearRange(year: number): { start: string; end: string } {
     start: `${year}-01-01`,
     end: `${year}-12-31`,
   };
-}
-
-// Convert ISO timestamp to local date string (YYYY-MM-DD)
-// This fixes timezone issues where UTC dates differ from local dates
-function toLocalDateString(isoTimestamp: string): string {
-  const d = new Date(isoTimestamp);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 export function useActivityData(year: number = 2026): UseActivityDataReturn {
@@ -135,7 +129,7 @@ export function useActivityData(year: number = 2026): UseActivityDataReturn {
       const hoursByDate: Record<string, number> = {};
       (sessions || []).forEach((s) => {
         if (s.duration_seconds && s.duration_seconds > 0) {
-          const date = toLocalDateString(s.start_time);
+          const date = formatLocalDate(new Date(s.start_time));
           const hours = s.duration_seconds / 3600;
           hoursByDate[date] = (hoursByDate[date] || 0) + hours;
         }
@@ -183,7 +177,7 @@ export function useActivityData(year: number = 2026): UseActivityDataReturn {
       commits.forEach((c: any) => {
         const timestamp = c.commit?.author?.date;
         if (timestamp) {
-          const date = toLocalDateString(timestamp);
+          const date = formatLocalDate(new Date(timestamp));
           countByDate[date] = (countByDate[date] || 0) + 1;
         }
       });
