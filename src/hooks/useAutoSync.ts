@@ -11,6 +11,7 @@ import { getWeekDates } from "@/lib/weeklyKpi";
 import { deepWorkService } from "@/lib/deepWorkService";
 import { REALTIME_EVENTS } from "@/hooks/useRealtimeSync";
 import { invalidateShipCache } from "@/lib/github";
+import { formatLocalDate } from "@/lib/dateUtils";
 
 export interface AutoSyncValues {
   prs_created?: number;
@@ -37,8 +38,8 @@ export function useAutoSync(weekKey: string): UseAutoSyncReturn {
 
   // Get week date range
   const { start, end } = getWeekDates(weekKey);
-  const startDate = start.toISOString().split("T")[0];
-  const endDate = end.toISOString().split("T")[0];
+  const startDate = formatLocalDate(start);
+  const endDate = formatLocalDate(end);
 
   // Sync deep work hours from Supabase sessions
   const syncDeepWorkHours = useCallback(async (): Promise<number> => {

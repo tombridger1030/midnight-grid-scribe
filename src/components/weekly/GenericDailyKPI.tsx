@@ -10,6 +10,7 @@ import React, { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronDown, ChevronUp, Target } from "lucide-react";
 import { colors } from "@/styles/design-tokens";
+import { formatLocalDate } from "@/lib/dateUtils";
 
 interface DailyValue {
   date: string;

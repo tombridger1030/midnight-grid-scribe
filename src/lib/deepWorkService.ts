@@ -5,6 +5,7 @@
 
 import { supabase } from "./supabase";
 import { userStorage } from "./userStorage";
+import { formatLocalDate } from "./dateUtils";
 
 // Constants
 const MAX_SESSION_DURATION_SECONDS = 4 * 60 * 60; // 4 hours in seconds
@@ -405,7 +406,7 @@ class DeepWorkService {
     } = await supabase.auth.getUser();
     if (!user) {
       return {
-        date: dayStart.toISOString().split("T")[0],
+        date: formatLocalDate(dayStart),
         totalSeconds: 0,
         totalHours: 0,
         sessions: [],
@@ -423,7 +424,7 @@ class DeepWorkService {
     if (error) {
       console.error("Error fetching daily summary:", error);
       return {
-        date: dayStart.toISOString().split("T")[0],
+        date: formatLocalDate(dayStart),
         totalSeconds: 0,
         totalHours: 0,
         sessions: [],
@@ -445,7 +446,7 @@ class DeepWorkService {
     }
 
     return {
-      date: dayStart.toISOString().split("T")[0],
+      date: formatLocalDate(dayStart),
       totalSeconds,
       totalHours: totalSeconds / 3600,
       sessions,
@@ -473,7 +474,7 @@ class DeepWorkService {
     // Group sessions by day
     const dailyMap = new Map<string, DeepWorkSession[]>();
     for (const session of sessions) {
-      const dateKey = new Date(session.start_time).toISOString().split("T")[0];
+      const dateKey = formatLocalDate(new Date(session.start_time));
       if (!dailyMap.has(dateKey)) {
         dailyMap.set(dateKey, []);
       }
@@ -611,7 +612,7 @@ class DeepWorkService {
     } = await supabase.auth.getUser();
     if (!user) {
       return {
-        date: dayStart.toISOString().split("T")[0],
+        date: formatLocalDate(dayStart),
         workHours: 0,
         personalHours: 0,
         totalHours: 0,
@@ -630,7 +631,7 @@ class DeepWorkService {
     if (error) {
       console.error("Error fetching daily schedule:", error);
       return {
-        date: dayStart.toISOString().split("T")[0],
+        date: formatLocalDate(dayStart),
         workHours: 0,
         personalHours: 0,
         totalHours: 0,
@@ -670,7 +671,7 @@ class DeepWorkService {
     });
 
     return {
-      date: dayStart.toISOString().split("T")[0],
+      date: formatLocalDate(dayStart),
       workHours: workSeconds / 3600,
       personalHours: personalSeconds / 3600,
       totalHours: (workSeconds + personalSeconds) / 3600,
@@ -1043,7 +1044,7 @@ class DeepWorkService {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) {
-      return { date: dayStart.toISOString().split("T")[0], blocks: [] };
+      return { date: formatLocalDate(dayStart), blocks: [] };
     }
 
     const { data: sessions } = await supabase
@@ -1127,7 +1128,7 @@ class DeepWorkService {
     }
 
     return {
-      date: dayStart.toISOString().split("T")[0],
+      date: formatLocalDate(dayStart),
       blocks,
     };
   }

@@ -7,6 +7,7 @@ import {
   getWeekDates,
 } from "./weeklyKpi";
 import { supabase } from "./supabase";
+import { formatLocalDate } from "./dateUtils";
 
 // Ranking system types
 export type RankTier =
@@ -324,8 +325,8 @@ export class RankingManager {
     weightDaysTracked: number;
   }> {
     const { start, end } = getWeekDates(weekKey);
-    const startDate = start.toISOString().split("T")[0];
-    const endDate = end.toISOString().split("T")[0];
+    const startDate = formatLocalDate(start);
+    const endDate = formatLocalDate(end);
 
     try {
       // Query all specialized KPI tables in parallel

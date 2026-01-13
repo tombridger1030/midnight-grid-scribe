@@ -1,4 +1,5 @@
 import { ShipRecord, logShip, loadNoctisiumData } from "./storage";
+import { formatLocalDate } from "./dateUtils";
 // Import fixed for deduplication
 
 // GitHub API configuration
@@ -889,7 +890,7 @@ export async function getShippingStreak(): Promise<number> {
   const shipDates = new Set<string>();
   for (const ship of ships) {
     const date = new Date(ship.timestamp);
-    const dateStr = date.toISOString().split("T")[0];
+    const dateStr = formatLocalDate(date);
     shipDates.add(dateStr);
   }
 
@@ -899,10 +900,10 @@ export async function getShippingStreak(): Promise<number> {
   today.setHours(0, 0, 0, 0);
 
   // If no ship today, check if we shipped yesterday (streak can continue)
-  const todayStr = today.toISOString().split("T")[0];
+  const todayStr = formatLocalDate(today);
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayStr = yesterday.toISOString().split("T")[0];
+  const yesterdayStr = formatLocalDate(yesterday);
 
   // Start checking from today or yesterday
   let checkDate = new Date(today);
@@ -916,7 +917,7 @@ export async function getShippingStreak(): Promise<number> {
 
   // Count consecutive days with ships
   while (true) {
-    const dateStr = checkDate.toISOString().split("T")[0];
+    const dateStr = formatLocalDate(checkDate);
     if (shipDates.has(dateStr)) {
       streak++;
       checkDate.setDate(checkDate.getDate() - 1);
@@ -1087,7 +1088,7 @@ export async function getDailyPRCounts(
   const current = new Date(start);
 
   while (current <= end) {
-    const dateStr = current.toISOString().split("T")[0];
+    const dateStr = formatLocalDate(current);
     result[dateStr] = 0;
     current.setDate(current.getDate() + 1);
   }
@@ -1119,7 +1120,7 @@ export async function getDailyPRCounts(
     // Count PRs per day
     for (const item of data.items || []) {
       const createdAt = new Date(item.created_at);
-      const dateStr = createdAt.toISOString().split("T")[0];
+      const dateStr = formatLocalDate(createdAt);
       if (result[dateStr] !== undefined) {
         result[dateStr]++;
       }

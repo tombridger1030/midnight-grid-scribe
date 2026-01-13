@@ -17,6 +17,7 @@ import {
   Check,
 } from "lucide-react";
 import { colors } from "@/styles/design-tokens";
+import { formatLocalDate } from "@/lib/dateUtils";
 import { DailySleep } from "@/hooks/useSleep";
 
 interface SleepKPIProps {

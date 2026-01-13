@@ -9,6 +9,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { formatLocalDate } from "@/lib/dateUtils";
 
 interface GitHubCommitsFeedProps {
   days?: number;
@@ -73,7 +74,7 @@ function GitHubCommitsFeed({
     for (let i = 0; i < days; i++) {
       const date = new Date();
       date.setDate(date.getDate() - i);
-      const dateKey = date.toISOString().split("T")[0];
+      const dateKey = formatLocalDate(date);
       const dayLabel = date.toLocaleDateString("en-US", {
         weekday: "short",
         month: "short",
@@ -91,7 +92,7 @@ function GitHubCommitsFeed({
     // Count commits per day and hour, store commits
     for (const commit of commits) {
       const commitDate = new Date(commit.date);
-      const dateKey = commitDate.toISOString().split("T")[0];
+      const dateKey = formatLocalDate(commitDate);
       const hour = commitDate.getHours();
 
       const stats = statsMap.get(dateKey);

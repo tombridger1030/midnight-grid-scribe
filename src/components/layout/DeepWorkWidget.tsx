@@ -1,16 +1,20 @@
 /**
  * DeepWorkWidget Component
- * Displays deep work progress and timer in the header
+ *
+ * Displays read-only deep work progress in the header.
+ * Shows commit-based hours (auto) + manual session hours.
+ * Timer functionality removed - deep work is now automated via commits.
  */
 
 import React, { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { Play, Square, Clock, ChevronDown } from "lucide-react";
+import { Clock, ChevronDown, Code, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { deepWorkService, DeepWorkSession } from "@/lib/deepWorkService";
 import { kpiManager } from "@/lib/configurableKpis";
-import { TaskSelector, SessionConfig } from "./TaskSelector";
+import { useDeepWorkFromCommits } from "@/hooks/useDeepWorkFromCommits";
 import { ExpandablePanel } from "./ExpandablePanel";
+import { useNavigate } from "react-router-dom";
 
 interface DeepWorkWidgetProps {
   className?: string;
@@ -19,14 +23,10 @@ interface DeepWorkWidgetProps {
 export const DeepWorkWidget: React.FC<DeepWorkWidgetProps> = ({
   className,
 }) => {
+  const navigate = useNavigate();
+
   // State
-  const [activeSession, setActiveSession] = useState<DeepWorkSession | null>(
-    null,
-  );
-  const [todayTotalSeconds, setTodayTotalSeconds] = useState(0);
   const [dailyTargetHours, setDailyTargetHours] = useState(8);
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const [showTaskSelector, setShowTaskSelector] = useState(false);
   const [showHistoryPanel, setShowHistoryPanel] = useState(false);
   const [todaySessions, setTodaySessions] = useState<DeepWorkSession[]>([]);
   const [weekSummary, setWeekSummary] = useState<{
@@ -35,18 +35,19 @@ export const DeepWorkWidget: React.FC<DeepWorkWidgetProps> = ({
     dailyTargetHours: number;
   } | null>(null);
 
-  // Load initial data
+  // Get commit-based deep work for today
+  const {
+    deepWorkHours: commitHours,
+    commitCount,
+    commitHours: hourlyData,
+    isLoading: commitLoading,
+    isConfigured,
+  } = useDeepWorkFromCommits(new Date());
+
+  // Load manual sessions and targets
   const loadData = useCallback(async () => {
     try {
-      // Load active session
-      const session = await deepWorkService.getActiveSession();
-      setActiveSession(session);
-
-      // Load today's total
-      const total = await deepWorkService.getTodayTotalSeconds();
-      setTodayTotalSeconds(total);
-
-      // Load today's sessions for history
+      // Load today's manual sessions
       const sessions = await deepWorkService.getTodaySessions();
       setTodaySessions(sessions);
 
@@ -57,7 +58,7 @@ export const DeepWorkWidget: React.FC<DeepWorkWidgetProps> = ({
         setDailyTargetHours(deepWorkKpi.target / 7);
       }
 
-      // Load week summary
+      // Load week summary for context
       const weeklyTarget = deepWorkKpi?.target || 40;
       const summary = await deepWorkService.getWeeklySummary(weeklyTarget);
       setWeekSummary({
@@ -74,193 +75,60 @@ export const DeepWorkWidget: React.FC<DeepWorkWidgetProps> = ({
     loadData();
   }, [loadData]);
 
-  // Timer tick for active session
-  useEffect(() => {
-    let interval: NodeJS.Timeout | null = null;
+  // Calculate manual session hours for today
+  const manualHours =
+    todaySessions.reduce((acc, s) => acc + (s.duration_seconds || 0), 0) / 3600;
 
-    if (activeSession?.is_active) {
-      const startTime = new Date(activeSession.start_time).getTime();
-
-      // Update immediately
-      setElapsedSeconds(Math.floor((Date.now() - startTime) / 1000));
-
-      // Then update every second
-      interval = setInterval(() => {
-        setElapsedSeconds(Math.floor((Date.now() - startTime) / 1000));
-      }, 1000);
-    } else {
-      setElapsedSeconds(0);
-    }
-
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [activeSession]);
-
-  // Listen for auto-stop events
-  useEffect(() => {
-    const handleAutoStop = () => {
-      setActiveSession(null);
-      loadData();
-    };
-
-    window.addEventListener("deepWorkAutoStopped", handleAutoStop);
-    return () =>
-      window.removeEventListener("deepWorkAutoStopped", handleAutoStop);
-  }, [loadData]);
-
-  // Start session
-  const handleStartSession = async (config: string | SessionConfig) => {
-    setShowTaskSelector(false);
-    try {
-      // Handle both legacy string and new SessionConfig
-      const taskName = typeof config === "string" ? config : config.taskName;
-      const activityType =
-        typeof config === "string" ? "work" : config.activityType;
-      const activityLabel =
-        typeof config === "string" ? undefined : config.activityLabel;
-
-      const session = await deepWorkService.startSession(
-        taskName,
-        activityType,
-        activityLabel,
-      );
-      if (session) {
-        setActiveSession(session);
-      }
-    } catch (error) {
-      console.error("Failed to start session:", error);
-    }
-  };
-
-  // Stop session
-  const handleStopSession = async () => {
-    if (!activeSession) return;
-
-    try {
-      await deepWorkService.stopSession(activeSession.id);
-      setActiveSession(null);
-      loadData(); // Refresh totals
-    } catch (error) {
-      console.error("Failed to stop session:", error);
-    }
-  };
+  // Total today = commit hours + manual hours
+  const todayTotalHours = commitHours + manualHours;
 
   // Format time for display
-  const formatHours = (seconds: number): string => {
-    const hours = seconds / 3600;
+  const formatHours = (hours: number): string => {
+    if (hours === 0) return "0";
+    if (hours < 1) return `${Math.round(hours * 60)}m`;
     return hours.toFixed(1);
   };
 
-  const formatTimer = (seconds: number): string => {
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
-
-    if (hours > 0) {
-      return `${hours}:${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-    }
-    return `${minutes}:${secs.toString().padStart(2, "0")}`;
-  };
-
   // Calculate progress
-  const todayHours = todayTotalSeconds / 3600;
-  const progressPercent = Math.min(100, (todayHours / dailyTargetHours) * 100);
+  const progressPercent = Math.min(
+    100,
+    (todayTotalHours / dailyTargetHours) * 100,
+  );
+
+  // Navigate to daily review to add manual sessions
+  const handleAddSession = () => {
+    setShowHistoryPanel(false);
+    navigate("/daily");
+  };
 
   return (
     <div className={cn("relative flex items-center", className)}>
-      {activeSession?.is_active ? (
-        // Active Session Display
-        <div className="flex items-center gap-3">
-          {/* Pulsing Indicator */}
-          <motion.div
-            animate={{ opacity: [1, 0.5, 1] }}
-            transition={{ duration: 1, repeat: Infinity }}
-            className="w-2 h-2 rounded-full bg-danger"
+      {/* Read-only Display */}
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => setShowHistoryPanel(!showHistoryPanel)}
+          className={cn(
+            "flex items-center gap-2 px-3 py-1.5 rounded",
+            "bg-surface-tertiary/50 hover:bg-surface-tertiary",
+            "transition-colors group",
+          )}
+        >
+          <Clock size={14} className="text-neon-cyan" />
+          <span className="font-mono text-sm text-content-primary">
+            {formatHours(todayTotalHours)}h
+          </span>
+          <span className="text-xs text-content-muted">
+            / {dailyTargetHours.toFixed(1)}h
+          </span>
+          <ChevronDown
+            size={12}
+            className={cn(
+              "text-content-muted transition-transform",
+              showHistoryPanel && "rotate-180",
+            )}
           />
-
-          {/* Timer */}
-          <button
-            onClick={() => setShowHistoryPanel(!showHistoryPanel)}
-            className={cn(
-              "flex items-center gap-2 px-3 py-1.5 rounded",
-              "bg-surface-tertiary/50 hover:bg-surface-tertiary",
-              "transition-colors",
-            )}
-          >
-            <span className="font-mono text-sm font-semibold text-content-primary">
-              {formatTimer(elapsedSeconds)}
-            </span>
-            {activeSession.task_name && (
-              <span className="text-xs text-content-muted max-w-32 truncate hidden sm:inline">
-                "{activeSession.task_name}"
-              </span>
-            )}
-          </button>
-
-          {/* Stop Button */}
-          <button
-            onClick={handleStopSession}
-            className={cn(
-              "p-1.5 rounded",
-              "bg-danger/10 text-danger",
-              "hover:bg-danger/20",
-              "transition-colors",
-            )}
-            title="Stop session"
-          >
-            <Square size={14} />
-          </button>
-        </div>
-      ) : (
-        // Idle State Display
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowHistoryPanel(!showHistoryPanel)}
-            className={cn(
-              "flex items-center gap-2 px-3 py-1.5 rounded",
-              "bg-surface-tertiary/50 hover:bg-surface-tertiary",
-              "transition-colors group",
-            )}
-          >
-            <Clock size={14} className="text-neon-cyan" />
-            <span className="font-mono text-sm text-content-primary">
-              {formatHours(todayTotalSeconds)}h
-            </span>
-            <span className="text-xs text-content-muted">
-              / {dailyTargetHours.toFixed(1)}h
-            </span>
-            <ChevronDown
-              size={12}
-              className={cn(
-                "text-content-muted transition-transform",
-                showHistoryPanel && "rotate-180",
-              )}
-            />
-          </button>
-
-          {/* Start Button */}
-          <button
-            onClick={() => setShowTaskSelector(true)}
-            className={cn(
-              "flex items-center gap-1.5 px-3 py-1.5 rounded",
-              "bg-neon-cyan text-black",
-              "hover:bg-neon-cyan/90 hover:shadow-glow-cyan",
-              "transition-all text-sm font-medium",
-            )}
-          >
-            <Play size={14} />
-            <span className="hidden sm:inline">Start</span>
-          </button>
-        </div>
-      )}
-
-      {/* Task Selector Panel */}
-      <TaskSelector
-        isOpen={showTaskSelector}
-        onClose={() => setShowTaskSelector(false)}
-        onSelectTask={handleStartSession}
-      />
+        </button>
+      </div>
 
       {/* History Panel */}
       <ExpandablePanel
@@ -291,59 +159,111 @@ export const DeepWorkWidget: React.FC<DeepWorkWidgetProps> = ({
           </div>
         </div>
 
-        {/* Sessions List */}
-        {todaySessions.length > 0 ? (
-          <div className="space-y-2 mb-4">
-            <div className="text-xs text-content-muted">Sessions today</div>
-            {todaySessions.map((session) => (
-              <div
-                key={session.id}
-                className={cn(
-                  "flex items-center justify-between p-2 rounded",
-                  "bg-surface-tertiary/50",
-                  session.is_active && "ring-1 ring-neon-cyan",
-                )}
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm text-content-primary truncate">
-                    {session.task_name}
-                  </div>
-                  <div className="text-xs text-content-muted">
-                    {new Date(session.start_time).toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                    {session.end_time && (
-                      <>
-                        {" "}
-                        -{" "}
-                        {new Date(session.end_time).toLocaleTimeString([], {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </>
-                    )}
-                  </div>
+        {/* Commit Hours (Auto) */}
+        {isConfigured && (
+          <div className="mb-4">
+            <div className="flex items-center gap-2 text-xs text-content-muted mb-2">
+              <Code size={12} className="text-neon-cyan" />
+              <span>Code (auto from commits)</span>
+            </div>
+            {commitLoading ? (
+              <div className="text-sm text-content-muted">Loading...</div>
+            ) : commitHours > 0 ? (
+              <div className="space-y-1">
+                <div className="text-sm text-content-primary">
+                  {commitHours}h ({commitCount} commits)
                 </div>
-                <div className="text-sm font-mono text-content-secondary">
-                  {session.duration_seconds
-                    ? deepWorkService.formatDuration(session.duration_seconds)
-                    : session.is_active
-                      ? formatTimer(elapsedSeconds)
-                      : "-"}
+                <div className="flex flex-wrap gap-1">
+                  {hourlyData.map((h) => (
+                    <span
+                      key={h.hour}
+                      className="px-1.5 py-0.5 text-xs rounded bg-neon-cyan/20 text-neon-cyan font-mono"
+                    >
+                      {h.hour.toString().padStart(2, "0")}:00
+                    </span>
+                  ))}
                 </div>
               </div>
-            ))}
-          </div>
-        ) : (
-          <div className="text-sm text-content-muted text-center py-4">
-            No sessions today yet
+            ) : (
+              <div className="text-sm text-content-muted">
+                No commits today yet
+              </div>
+            )}
           </div>
         )}
 
+        {/* Manual Sessions */}
+        {todaySessions.length > 0 && (
+          <div className="mb-4">
+            <div className="flex items-center gap-2 text-xs text-content-muted mb-2">
+              <Clock size={12} />
+              <span>Manual sessions</span>
+            </div>
+            <div className="space-y-2">
+              {todaySessions.map((session) => (
+                <div
+                  key={session.id}
+                  className={cn(
+                    "flex items-center justify-between p-2 rounded",
+                    "bg-surface-tertiary/50",
+                  )}
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm text-content-primary truncate">
+                      {session.task_name}
+                    </div>
+                    <div className="text-xs text-content-muted">
+                      {new Date(session.start_time).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                      {session.end_time && (
+                        <>
+                          {" "}
+                          -{" "}
+                          {new Date(session.end_time).toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  <div className="text-sm font-mono text-content-secondary">
+                    {session.duration_seconds
+                      ? deepWorkService.formatDuration(session.duration_seconds)
+                      : "-"}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* No data state */}
+        {!isConfigured && todaySessions.length === 0 && (
+          <div className="text-sm text-content-muted text-center py-4">
+            No deep work tracked today
+          </div>
+        )}
+
+        {/* Add Session Link */}
+        <button
+          onClick={handleAddSession}
+          className={cn(
+            "w-full flex items-center justify-center gap-2 py-2 rounded",
+            "bg-surface-tertiary/50 hover:bg-surface-tertiary",
+            "text-sm text-content-muted hover:text-content-primary",
+            "transition-colors",
+          )}
+        >
+          <Plus size={14} />
+          <span>Add session in Daily Log</span>
+        </button>
+
         {/* Week Summary */}
         {weekSummary && (
-          <div className="pt-3 border-t border-line">
+          <div className="mt-3 pt-3 border-t border-line">
             <div className="text-xs text-content-muted mb-1">This week</div>
             <div className="flex items-center justify-between">
               <span className="text-sm text-content-primary">

@@ -16,6 +16,8 @@ interface TimelineViewProps {
   className?: string;
   showAllHours?: boolean;
   onToggleShowAllHours?: () => void;
+  /** Hours (0-23) with git commits - auto-populated deep work */
+  commitHours?: number[];
 }
 
 export const TimelineView: React.FC<TimelineViewProps> = ({
@@ -24,7 +26,10 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
   className,
   showAllHours = false,
   onToggleShowAllHours,
+  commitHours = [],
 }) => {
+  // Create a set for O(1) lookup of commit hours
+  const commitHourSet = new Set(commitHours);
   const [hoveredBlock, setHoveredBlock] = useState<TimelineBlockType | null>(
     null,
   );
@@ -72,9 +77,11 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
         {hourlyBlocks.map((hourBlocks, hourIndex) => {
           // Skip completely empty hours to reduce clutter (unless showAllHours is true)
           const hasActivity = hourBlocks.some((b) => b.coverage > 0);
+          const hasCommit = commitHourSet.has(hourIndex);
           const showHour =
             showAllHours ||
             hasActivity ||
+            hasCommit ||
             hourIndex === 0 ||
             hourIndex === 6 ||
             hourIndex === 12 ||
@@ -113,6 +120,8 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
                     const isHovered =
                       hoveredBlock?.hour === block.hour &&
                       hoveredBlock?.quarter === block.quarter;
+                    const isCommitHour = commitHourSet.has(block.hour);
+                    const isEmptyButHasCommit = isEmpty && isCommitHour;
 
                     return (
                       <motion.div
@@ -127,9 +136,11 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
                         onClick={() => onBlockClick && onBlockClick(block)}
                         className={cn(
                           "h-6 rounded-sm transition-all cursor-pointer relative",
-                          isEmpty
+                          isEmpty && !isCommitHour
                             ? "bg-surface-tertiary/30 hover:bg-surface-tertiary/50"
                             : "hover:ring-1 hover:ring-white/30",
+                          isEmptyButHasCommit &&
+                            "bg-neon-cyan/20 border border-neon-cyan/40 border-dashed",
                         )}
                         style={
                           !isEmpty
@@ -137,19 +148,25 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
                                 backgroundColor: block.categoryColor,
                                 opacity: 0.3 + block.coverage * 0.7,
                               }
-                            : undefined
+                            : isEmptyButHasCommit
+                              ? undefined
+                              : undefined
                         }
                         title={
                           block.sessionIds.length > 0
                             ? `${block.categoryName}: ${block.timeLabel}`
-                            : "Empty - click to add session"
+                            : isCommitHour
+                              ? `Commit activity: ${block.timeLabel}`
+                              : "Empty - click to add session"
                         }
                       >
                         {/* Hover tooltip */}
-                        {isHovered && !isEmpty && (
+                        {isHovered && (!isEmpty || isCommitHour) && (
                           <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-surface-tertiary border border-line rounded text-xs whitespace-nowrap z-10 pointer-events-none">
                             <div className="font-medium">
-                              {block.categoryName}
+                              {isEmpty && isCommitHour
+                                ? "Code (auto)"
+                                : block.categoryName}
                             </div>
                             <div className="text-content-muted">
                               {block.timeLabel}
@@ -170,15 +187,17 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
       <div className="flex flex-wrap gap-4 text-xs pt-2 border-t border-line/50">
         <div className="flex items-center gap-2">
           <div className="w-3 h-3 rounded bg-surface-tertiary/30" />
-          <span className="text-content-muted">Unaccounted</span>
+          <span className="text-content-muted">Empty</span>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded bg-surface-tertiary/30 border border-white/20" />
-          <span className="text-content-muted">Partial coverage</span>
-        </div>
+        {commitHours.length > 0 && (
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded bg-neon-cyan/20 border border-neon-cyan/40 border-dashed" />
+            <span className="text-content-muted">Code (auto)</span>
+          </div>
+        )}
         <div className="flex items-center gap-2">
           <div className="w-3 h-3 rounded bg-neon-cyan" />
-          <span className="text-content-muted">Full coverage</span>
+          <span className="text-content-muted">Manual session</span>
         </div>
       </div>
     </div>

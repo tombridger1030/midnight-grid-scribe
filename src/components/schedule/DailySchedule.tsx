@@ -25,6 +25,7 @@ import {
   ActivityCategory,
 } from "@/lib/deepWorkService";
 import { useActivityCategories } from "@/hooks/useActivityCategories";
+import { useDeepWorkFromCommits } from "@/hooks/useDeepWorkFromCommits";
 import { CategorySummaryCards } from "./CategorySummaryCards";
 import { TimelineView } from "./TimelineView";
 import { ManualSessionEntry } from "./ManualSessionEntry";
@@ -83,6 +84,10 @@ export const DailySchedule: React.FC<DailyScheduleProps> = ({
     defaultCategory,
     isLoading: categoriesLoading,
   } = useActivityCategories();
+
+  // Get commit hours for the timeline visualization
+  const { commitHours: commitHourData } = useDeepWorkFromCommits(currentDate);
+  const commitHours = commitHourData.map((ch) => ch.hour);
 
   // Load schedule for current date
   const loadSchedule = useCallback(
@@ -348,6 +353,7 @@ export const DailySchedule: React.FC<DailyScheduleProps> = ({
                     onBlockClick={handleBlockClick}
                     showAllHours={showAllHours}
                     onToggleShowAllHours={() => setShowAllHours(!showAllHours)}
+                    commitHours={commitHours}
                   />
                 </div>
               </motion.div>

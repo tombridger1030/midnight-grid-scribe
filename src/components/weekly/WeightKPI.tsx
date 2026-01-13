@@ -18,6 +18,7 @@ import {
   Check,
 } from "lucide-react";
 import { colors } from "@/styles/design-tokens";
+import { formatLocalDate } from "@/lib/dateUtils";
 import { DailyWeight } from "@/hooks/useWeight";
 
 interface WeightKPIProps {

@@ -12,6 +12,7 @@ import { DEFAULT_KPIS, KPIType, AutoSyncSource } from "@/lib/kpiDefaults";
 import { getCurrentWeek, getWeekDates, formatWeekKey } from "@/lib/weeklyKpi";
 import { REALTIME_EVENTS } from "@/hooks/useRealtimeSync";
 import { useProgressionStore } from "@/stores/progressionStore";
+import { formatLocalDate } from "@/lib/dateUtils";
 
 export interface KPIConfig {
   id: string;
@@ -302,7 +303,7 @@ export function useWeeklyKPIs(initialWeekKey?: string): UseWeeklyKPIsReturn {
         // ALSO update weekly_kpi_entries so the value persists across page reloads
         // The entries table is used as the source of truth for calculating weekly values
         // When incrementing, we add the increment to today's entry
-        const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+        const today = formatLocalDate(new Date()); // YYYY-MM-DD local
 
         // Calculate the increment (or decrement) amount
         const increment = value - previousValue;

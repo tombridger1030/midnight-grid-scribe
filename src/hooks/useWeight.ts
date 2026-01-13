@@ -10,6 +10,7 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/contexts/AuthContext";
 import { getWeekDates, updateWeeklyKPIRecord } from "@/lib/weeklyKpi";
 import { useProgressionStore } from "@/stores/progressionStore";
+import { formatLocalDate } from "@/lib/dateUtils";
 
 export interface DailyWeight {
   id?: string;
@@ -49,8 +50,8 @@ export function useWeight(weekKey: string): UseWeightReturn {
   const [error, setError] = useState<Error | null>(null);
 
   const { start, end } = getWeekDates(weekKey);
-  const startDate = start.toISOString().split("T")[0];
-  const endDate = end.toISOString().split("T")[0];
+  const startDate = formatLocalDate(start);
+  const endDate = formatLocalDate(end);
 
   // Load weight data for the week
   const loadWeekData = useCallback(async () => {
@@ -216,3 +217,58 @@ export function useWeight(weekKey: string): UseWeightReturn {
 }
 
 export default useWeight;
+
+/**
+ * Standalone function to get weight data for a single date.
+ * Used by QuickDailyEntry when week context isn't needed.
+ */
+export async function getWeightForDate(
+  userId: string,
+  date: string,
+): Promise<DailyWeight | null> {
+  try {
+    const { data, error } = await supabase
+      .from("daily_weight")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("date", date)
+      .maybeSingle();
+
+    if (error) throw error;
+    return data as DailyWeight | null;
+  } catch (err) {
+    console.error("Failed to get weight for date:", err);
+    return null;
+  }
+}
+
+/**
+ * Standalone function to save weight data for a single date.
+ * Used by QuickDailyEntry for quick save without week context.
+ */
+export async function saveWeightForDate(
+  userId: string,
+  date: string,
+  weightLbs: number,
+): Promise<boolean> {
+  try {
+    const { error } = await supabase.from("daily_weight").upsert(
+      {
+        user_id: userId,
+        date,
+        weight_lbs: weightLbs,
+      },
+      { onConflict: "user_id,date" },
+    );
+
+    if (error) throw error;
+
+    // Award XP for weight entry
+    useProgressionStore.getState().onKPIEntry("weight_entry");
+
+    return true;
+  } catch (err) {
+    console.error("Failed to save weight for date:", err);
+    return false;
+  }
+}

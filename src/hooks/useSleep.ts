@@ -9,6 +9,7 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/contexts/AuthContext";
 import { getWeekDates, updateWeeklyKPIRecord } from "@/lib/weeklyKpi";
 import { useProgressionStore } from "@/stores/progressionStore";
+import { formatLocalDate } from "@/lib/dateUtils";
 
 export interface DailySleep {
   id?: string;
@@ -69,8 +70,8 @@ export function useSleep(weekKey: string): UseSleepReturn {
 
   // Get week date range
   const { start, end } = getWeekDates(weekKey);
-  const startDate = start.toISOString().split("T")[0];
-  const endDate = end.toISOString().split("T")[0];
+  const startDate = formatLocalDate(start);
+  const endDate = formatLocalDate(end);
 
   // Load sleep data for the week
   const loadWeekData = useCallback(async () => {
@@ -223,3 +224,59 @@ export function useSleep(weekKey: string): UseSleepReturn {
 }
 
 export default useSleep;
+
+/**
+ * Standalone function to get sleep data for a single date.
+ * Used by QuickDailyEntry when week context isn't needed.
+ */
+export async function getSleepForDate(
+  userId: string,
+  date: string,
+): Promise<DailySleep | null> {
+  try {
+    const { data, error } = await supabase
+      .from("daily_sleep")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("date", date)
+      .maybeSingle();
+
+    if (error) throw error;
+    return data as DailySleep | null;
+  } catch (err) {
+    console.error("Failed to get sleep for date:", err);
+    return null;
+  }
+}
+
+/**
+ * Standalone function to save sleep data for a single date.
+ * Used by QuickDailyEntry for quick save without week context.
+ */
+export async function saveSleepForDate(
+  userId: string,
+  date: string,
+  hours: number,
+): Promise<boolean> {
+  try {
+    const { error } = await supabase.from("daily_sleep").upsert(
+      {
+        user_id: userId,
+        date,
+        hours,
+        quality: 3, // Default quality
+      },
+      { onConflict: "user_id,date" },
+    );
+
+    if (error) throw error;
+
+    // Award XP for sleep entry
+    useProgressionStore.getState().onKPIEntry("sleep_entry");
+
+    return true;
+  } catch (err) {
+    console.error("Failed to save sleep for date:", err);
+    return false;
+  }
+}

@@ -9,6 +9,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { GitPullRequest, ChevronDown, ChevronUp, Sparkles } from "lucide-react";
 import { colors } from "@/styles/design-tokens";
+import { formatLocalDate } from "@/lib/dateUtils";
 import { getDailyPRCounts, isGitHubConfigured } from "@/lib/github";
 
 interface PRsKPIProps {

@@ -10,6 +10,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Book, BookProgress, BookType, BookStatus } from "@/lib/kpiDefaults";
 import { getWeekDates, updateWeeklyKPIRecord } from "@/lib/weeklyKpi";
 import { useProgressionStore } from "@/stores/progressionStore";
+import { formatLocalDate } from "@/lib/dateUtils";
 
 export interface NewBook {
   title: string;
@@ -48,8 +49,8 @@ export function useBooks(weekKey: string): UseBooksReturn {
 
   // Get week date range
   const { start, end } = getWeekDates(weekKey);
-  const startDate = start.toISOString().split("T")[0];
-  const endDate = end.toISOString().split("T")[0];
+  const startDate = formatLocalDate(start);
+  const endDate = formatLocalDate(end);
 
   // Current year for completed count
   const currentYear = new Date().getFullYear();
@@ -186,7 +187,7 @@ export function useBooks(weekKey: string): UseBooksReturn {
             current_page: 0,
             percent_complete: 0,
             status: "reading",
-            started_at: new Date().toISOString().split("T")[0],
+            started_at: formatLocalDate(new Date()),
           })
           .select()
           .single();
@@ -222,7 +223,7 @@ export function useBooks(weekKey: string): UseBooksReturn {
       }
 
       // Calculate pages/percent read today
-      const today = new Date().toISOString().split("T")[0];
+      const today = formatLocalDate(new Date());
       const pagesRead =
         book.book_type !== "audiobook"
           ? Math.max(0, newPage - book.current_page)
@@ -305,7 +306,7 @@ export function useBooks(weekKey: string): UseBooksReturn {
             status: "completed",
             percent_complete: 100,
             current_page: book.total_pages || book.current_page,
-            completed_at: new Date().toISOString().split("T")[0],
+            completed_at: formatLocalDate(new Date()),
             updated_at: new Date().toISOString(),
           })
           .eq("id", bookId)
@@ -320,7 +321,7 @@ export function useBooks(weekKey: string): UseBooksReturn {
                   ...b,
                   status: "completed" as BookStatus,
                   percent_complete: 100,
-                  completed_at: new Date().toISOString().split("T")[0],
+                  completed_at: formatLocalDate(new Date()),
                 }
               : b,
           ),

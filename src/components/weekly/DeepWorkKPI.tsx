@@ -2,22 +2,30 @@
  * DeepWorkKPI Component
  *
  * Shows weekly deep work hours with expandable daily breakdown.
- * Displays sessions per day with hours worked.
+ * Uses hybrid calculation: commit hours (auto) + manual session hours.
  */
 
 import React, { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Zap, ChevronDown, ChevronUp } from "lucide-react";
+import { Zap, ChevronDown, ChevronUp, Code, Clock } from "lucide-react";
 import { colors } from "@/styles/design-tokens";
-import {
-  deepWorkService,
-  WeeklyDeepWorkSummary,
-  DailyDeepWorkSummary,
-} from "@/lib/deepWorkService";
+import { formatLocalDate } from "@/lib/dateUtils";
+import { useWeeklyDeepWorkFromCommits } from "@/hooks/useWeeklyDeepWorkFromCommits";
+import { deepWorkService, DailyDeepWorkSummary } from "@/lib/deepWorkService";
 
 interface DeepWorkKPIProps {
   target: number;
   weekDates: { start: Date; end: Date };
+}
+
+// Interface for combined daily data
+interface DailyDeepWorkData {
+  date: string;
+  commitHours: number;
+  manualHours: number;
+  totalHours: number;
+  commitCount: number;
+  sessionCount: number;
 }
 
 export const DeepWorkKPI: React.FC<DeepWorkKPIProps> = ({
@@ -25,51 +33,92 @@ export const DeepWorkKPI: React.FC<DeepWorkKPIProps> = ({
   weekDates,
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(true);
-  const [weeklySummary, setWeeklySummary] =
-    useState<WeeklyDeepWorkSummary | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [manualSessions, setManualSessions] = useState<
+    Record<string, DailyDeepWorkSummary>
+  >({});
+  const [isLoadingManual, setIsLoadingManual] = useState(true);
 
-  // Load weekly summary
+  // Fetch commit-based deep work hours
+  const {
+    dailyData: commitData,
+    totalHours: commitTotalHours,
+    isLoading: isLoadingCommits,
+    isConfigured,
+  } = useWeeklyDeepWorkFromCommits(weekDates.start, weekDates.end);
+
+  // Load manual sessions (non-commit sessions from timeline)
   useEffect(() => {
-    const loadData = async () => {
-      setIsLoading(true);
+    const loadManualSessions = async () => {
+      setIsLoadingManual(true);
       try {
-        const summary = await deepWorkService.getWeeklySummary(target);
-        setWeeklySummary(summary);
+        const sessions: Record<string, DailyDeepWorkSummary> = {};
+        const current = new Date(weekDates.start);
+        while (current <= weekDates.end) {
+          const summary = await deepWorkService.getDailySummary(current);
+          if (summary.sessions.length > 0) {
+            sessions[summary.date] = summary;
+          }
+          current.setDate(current.getDate() + 1);
+        }
+        setManualSessions(sessions);
       } catch (error) {
-        console.error("Failed to load deep work summary:", error);
+        console.error("Failed to load manual sessions:", error);
       } finally {
-        setIsLoading(false);
+        setIsLoadingManual(false);
       }
     };
 
-    loadData();
-  }, [target, weekDates.start, weekDates.end]);
+    loadManualSessions();
+  }, [weekDates.start, weekDates.end]);
+
+  const isLoading = isLoadingCommits || isLoadingManual;
 
   // Generate all 7 days of the week
   const weekDays = useMemo(() => {
     const days: string[] = [];
     const current = new Date(weekDates.start);
     while (current <= weekDates.end) {
-      days.push(current.toISOString().split("T")[0]);
+      days.push(formatLocalDate(current));
       current.setDate(current.getDate() + 1);
     }
     return days;
   }, [weekDates]);
 
-  // Create a map of daily summaries by date
-  const dailySummaryMap = useMemo(() => {
-    if (!weeklySummary) return {};
-    return weeklySummary.dailySummaries.reduce(
-      (acc, summary) => {
-        acc[summary.date] = summary;
-        return acc;
-      },
-      {} as Record<string, DailyDeepWorkSummary>,
-    );
-  }, [weeklySummary]);
+  // Combine commit hours and manual session hours per day
+  const dailyCombinedData = useMemo(() => {
+    const combined: Record<string, DailyDeepWorkData> = {};
 
-  const totalHours = weeklySummary?.totalHours || 0;
+    weekDays.forEach((date) => {
+      const commitInfo = commitData[date] || { hours: 0, commitCount: 0 };
+      const manualInfo = manualSessions[date] || {
+        totalHours: 0,
+        sessions: [],
+      };
+
+      combined[date] = {
+        date,
+        commitHours: commitInfo.hours,
+        manualHours: manualInfo.totalHours,
+        totalHours: commitInfo.hours + manualInfo.totalHours,
+        commitCount: commitInfo.commitCount,
+        sessionCount: manualInfo.sessions?.length || 0,
+      };
+    });
+
+    return combined;
+  }, [weekDays, commitData, manualSessions]);
+
+  // Calculate total hours (commit + manual)
+  const { totalHours, manualTotalHours } = useMemo(() => {
+    let total = 0;
+    let manual = 0;
+    Object.values(dailyCombinedData).forEach((data) => {
+      total += data.totalHours;
+      manual += data.manualHours;
+    });
+    return { totalHours: total, manualTotalHours: manual };
+  }, [dailyCombinedData]);
+
   const progress = target > 0 ? Math.min(100, (totalHours / target) * 100) : 0;
   const isComplete = progress >= 100;
 
@@ -183,9 +232,10 @@ export const DeepWorkKPI: React.FC<DeepWorkKPIProps> = ({
           >
             <div className="space-y-1">
               {weekDays.map((date) => {
-                const daySummary = dailySummaryMap[date];
-                const dayHours = daySummary?.totalHours || 0;
-                const sessionCount = daySummary?.sessions.length || 0;
+                const dayData = dailyCombinedData[date];
+                const dayHours = dayData?.totalHours || 0;
+                const commitHours = dayData?.commitHours || 0;
+                const manualHours = dayData?.manualHours || 0;
                 const hasData = dayHours > 0;
 
                 return (
@@ -213,20 +263,30 @@ export const DeepWorkKPI: React.FC<DeepWorkKPIProps> = ({
                           >
                             {formatHours(dayHours)}
                           </span>
-                          <span
-                            className="text-xs"
+                          <div
+                            className="flex items-center gap-1.5 text-xs"
                             style={{ color: colors.text.muted }}
                           >
-                            ({sessionCount} session
-                            {sessionCount !== 1 ? "s" : ""})
-                          </span>
+                            {commitHours > 0 && (
+                              <span className="flex items-center gap-0.5">
+                                <Code size={10} />
+                                {formatHours(commitHours)}
+                              </span>
+                            )}
+                            {manualHours > 0 && (
+                              <span className="flex items-center gap-0.5">
+                                <Clock size={10} />
+                                {formatHours(manualHours)}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       ) : (
                         <span
                           className="text-xs"
                           style={{ color: colors.text.disabled }}
                         >
-                          No sessions
+                          No activity
                         </span>
                       )}
                     </div>
@@ -255,20 +315,30 @@ export const DeepWorkKPI: React.FC<DeepWorkKPIProps> = ({
               className="mt-4 pt-3 flex justify-between items-center"
               style={{ borderTop: `1px solid ${colors.border.DEFAULT}` }}
             >
-              <span
-                className="text-xs font-medium"
-                style={{ color: colors.text.muted }}
-              >
-                {weeklySummary?.onTrack ? "On track" : "Behind target"}
-              </span>
+              <div className="flex items-center gap-3">
+                <span
+                  className="text-xs font-medium"
+                  style={{ color: colors.text.muted }}
+                >
+                  {progress >= 90 ? "On track" : "Behind target"}
+                </span>
+                {isConfigured && (
+                  <span
+                    className="text-xs flex items-center gap-1"
+                    style={{ color: colors.text.disabled }}
+                  >
+                    <Code size={10} /> auto from commits
+                  </span>
+                )}
+              </div>
               <div className="flex items-center gap-2">
                 <span
                   className="text-xs font-mono"
                   style={{ color: colors.text.muted }}
                 >
-                  {weeklySummary?.remainingHours
-                    ? `${formatHours(weeklySummary.remainingHours)} remaining`
-                    : "Target reached!"}
+                  {totalHours >= target
+                    ? "Target reached!"
+                    : `${formatHours(target - totalHours)} remaining`}
                 </span>
               </div>
             </div>

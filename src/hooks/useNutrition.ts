@@ -10,6 +10,7 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/contexts/AuthContext";
 import { getWeekDates, updateWeeklyKPIRecord } from "@/lib/weeklyKpi";
 import { useProgressionStore } from "@/stores/progressionStore";
+import { formatLocalDate } from "@/lib/dateUtils";
 
 // Re-export food items functions from nutritionAnalysis
 export {
@@ -73,8 +74,8 @@ export function useNutrition(weekKey: string): UseNutritionReturn {
 
   // Get week date range
   const { start, end } = getWeekDates(weekKey);
-  const startDate = start.toISOString().split("T")[0];
-  const endDate = end.toISOString().split("T")[0];
+  const startDate = formatLocalDate(start);
+  const endDate = formatLocalDate(end);
 
   // Load nutrition data for the week
   const loadWeekData = useCallback(async () => {

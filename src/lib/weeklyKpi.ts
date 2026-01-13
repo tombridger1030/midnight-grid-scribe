@@ -1,5 +1,6 @@
 import { supabase } from "./supabase";
 import { userStorage } from "./userStorage";
+import { formatLocalDate } from "./dateUtils";
 
 // Cache for KPI configurations to avoid repeated lookups
 let kpiConfigCache: Map<string, { isAverage: boolean }> | null = null;
@@ -1266,7 +1267,7 @@ export const incrementContentShippedKPI = async (
   try {
     const date = publishedDate ? new Date(publishedDate) : new Date();
     const weekKey = getWeekKey(date);
-    const dayIndex = getDayIndexFromDate(date.toISOString().split("T")[0]);
+    const dayIndex = getDayIndexFromDate(formatLocalDate(date));
 
     if (dayIndex >= 0 && dayIndex < 7) {
       // Get current daily values
@@ -1306,7 +1307,7 @@ export const syncDeepWorkHours = async (): Promise<void> => {
         session.durationMinutes &&
         session.durationMinutes > 0
       ) {
-        const date = new Date(session.startTime).toISOString().split("T")[0]; // YYYY-MM-DD
+        const date = formatLocalDate(new Date(session.startTime)); // YYYY-MM-DD local
         const hours = session.durationMinutes / 60;
         sessionsPerDate[date] = (sessionsPerDate[date] || 0) + hours;
       }
