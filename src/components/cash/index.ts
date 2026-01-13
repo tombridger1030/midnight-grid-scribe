@@ -24,6 +24,8 @@ export { MonthlyView } from "./MonthlyView";
 export { SubscriptionsTab } from "./SubscriptionsTab";
 export { SubscriptionReview } from "./SubscriptionReview";
 export { SubscriptionCard } from "./SubscriptionCard";
+export { SubscriptionDetailModal } from "./SubscriptionDetailModal";
+export { CategoryTransactionsModal } from "./CategoryTransactionsModal";
 
 // Daily Spending Components
 export { DailySpendingView } from "./DailySpendingView";

@@ -516,3 +516,43 @@ export async function getRecentStatements(limit = 10) {
     return [];
   }
 }
+
+/**
+ * Load all transactions from Supabase for the current user
+ * Used as fallback when localStorage is empty
+ */
+export async function loadTransactionsFromSupabase(): Promise<
+  ParsedTransaction[]
+> {
+  try {
+    const { supabase } = await import("@/lib/supabase");
+    const { data: userData } = await supabase.auth.getUser();
+
+    if (!userData.user) return [];
+
+    const { data, error } = await supabase
+      .from("bank_statement_transactions")
+      .select("*")
+      .eq("user_id", userData.user.id)
+      .order("transaction_date", { ascending: false });
+
+    if (error) throw error;
+    if (!data || data.length === 0) return [];
+
+    // Convert database records to ParsedTransaction format
+    return data.map((record) => ({
+      date: record.transaction_date,
+      description: record.description,
+      // Amount in DB is absolute, need to determine sign from category
+      amount:
+        record.category === "Income" || record.category === "Transfer"
+          ? Math.abs(record.amount)
+          : -Math.abs(record.amount),
+      category: record.category,
+      confidence: record.confidence_score || 0.9,
+    }));
+  } catch (error) {
+    console.error("Failed to load transactions from Supabase:", error);
+    return [];
+  }
+}

@@ -93,8 +93,8 @@ function detectFrequency(dates: string[]): {
     };
   }
 
-  // Monthly: 25-35 days
-  if (avgInterval >= 25 && avgInterval <= 35) {
+  // Monthly: 28-35 days (at least 1 month between transactions)
+  if (avgInterval >= 28 && avgInterval <= 35) {
     const variance =
       intervals.reduce((sum, i) => sum + Math.abs(i - avgInterval), 0) /
       intervals.length;
@@ -298,44 +298,9 @@ export async function detectSubscriptions(
   const subscriptions: DetectedSubscription[] = [];
 
   for (const group of vendorGroups.values()) {
-    // Need at least 2 transactions to detect a pattern
+    // STRICT: Need at least 2 transactions to be considered a subscription
+    // Even known subscription services need multiple charges to confirm
     if (group.transactions.length < 2) {
-      // But if it's flagged as a subscription service, still include it
-      if (group.resolved.isSubscription) {
-        const sortedTxns = [...group.transactions].sort(
-          (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
-        );
-        const lastCharged = sortedTxns[0].date;
-
-        const recurringType = determineRecurringType(
-          group.transactions[0].description,
-          group.resolved.category,
-          group.resolved.isSubscription,
-        );
-
-        subscriptions.push({
-          id: generateSubscriptionId(group.vendor),
-          merchantName: group.transactions[0].description,
-          displayName: group.vendor,
-          amount: group.averageAmount,
-          frequency: "monthly", // Assume monthly for known subscriptions
-          category: group.resolved.category,
-          importance: getDefaultImportance(group.resolved.category, true),
-          isUserOverride: false,
-          confidence: 0.6, // Lower confidence due to single transaction
-          lastCharged,
-          nextExpected: predictNextCharge(lastCharged, "monthly"),
-          transactions: group.transactions.map((t) => ({
-            date: t.date,
-            amount: t.amount,
-            description: t.description,
-          })),
-          annualCost: calculateAnnualCost(group.averageAmount, "monthly"),
-          source: group.resolved.source,
-          isSubscriptionService: group.resolved.isSubscription || false,
-          recurringType,
-        });
-      }
       continue;
     }
 
@@ -407,10 +372,16 @@ export async function detectSubscriptions(
     });
   }
 
-  // Sort by annual cost (highest first)
-  subscriptions.sort((a, b) => b.annualCost - a.annualCost);
+  // Filter out transfers and investments - these are NOT subscriptions
+  const filteredSubscriptions = subscriptions.filter(
+    (sub) =>
+      sub.recurringType !== "transfer" && sub.recurringType !== "investment",
+  );
 
-  return subscriptions;
+  // Sort by annual cost (highest first)
+  filteredSubscriptions.sort((a, b) => b.annualCost - a.annualCost);
+
+  return filteredSubscriptions;
 }
 
 /**

@@ -25,6 +25,10 @@ interface SummaryCardsProps {
   transactions: ParsedTransaction[];
   subscriptions: RankedSubscription[];
   hideBalances: boolean;
+  onCategoryClick?: (
+    category: string,
+    transactions: ParsedTransaction[],
+  ) => void;
 }
 
 interface CardProps {
@@ -35,6 +39,7 @@ interface CardProps {
   trend?: "up" | "down" | "neutral";
   hideValue?: boolean;
   delay?: number;
+  onClick?: () => void;
 }
 
 const Card: React.FC<CardProps> = ({
@@ -45,15 +50,20 @@ const Card: React.FC<CardProps> = ({
   trend,
   hideValue,
   delay = 0,
+  onClick,
 }) => {
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, delay }}
-      className="p-6 rounded-xl bg-surface-secondary border border-line/50
-                 hover:border-terminal-accent/30 transition-all duration-200
-                 hover:shadow-lg hover:shadow-terminal-accent/5"
+      onClick={onClick}
+      className={cn(
+        "p-6 rounded-xl bg-surface-secondary border border-line/50",
+        "hover:border-terminal-accent/30 transition-all duration-200",
+        "hover:shadow-lg hover:shadow-terminal-accent/5",
+        onClick && "cursor-pointer",
+      )}
     >
       <div className="flex items-start justify-between mb-4">
         <div className="p-2 rounded-lg bg-terminal-accent/10 text-terminal-accent">
@@ -92,19 +102,21 @@ export const SummaryCards: React.FC<SummaryCardsProps> = ({
   transactions,
   subscriptions,
   hideBalances,
+  onCategoryClick,
 }) => {
   const stats = useMemo(() => {
     const now = new Date();
     const currentMonth = now.getMonth();
     const currentYear = now.getFullYear();
 
-    // Filter to current month transactions (expenses only - negative amounts)
-    const thisMonthTransactions = transactions.filter((t) => {
+    // All expense transactions (negative amounts)
+    const allExpenses = transactions.filter((t) => t.amount < 0);
+
+    // Filter to current month transactions for "This Month" card
+    const thisMonthTransactions = allExpenses.filter((t) => {
       const date = new Date(t.date);
       return (
-        date.getMonth() === currentMonth &&
-        date.getFullYear() === currentYear &&
-        t.amount < 0
+        date.getMonth() === currentMonth && date.getFullYear() === currentYear
       );
     });
 
@@ -114,34 +126,54 @@ export const SummaryCards: React.FC<SummaryCardsProps> = ({
       0,
     );
 
-    // Days elapsed in current month
-    const daysElapsed = now.getDate();
-    const avgPerDay = daysElapsed > 0 ? thisMonthTotal / daysElapsed : 0;
+    // Calculate avg/day over ALL expenses (not just current month)
+    let avgPerDay: number | null = null;
+    if (allExpenses.length > 0) {
+      const totalSpent = allExpenses.reduce(
+        (sum, t) => sum + Math.abs(t.amount),
+        0,
+      );
+      const dates = allExpenses.map((t) => new Date(t.date).getTime());
+      const earliestDate = Math.min(...dates);
+      const daysSpan = Math.ceil(
+        (Date.now() - earliestDate) / (1000 * 60 * 60 * 24),
+      );
+      avgPerDay = daysSpan > 0 ? totalSpent / daysSpan : null;
+    }
 
     // Subscription costs (monthly)
     const monthlySubscriptionCost = subscriptions.reduce((sum, sub) => {
+      if (sub.frequency === "weekly") return sum + sub.amount * 4.33; // ~4.33 weeks per month
       if (sub.frequency === "monthly") return sum + sub.amount;
       if (sub.frequency === "yearly") return sum + sub.amount / 12;
       if (sub.frequency === "quarterly") return sum + sub.amount / 3;
       return sum;
     }, 0);
 
-    // Top category
+    // Top category from ALL expenses (not just current month)
     const categoryTotals: Record<string, number> = {};
-    thisMonthTransactions.forEach((t) => {
+    const categoryTransactions: Record<string, ParsedTransaction[]> = {};
+    allExpenses.forEach((t) => {
       const cat = t.category || "Other";
       categoryTotals[cat] = (categoryTotals[cat] || 0) + Math.abs(t.amount);
+      if (!categoryTransactions[cat]) {
+        categoryTransactions[cat] = [];
+      }
+      categoryTransactions[cat].push(t);
     });
 
     const topCategory =
       Object.entries(categoryTotals).sort((a, b) => b[1] - a[1])[0]?.[0] ||
       "N/A";
 
+    const topCategoryTransactions = categoryTransactions[topCategory] || [];
+
     return {
       thisMonthTotal,
       avgPerDay,
       monthlySubscriptionCost,
       topCategory,
+      topCategoryTransactions,
     };
   }, [transactions, subscriptions]);
 
@@ -166,8 +198,12 @@ export const SummaryCards: React.FC<SummaryCardsProps> = ({
       />
       <Card
         title="Avg / Day"
-        value={formatCurrency(stats.avgPerDay)}
-        subtitle="Based on month to date"
+        value={
+          stats.avgPerDay !== null ? formatCurrency(stats.avgPerDay) : "---"
+        }
+        subtitle={
+          stats.avgPerDay !== null ? "All-time average" : "Need more data"
+        }
         icon={<TrendingUp size={20} />}
         hideValue={hideBalances}
         delay={0.05}
@@ -186,6 +222,15 @@ export const SummaryCards: React.FC<SummaryCardsProps> = ({
         subtitle="Highest spending"
         icon={<Folder size={20} />}
         delay={0.15}
+        onClick={
+          onCategoryClick && stats.topCategory !== "N/A"
+            ? () =>
+                onCategoryClick(
+                  stats.topCategory,
+                  stats.topCategoryTransactions,
+                )
+            : undefined
+        }
       />
     </div>
   );
