@@ -35,6 +35,7 @@ export interface StoredSubscription {
   annualCost: number;
   lastCharged: string;
   aiReason?: string;
+  isCancelled?: boolean;
 }
 
 /**
@@ -107,6 +108,7 @@ export function saveSubscriptions(
     annualCost: sub.annualCost,
     lastCharged: sub.lastCharged,
     aiReason: sub.aiReason,
+    isCancelled: sub.isCancelled,
   }));
 
   return saveToStorage(STORAGE_KEYS.SUBSCRIPTIONS, stored);
@@ -124,6 +126,21 @@ export function loadSubscriptions(): StoredSubscription[] {
  */
 export function clearSubscriptions(): void {
   removeFromStorage(STORAGE_KEYS.SUBSCRIPTIONS);
+}
+
+/**
+ * Delete a specific subscription by ID
+ */
+export function deleteSubscription(subscriptionId: string): boolean {
+  const subscriptions = loadSubscriptions();
+  const filtered = subscriptions.filter((s) => s.id !== subscriptionId);
+
+  if (filtered.length === subscriptions.length) {
+    // Subscription not found
+    return false;
+  }
+
+  return saveToStorage(STORAGE_KEYS.SUBSCRIPTIONS, filtered);
 }
 
 // ==================== Name Corrections ====================

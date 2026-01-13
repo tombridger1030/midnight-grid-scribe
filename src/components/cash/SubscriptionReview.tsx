@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SubscriptionCard } from "./SubscriptionCard";
+import { SubscriptionDetailModal } from "./SubscriptionDetailModal";
 import type { RankedSubscription } from "@/lib/ai/subscriptionRanker";
 import {
   getRankingSummary,
@@ -32,6 +33,9 @@ interface SubscriptionReviewProps {
   onUpdateName: (id: string, newName: string) => void;
   onUpdateImportance: (id: string, importance: 1 | 2 | 3 | 4 | 5) => void;
   onDismissSuggestion: (id: string) => void;
+  onDelete?: (id: string) => void;
+  onToggleCancelled?: (id: string, cancelled: boolean) => void;
+  onUpdateCategory?: (id: string, category: MerchantCategory) => void;
 }
 
 type SortOption =
@@ -39,7 +43,7 @@ type SortOption =
   | "importance-desc"
   | "cost-high"
   | "cost-low";
-type FilterOption = "all" | "cancel" | "keep" | MerchantCategory;
+type FilterOption = "all" | "cancel" | "keep" | "cancelled" | MerchantCategory;
 
 const SORT_OPTIONS: { value: SortOption; label: string }[] = [
   { value: "importance-asc", label: "Priority (cancel first)" },
@@ -50,6 +54,7 @@ const SORT_OPTIONS: { value: SortOption; label: string }[] = [
 
 const FILTER_OPTIONS: { value: FilterOption; label: string }[] = [
   { value: "all", label: "All Subscriptions" },
+  { value: "cancelled", label: "Cancelled" },
   { value: "cancel", label: "Consider Canceling" },
   { value: "keep", label: "Essential" },
   { value: "entertainment", label: "Entertainment" },
@@ -65,9 +70,15 @@ export const SubscriptionReview: React.FC<SubscriptionReviewProps> = ({
   onUpdateName,
   onUpdateImportance,
   onDismissSuggestion,
+  onDelete,
+  onToggleCancelled,
+  onUpdateCategory,
 }) => {
   const [sortBy, setSortBy] = useState<SortOption>("importance-asc");
   const [filterBy, setFilterBy] = useState<FilterOption>("all");
+  const [selectedSubscription, setSelectedSubscription] =
+    useState<RankedSubscription | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   // Calculate summary statistics
   const summary = useMemo(
@@ -75,13 +86,25 @@ export const SubscriptionReview: React.FC<SubscriptionReviewProps> = ({
     [subscriptions],
   );
 
+  // Calculate cancelled savings
+  const cancelledSavings = useMemo(() => {
+    const cancelledSubs = subscriptions.filter((s) => s.isCancelled);
+    return {
+      count: cancelledSubs.length,
+      annualSavings: cancelledSubs.reduce((sum, s) => sum + s.annualCost, 0),
+    };
+  }, [subscriptions]);
+
   // Filter subscriptions
   const filteredSubscriptions = useMemo(() => {
     let filtered = [...subscriptions];
 
     switch (filterBy) {
+      case "cancelled":
+        filtered = filtered.filter((s) => s.isCancelled);
+        break;
       case "cancel":
-        filtered = filtered.filter((s) => s.importance <= 2);
+        filtered = filtered.filter((s) => s.importance <= 2 && !s.isCancelled);
         break;
       case "keep":
         filtered = filtered.filter((s) => s.importance >= 4);
@@ -158,7 +181,7 @@ export const SubscriptionReview: React.FC<SubscriptionReviewProps> = ({
   return (
     <div className="space-y-6">
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total Annual Cost */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
@@ -247,6 +270,32 @@ export const SubscriptionReview: React.FC<SubscriptionReviewProps> = ({
             </div>
           </div>
         </motion.div>
+
+        {/* Cancelled Savings */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15 }}
+          className={cn(
+            "p-5 rounded-lg border",
+            cancelledSavings.count > 0
+              ? "bg-green-500/5 border-green-500/30"
+              : "bg-surface-secondary border-line",
+          )}
+        >
+          <div className="flex items-center gap-2 text-green-400/80 mb-2">
+            <CheckCircle2 size={16} />
+            <span className="text-sm uppercase tracking-wider">
+              Cancelled Savings
+            </span>
+          </div>
+          <div className="text-3xl font-bold font-mono text-green-400">
+            {formatCurrency(cancelledSavings.annualSavings)}
+          </div>
+          <div className="text-sm text-terminal-accent/50 mt-1">
+            {cancelledSavings.count} subscription(s) cancelled
+          </div>
+        </motion.div>
       </div>
 
       {/* Filter and Sort Controls */}
@@ -311,6 +360,13 @@ export const SubscriptionReview: React.FC<SubscriptionReviewProps> = ({
                 onUpdateName={onUpdateName}
                 onUpdateImportance={onUpdateImportance}
                 onDismissSuggestion={onDismissSuggestion}
+                onDelete={onDelete}
+                onClick={() => {
+                  setSelectedSubscription(subscription);
+                  setIsModalOpen(true);
+                }}
+                onToggleCancelled={onToggleCancelled}
+                onUpdateCategory={onUpdateCategory}
               />
             </motion.div>
           ))}
@@ -339,6 +395,17 @@ export const SubscriptionReview: React.FC<SubscriptionReviewProps> = ({
           </div>
         </motion.div>
       )}
+
+      {/* Subscription Detail Modal */}
+      <SubscriptionDetailModal
+        subscription={selectedSubscription}
+        isOpen={isModalOpen}
+        onClose={() => {
+          setIsModalOpen(false);
+          setSelectedSubscription(null);
+        }}
+        hideBalances={hideBalances}
+      />
     </div>
   );
 };
