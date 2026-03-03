@@ -23,6 +23,7 @@ import {
   MonthProgress,
   YearStreak,
   WeekBreakdown,
+  SkillSummary,
 } from "@/components/dashboard";
 
 const Dashboard: React.FC = () => {
@@ -118,6 +119,8 @@ const Dashboard: React.FC = () => {
           currentWeekKey={data.currentWeekKey}
           className="mt-8"
         />
+
+        <SkillSummary />
       </div>
     </div>
   );

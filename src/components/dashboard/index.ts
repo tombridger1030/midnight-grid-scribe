@@ -9,3 +9,4 @@ export { StatLine } from './StatLine';
 export { MonthProgress } from './MonthProgress';
 export { YearStreak } from './YearStreak';
 export { WeekBreakdown } from './WeekBreakdown';
+export { SkillSummary } from './SkillSummary';
