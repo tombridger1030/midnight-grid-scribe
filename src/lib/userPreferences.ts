@@ -42,6 +42,7 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
     "dashboard",
     "kpis",
     "activity",
+    "progression",
     "cash",
     "content",
     "daily-review",
@@ -92,6 +93,12 @@ export const AVAILABLE_MODULES = [
     description: "Yearly activity heatmaps",
   },
   {
+    id: "progression",
+    name: "Progression",
+    icon: "TrendingUp",
+    description: "Skill progression tracking",
+  },
+  {
     id: "cash",
     name: "Cash",
     icon: "Network",
@@ -138,6 +145,11 @@ export class UserPreferencesManager {
         } else {
           enabledModules.push("activity");
         }
+      }
+
+      // Auto-enable progression module for all users
+      if (!enabledModules.includes("progression")) {
+        enabledModules.push("progression");
       }
 
       // Merge with defaults to ensure all keys exist
