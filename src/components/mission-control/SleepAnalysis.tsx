@@ -47,7 +47,7 @@ export function SleepAnalysis({
                 lineHeight: mcTokens.typography.hero.lineHeight,
               }}
             >
-              {sleepHours}
+              {sleepHours !== null ? sleepHours.toFixed(1) : "--"}
             </span>
             <span
               style={{
