@@ -116,7 +116,7 @@ export function RepoStatusTable({ commits, repoCount }: RepoStatusTableProps) {
     fontWeight: mcTokens.typography.label.weight,
     letterSpacing: "1px",
     textTransform: "uppercase",
-    padding: "0 4px 4px 0",
+    padding: "0 4px 2px 0",
     textAlign: "left",
     borderBottom: `1px solid ${mcTokens.colors.border.subtle}`,
   };
@@ -126,7 +126,7 @@ export function RepoStatusTable({ commits, repoCount }: RepoStatusTableProps) {
     fontSize: "11px",
     fontFamily: mcTokens.typography.fontFamily,
     padding: "0 4px",
-    height: "22px",
+    height: "20px",
     verticalAlign: "middle",
     whiteSpace: "nowrap",
     overflow: "hidden",
@@ -134,11 +134,11 @@ export function RepoStatusTable({ commits, repoCount }: RepoStatusTableProps) {
   };
 
   return (
-    <div>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       <PanelHeader title="REPO STATUS" detail={`${repoCount} TRACKED`} />
       <div
         style={{
-          maxHeight: 200,
+          flex: 1,
           overflowY: "auto",
           scrollbarWidth: "thin",
           scrollbarColor: `${mcTokens.colors.border.default} transparent`,

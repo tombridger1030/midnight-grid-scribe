@@ -68,16 +68,16 @@ export function RecoveryGauge({
 
   if (!whoopConnected) {
     return (
-      <div>
+      <div style={{ height: "100%" }}>
         <PanelHeader title="RECOVERY" status="inactive" />
         <div
           style={{
             display: "flex",
             justifyContent: "center",
-            padding: "8px 0",
+            padding: "4px 0",
           }}
         >
-          <svg viewBox="0 0 200 200" style={{ width: 140, height: 140 }}>
+          <svg viewBox="0 0 200 200" style={{ width: 110, height: 110 }}>
             <circle
               cx={100}
               cy={100}
@@ -105,16 +105,16 @@ export function RecoveryGauge({
   }
 
   return (
-    <div>
+    <div style={{ height: "100%" }}>
       <PanelHeader title="RECOVERY" status={getHeaderStatus(recovery)} />
       <div
         style={{
           display: "flex",
           justifyContent: "center",
-          padding: "4px 0",
+          padding: "2px 0",
         }}
       >
-        <svg viewBox="0 0 200 200" style={{ width: 140, height: 140 }}>
+        <svg viewBox="0 0 200 200" style={{ width: 110, height: 110 }}>
           {/* Track */}
           <circle
             cx={100}
@@ -188,7 +188,7 @@ export function RecoveryGauge({
           alignItems: "center",
           justifyContent: "center",
           gap: 0,
-          marginTop: "4px",
+          marginTop: "2px",
         }}
       >
         <div style={miniStatStyle}>

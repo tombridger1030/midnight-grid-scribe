@@ -25,35 +25,52 @@ export function SleepAnalysis({
     return (sum / sleepSpark.length).toFixed(1);
   }, [sleepSpark]);
 
+  const hasData = sleepHours !== null;
+
   return (
-    <div>
+    <div style={{ height: "100%" }}>
       <PanelHeader title="SLEEP ANALYSIS" />
       {/* Main stat */}
       <div
         style={{
           fontFamily: mcTokens.typography.fontFamily,
-          marginBottom: mcTokens.spacing.row,
+          marginBottom: "2px",
         }}
       >
-        <span
-          style={{
-            color: mcTokens.colors.text.primary,
-            fontSize: mcTokens.typography.hero.size,
-            fontWeight: mcTokens.typography.hero.weight,
-            lineHeight: mcTokens.typography.hero.lineHeight,
-          }}
-        >
-          {sleepHours !== null ? sleepHours : "--"}
-        </span>
-        <span
-          style={{
-            color: mcTokens.colors.text.secondary,
-            fontSize: "16px",
-            marginLeft: "2px",
-          }}
-        >
-          h
-        </span>
+        {hasData ? (
+          <>
+            <span
+              style={{
+                color: mcTokens.colors.text.primary,
+                fontSize: mcTokens.typography.hero.size,
+                fontWeight: mcTokens.typography.hero.weight,
+                lineHeight: mcTokens.typography.hero.lineHeight,
+              }}
+            >
+              {sleepHours}
+            </span>
+            <span
+              style={{
+                color: mcTokens.colors.text.secondary,
+                fontSize: "14px",
+                marginLeft: "2px",
+              }}
+            >
+              h
+            </span>
+          </>
+        ) : (
+          <span
+            style={{
+              color: mcTokens.colors.text.secondary,
+              fontSize: mcTokens.typography.metric.size,
+              fontWeight: mcTokens.typography.metric.weight,
+              letterSpacing: "2px",
+            }}
+          >
+            NO DATA
+          </span>
+        )}
       </div>
       {/* Efficiency */}
       <div
@@ -61,7 +78,7 @@ export function SleepAnalysis({
           fontFamily: mcTokens.typography.fontFamily,
           fontSize: "11px",
           color: mcTokens.colors.text.secondary,
-          marginBottom: mcTokens.spacing.section,
+          marginBottom: mcTokens.spacing.row,
         }}
       >
         {sleepEfficiency !== null
@@ -69,16 +86,14 @@ export function SleepAnalysis({
           : "-- efficiency"}
       </div>
       {/* Progress bar */}
-      <div
-        style={{ position: "relative", marginBottom: mcTokens.spacing.section }}
-      >
+      <div style={{ position: "relative", marginBottom: mcTokens.spacing.row }}>
         <div
           style={{
             textAlign: "right",
             fontSize: "9px",
             fontFamily: mcTokens.typography.fontFamily,
             color: mcTokens.colors.text.dim,
-            marginBottom: "2px",
+            marginBottom: "1px",
           }}
         >
           8h
@@ -86,9 +101,9 @@ export function SleepAnalysis({
         <div
           style={{
             width: "100%",
-            height: 8,
+            height: 6,
             backgroundColor: mcTokens.colors.border.default,
-            borderRadius: 4,
+            borderRadius: 3,
             overflow: "hidden",
           }}
         >
@@ -97,7 +112,7 @@ export function SleepAnalysis({
               width: `${fillPercent}%`,
               height: "100%",
               backgroundColor: mcTokens.colors.accent.cyan,
-              borderRadius: 4,
+              borderRadius: 3,
               transition: "width 0.5s ease",
             }}
           />

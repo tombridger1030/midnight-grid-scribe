@@ -21,7 +21,7 @@ export function PanelHeader({ title, status, detail }: PanelHeaderProps) {
         alignItems: "center",
         justifyContent: "space-between",
         borderBottom: `1px solid ${mcTokens.colors.border.subtle}`,
-        marginBottom: mcTokens.spacing.section,
+        marginBottom: mcTokens.spacing.row,
         paddingBottom: mcTokens.spacing.row,
       }}
     >

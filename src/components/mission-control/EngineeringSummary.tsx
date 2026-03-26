@@ -78,9 +78,9 @@ export const EngineeringSummary: React.FC<EngSummaryProps> = ({
   return (
     <div
       style={{
-        ...mcTokens.panel,
         display: "flex",
         flexDirection: "column",
+        height: "100%",
       }}
     >
       <PanelHeader title="ENGINEERING OUTPUT" status="nominal" />
@@ -93,14 +93,14 @@ export const EngineeringSummary: React.FC<EngSummaryProps> = ({
           fontWeight: mcTokens.typography.hero.weight,
           lineHeight: mcTokens.typography.hero.lineHeight,
           color: mcTokens.colors.accent.cyan,
-          marginBottom: "4px",
+          marginBottom: "2px",
         }}
       >
         {monthCommits.toLocaleString()}
       </div>
 
       {/* Hero label */}
-      <div style={{ ...labelStyle, marginBottom: mcTokens.spacing.section }}>
+      <div style={{ ...labelStyle, marginBottom: mcTokens.spacing.row }}>
         COMMITS THIS MONTH
       </div>
 
@@ -110,7 +110,7 @@ export const EngineeringSummary: React.FC<EngSummaryProps> = ({
           display: "grid",
           gridTemplateColumns: "1fr 1fr",
           rowGap: mcTokens.spacing.row,
-          marginBottom: mcTokens.spacing.section,
+          marginBottom: mcTokens.spacing.row,
         }}
       >
         {gridRows.map((row) => (

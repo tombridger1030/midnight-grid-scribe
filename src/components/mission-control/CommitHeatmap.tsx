@@ -75,7 +75,6 @@ export const CommitHeatmap: React.FC<CommitHeatmapProps> = ({ commits }) => {
   return (
     <div
       style={{
-        ...mcTokens.panel,
         display: "flex",
         flexDirection: "column",
         height: "100%",
@@ -83,13 +82,13 @@ export const CommitHeatmap: React.FC<CommitHeatmapProps> = ({ commits }) => {
     >
       <PanelHeader title="COMMIT ACTIVITY" status="nominal" />
 
-      <div style={{ display: "flex", gap: "6px", flex: 1 }}>
+      <div style={{ display: "flex", gap: "4px", flex: 1, minHeight: 0 }}>
         {/* Day labels column */}
         <div
           style={{
             display: "flex",
             flexDirection: "column",
-            gap: "3px",
+            gap: "2px",
             justifyContent: "center",
           }}
         >
@@ -105,7 +104,7 @@ export const CommitHeatmap: React.FC<CommitHeatmapProps> = ({ commits }) => {
                 fontSize: mcTokens.typography.tiny.size,
                 letterSpacing: mcTokens.typography.tiny.letterSpacing,
                 color: mcTokens.colors.text.secondary,
-                width: "28px",
+                width: "24px",
               }}
             >
               {SHOW_DAY_LABELS.has(i) ? DAY_LABELS[i] : ""}
@@ -114,14 +113,14 @@ export const CommitHeatmap: React.FC<CommitHeatmapProps> = ({ commits }) => {
         </div>
 
         {/* Heatmap grid */}
-        <div style={{ position: "relative", flex: 1 }}>
+        <div style={{ position: "relative", flex: 1, minHeight: 0 }}>
           <div
             style={{
               display: "grid",
               gridTemplateRows: "repeat(7, 1fr)",
               gridAutoFlow: "column",
               gridAutoColumns: "1fr",
-              gap: "3px",
+              gap: "2px",
               height: "100%",
             }}
           >
@@ -131,11 +130,11 @@ export const CommitHeatmap: React.FC<CommitHeatmapProps> = ({ commits }) => {
                 onMouseEnter={() => setHoveredIdx(idx)}
                 onMouseLeave={() => setHoveredIdx(null)}
                 style={{
-                  borderRadius: 3,
-                  aspectRatio: "1",
+                  borderRadius: 2,
                   backgroundColor: getCellColor(day.count),
                   cursor: "pointer",
                   position: "relative",
+                  minHeight: 0,
                 }}
               >
                 {hoveredIdx === idx && (

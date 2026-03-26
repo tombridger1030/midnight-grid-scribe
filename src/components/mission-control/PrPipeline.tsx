@@ -23,7 +23,7 @@ export function PrPipeline({
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    padding: `${mcTokens.spacing.row} 0`,
+    padding: `3px 0`,
     borderBottom: `1px solid ${mcTokens.colors.border.subtle}`,
     fontFamily: mcTokens.typography.fontFamily,
   };
@@ -61,7 +61,7 @@ export function PrPipeline({
       <div
         style={{
           marginTop: mcTokens.spacing.row,
-          height: 6,
+          height: 10,
           backgroundColor: mcTokens.colors.border.default,
           borderRadius: 3,
           overflow: "hidden",

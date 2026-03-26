@@ -106,7 +106,7 @@ export const MissionTimer: React.FC<MissionTimerProps> = ({
           justifyContent: "space-between",
           background: mcTokens.colors.bg.timer,
           borderBottom: `1px solid ${mcTokens.colors.accent.cyan}`,
-          padding: "10px 12px",
+          padding: "8px 12px",
           width: "100%",
         }}
       >

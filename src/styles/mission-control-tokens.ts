@@ -47,7 +47,7 @@ export const mcTokens = {
   },
   typography: {
     fontFamily: "'JetBrains Mono', 'Fira Mono', monospace",
-    hero: { size: "48px", weight: "300", lineHeight: "1" },
+    hero: { size: "40px", weight: "300", lineHeight: "1" },
     metric: { size: "20px", weight: "300" },
     label: {
       size: "9px",
@@ -65,16 +65,16 @@ export const mcTokens = {
   },
   spacing: {
     page: "12px", // tighter for dense layout
-    panel: "14px", // panel internal padding
-    section: "10px", // between sections within a panel
-    row: "6px", // between metric rows
+    panel: "10px", // panel internal padding
+    section: "6px", // between sections within a panel
+    row: "4px", // between metric rows
     gap: "1px", // grid gap between panels
   },
   panel: {
     background: "#0d1f3c",
     border: "1px solid #1a3a6e",
     borderRadius: "2px", // very subtle, almost square
-    padding: "14px",
+    padding: "10px",
   },
   animation: {
     staggerDelay: 0.05,

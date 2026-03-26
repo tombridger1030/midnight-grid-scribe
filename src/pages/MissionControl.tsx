@@ -562,11 +562,12 @@ const MissionControl: React.FC = () => {
           flex: 1,
           gap: mcTokens.spacing.gap,
           padding: mcTokens.spacing.page,
+          alignItems: "stretch",
         }}
       >
         {/* Row 1 */}
         <motion.div
-          style={mcTokens.panel}
+          style={{ ...mcTokens.panel, height: "100%" }}
           custom={0}
           variants={fadeVariant}
           initial="hidden"
@@ -586,7 +587,7 @@ const MissionControl: React.FC = () => {
         </motion.div>
 
         <motion.div
-          style={mcTokens.panel}
+          style={{ ...mcTokens.panel, height: "100%" }}
           custom={1}
           variants={fadeVariant}
           initial="hidden"
@@ -596,7 +597,7 @@ const MissionControl: React.FC = () => {
         </motion.div>
 
         <motion.div
-          style={mcTokens.panel}
+          style={{ ...mcTokens.panel, height: "100%" }}
           custom={2}
           variants={fadeVariant}
           initial="hidden"
@@ -606,7 +607,7 @@ const MissionControl: React.FC = () => {
         </motion.div>
 
         <motion.div
-          style={mcTokens.panel}
+          style={{ ...mcTokens.panel, height: "100%" }}
           custom={3}
           variants={fadeVariant}
           initial="hidden"
@@ -623,7 +624,7 @@ const MissionControl: React.FC = () => {
 
         {/* Row 2 */}
         <motion.div
-          style={mcTokens.panel}
+          style={{ ...mcTokens.panel, height: "100%" }}
           custom={4}
           variants={fadeVariant}
           initial="hidden"
@@ -633,7 +634,7 @@ const MissionControl: React.FC = () => {
         </motion.div>
 
         <motion.div
-          style={mcTokens.panel}
+          style={{ ...mcTokens.panel, height: "100%" }}
           custom={5}
           variants={fadeVariant}
           initial="hidden"
@@ -646,7 +647,7 @@ const MissionControl: React.FC = () => {
         </motion.div>
 
         <motion.div
-          style={mcTokens.panel}
+          style={{ ...mcTokens.panel, height: "100%" }}
           custom={6}
           variants={fadeVariant}
           initial="hidden"
@@ -673,7 +674,7 @@ const MissionControl: React.FC = () => {
         </motion.div>
 
         <motion.div
-          style={mcTokens.panel}
+          style={{ ...mcTokens.panel, height: "100%" }}
           custom={7}
           variants={fadeVariant}
           initial="hidden"

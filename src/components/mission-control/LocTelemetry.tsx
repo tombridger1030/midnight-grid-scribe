@@ -204,7 +204,7 @@ export function LocTelemetry({ commits }: LocTelemetryProps) {
       {/* Net summary */}
       <div
         style={{
-          marginTop: "6px",
+          marginTop: "4px",
           fontSize: "11px",
           fontFamily: mcTokens.typography.fontFamily,
           color: mcTokens.colors.text.secondary,

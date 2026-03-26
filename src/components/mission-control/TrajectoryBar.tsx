@@ -33,7 +33,7 @@ export function TrajectoryBar({
         alignItems: "center",
         backgroundColor: mcTokens.colors.bg.timer,
         borderTop: `1px solid ${mcTokens.colors.border.default}`,
-        padding: "10px 12px",
+        padding: "8px 12px",
         fontFamily: mcTokens.typography.fontFamily,
         fontSize: "11px",
       }}

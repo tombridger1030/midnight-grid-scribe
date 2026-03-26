@@ -48,7 +48,7 @@ export function VitalsReadout({
   ];
 
   return (
-    <div>
+    <div style={{ height: "100%" }}>
       <PanelHeader title="VITALS READOUT" status={headerStatus} />
       {rows.map((row, i) => (
         <div
@@ -57,7 +57,7 @@ export function VitalsReadout({
             display: "flex",
             alignItems: "baseline",
             justifyContent: "space-between",
-            padding: `${mcTokens.spacing.row} 0`,
+            padding: `3px 0`,
             borderBottom:
               i < rows.length - 1
                 ? `1px solid ${mcTokens.colors.border.subtle}`
@@ -79,12 +79,21 @@ export function VitalsReadout({
             {row.label}
           </span>
           {/* Value + Unit + Trend */}
-          <div style={{ display: "flex", alignItems: "baseline", gap: "6px" }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "baseline",
+              gap: "4px",
+              minWidth: 80,
+              justifyContent: "flex-end",
+            }}
+          >
             <span
               style={{
                 color: mcTokens.colors.text.primary,
                 fontSize: mcTokens.typography.metric.size,
                 fontWeight: mcTokens.typography.metric.weight,
+                fontVariantNumeric: "tabular-nums",
               }}
             >
               {formatValue(row.value)}
