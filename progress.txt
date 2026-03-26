@@ -1,0 +1,10 @@
+
+## 2026-03-26: Mission Control V2 Merged (PR #12)
+- Complete NASA/SpaceX telemetry dashboard redesign
+- 10-panel grid: Engineering Summary, Commit Heatmap, Repo Status Table, Recovery Ring Gauge, LoC Telemetry, PR Pipeline, Vitals Readout, Sleep Analysis, Mission Timer, Trajectory Bar
+- Deep navy + cyan color palette
+- GitHub integration: 19 repos, commits, PRs, LoC across all branches
+- Whoop integration: Recovery, HRV, RHR, Sleep, Strain, Calories with OAuth flow
+- pg_cron: github-sync every 15min, whoop-sync every 30min
+- Interactive heatmap, sparklines with hover tooltips, ring gauge
+- 44 commits, 61 files, +9,014/-529 lines
