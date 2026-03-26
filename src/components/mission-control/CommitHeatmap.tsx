@@ -112,8 +112,9 @@ export const CommitHeatmap: React.FC<CommitHeatmapProps> = ({ commits }) => {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, 14px)",
+              gridTemplateRows: "repeat(7, 12px)",
               gridAutoFlow: "column",
+              gridAutoColumns: "12px",
               gap: "2px",
             }}
           >
