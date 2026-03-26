@@ -74,32 +74,38 @@ export const CommitHeatmap: React.FC<CommitHeatmapProps> = ({ commits }) => {
 
   return (
     <div
-      style={{ ...mcTokens.panel, display: "flex", flexDirection: "column" }}
+      style={{
+        ...mcTokens.panel,
+        display: "flex",
+        flexDirection: "column",
+        height: "100%",
+      }}
     >
       <PanelHeader title="COMMIT ACTIVITY" status="nominal" />
 
-      <div style={{ display: "flex", gap: "4px" }}>
+      <div style={{ display: "flex", gap: "6px", flex: 1 }}>
         {/* Day labels column */}
         <div
           style={{
             display: "flex",
             flexDirection: "column",
-            gap: "2px",
-            paddingTop: "0px",
+            gap: "3px",
+            justifyContent: "center",
           }}
         >
           {Array.from({ length: 7 }, (_, i) => (
             <div
               key={i}
               style={{
-                height: 12,
+                height: 0,
+                flex: 1,
                 display: "flex",
                 alignItems: "center",
                 fontFamily: mcTokens.typography.fontFamily,
                 fontSize: mcTokens.typography.tiny.size,
                 letterSpacing: mcTokens.typography.tiny.letterSpacing,
                 color: mcTokens.colors.text.secondary,
-                width: "24px",
+                width: "28px",
               }}
             >
               {SHOW_DAY_LABELS.has(i) ? DAY_LABELS[i] : ""}
@@ -112,10 +118,11 @@ export const CommitHeatmap: React.FC<CommitHeatmapProps> = ({ commits }) => {
           <div
             style={{
               display: "grid",
-              gridTemplateRows: "repeat(7, 12px)",
+              gridTemplateRows: "repeat(7, 1fr)",
               gridAutoFlow: "column",
-              gridAutoColumns: "12px",
-              gap: "2px",
+              gridAutoColumns: "1fr",
+              gap: "3px",
+              height: "100%",
             }}
           >
             {days.map((day, idx) => (
@@ -124,9 +131,8 @@ export const CommitHeatmap: React.FC<CommitHeatmapProps> = ({ commits }) => {
                 onMouseEnter={() => setHoveredIdx(idx)}
                 onMouseLeave={() => setHoveredIdx(null)}
                 style={{
-                  width: 12,
-                  height: 12,
-                  borderRadius: 2,
+                  borderRadius: 3,
+                  aspectRatio: "1",
                   backgroundColor: getCellColor(day.count),
                   cursor: "pointer",
                   position: "relative",
