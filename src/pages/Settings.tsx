@@ -1,20 +1,21 @@
 /**
  * Settings Page
- * 
+ *
  * Clean, minimal dark settings page with collapsible sections.
  * Replaces the old Profile.tsx page.
  */
 
-import React from 'react';
-import { motion } from 'framer-motion';
-import { useAuth } from '@/contexts/AuthContext';
+import React from "react";
+import { motion } from "framer-motion";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   ProfileSection,
   SecuritySection,
   NavigationSection,
   GitHubSection,
+  WhoopSection,
   AdminSection,
-} from '@/components/settings';
+} from "@/components/settings";
 
 const Settings: React.FC = () => {
   const { profile, loading } = useAuth();
@@ -54,6 +55,7 @@ const Settings: React.FC = () => {
         <SecuritySection />
         <NavigationSection />
         <GitHubSection />
+        <WhoopSection />
         {profile?.is_admin && <AdminSection />}
       </div>
     </motion.div>
