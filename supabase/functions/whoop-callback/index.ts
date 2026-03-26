@@ -87,32 +87,7 @@ Deno.serve(async (req) => {
     const supabase = createServiceClient();
     const userId = getMissionControlUserId();
 
-    // Store tokens in Vault (create or update)
-    // Try update first, create if not exists
-    const { error: accessErr } = await supabase.rpc("update_vault_secret", {
-      secret_name: "whoop_access_token",
-      new_secret: tokens.access_token,
-    });
-    if (accessErr) {
-      // Secret doesn't exist yet -- create it via SQL
-      await supabase.rpc("create_vault_secret", {
-        secret_name: "whoop_access_token",
-        secret_value: tokens.access_token,
-      });
-    }
-
-    const { error: refreshErr } = await supabase.rpc("update_vault_secret", {
-      secret_name: "whoop_refresh_token",
-      new_secret: tokens.refresh_token,
-    });
-    if (refreshErr) {
-      await supabase.rpc("create_vault_secret", {
-        secret_name: "whoop_refresh_token",
-        secret_value: tokens.refresh_token,
-      });
-    }
-
-    // Update sync table
+    // Store tokens in sync table
     const expiresAt = new Date(
       Date.now() + tokens.expires_in * 1000,
     ).toISOString();
@@ -120,6 +95,8 @@ Deno.serve(async (req) => {
       {
         user_id: userId,
         whoop_connected: true,
+        whoop_access_token: tokens.access_token,
+        whoop_refresh_token: tokens.refresh_token,
         whoop_token_expires_at: expiresAt,
       },
       { onConflict: "user_id" },

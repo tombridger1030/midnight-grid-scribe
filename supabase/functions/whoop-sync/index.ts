@@ -8,7 +8,6 @@ import {
   createServiceClient,
   errorResponse,
   getMissionControlUserId,
-  getVaultSecret,
   jsonResponse,
 } from "../_shared/utils.ts";
 
@@ -154,11 +153,11 @@ Deno.serve(async (req) => {
   try {
     const userId = getMissionControlUserId();
 
-    // 1. Check if Whoop is connected
+    // 1. Check if Whoop is connected and get tokens from sync table
     const { data: syncRow, error: syncError } = await supabase
       .from("mission_control_sync")
       .select(
-        "whoop_connected, whoop_token_expires_at, last_whoop_sync, whoop_sync_errors",
+        "whoop_connected, whoop_access_token, whoop_refresh_token, whoop_token_expires_at, last_whoop_sync, whoop_sync_errors",
       )
       .eq("user_id", userId)
       .single();
@@ -167,15 +166,13 @@ Deno.serve(async (req) => {
       return errorResponse("Sync config not found", 404);
     }
 
-    if (!syncRow.whoop_connected) {
-      return jsonResponse({ message: "Whoop not connected, skipping sync" });
+    if (!syncRow.whoop_connected || !syncRow.whoop_access_token) {
+      return jsonResponse({ message: "Whoop not connected" });
     }
 
     let syncErrors: unknown[] = syncRow.whoop_sync_errors ?? [];
-
-    // 2. Get access token from Vault, refresh if expired
-    let accessToken = await getVaultSecret(supabase, "whoop_access_token");
-    const refreshToken = await getVaultSecret(supabase, "whoop_refresh_token");
+    let accessToken: string = syncRow.whoop_access_token;
+    const refreshToken: string | null = syncRow.whoop_refresh_token;
 
     if (!accessToken && !refreshToken) {
       // No tokens at all -- disconnect
@@ -183,7 +180,7 @@ Deno.serve(async (req) => {
         .from("mission_control_sync")
         .update({ whoop_connected: false })
         .eq("user_id", userId);
-      return errorResponse("No Whoop tokens found in Vault", 401);
+      return errorResponse("No Whoop tokens found", 401);
     }
 
     // Check if token is expired or missing
@@ -202,22 +199,14 @@ Deno.serve(async (req) => {
             .from("mission_control_sync")
             .update({
               whoop_connected: false,
+              whoop_access_token: null,
+              whoop_refresh_token: null,
               whoop_sync_errors: appendSyncError(
                 syncErrors,
                 "Refresh token rejected (401). Whoop disconnected.",
               ),
             })
             .eq("user_id", userId);
-
-          // Clear tokens from Vault
-          await supabase.rpc("update_vault_secret", {
-            secret_name: "whoop_access_token",
-            new_secret: "",
-          });
-          await supabase.rpc("update_vault_secret", {
-            secret_name: "whoop_refresh_token",
-            new_secret: "",
-          });
 
           return errorResponse(
             "Whoop refresh token invalid. Disconnected.",
@@ -235,24 +224,16 @@ Deno.serve(async (req) => {
           return errorResponse("Token refresh failed and no access token", 401);
         }
       } else {
-        // Refresh succeeded -- store new tokens
+        // Refresh succeeded -- store new tokens in sync table
         accessToken = refresh.accessToken!;
-
-        await supabase.rpc("update_vault_secret", {
-          secret_name: "whoop_access_token",
-          new_secret: refresh.accessToken!,
-        });
-
-        if (refresh.refreshToken) {
-          await supabase.rpc("update_vault_secret", {
-            secret_name: "whoop_refresh_token",
-            new_secret: refresh.refreshToken,
-          });
-        }
 
         await supabase
           .from("mission_control_sync")
-          .update({ whoop_token_expires_at: refresh.expiresAt })
+          .update({
+            whoop_access_token: refresh.accessToken!,
+            whoop_refresh_token: refresh.refreshToken ?? refreshToken,
+            whoop_token_expires_at: refresh.expiresAt,
+          })
           .eq("user_id", userId);
       }
     }
