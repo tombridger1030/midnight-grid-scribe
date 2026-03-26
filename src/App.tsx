@@ -139,7 +139,6 @@ const AppContent = () => {
               element={<Navigate to="/settings" replace />}
             />
             <Route path="daily-review" element={<DailyReview />} />
-            <Route path="progression" element={<Progression />} />
             <Route path="content" element={<Content />}>
               <Route index element={<ContentDashboard />} />
               <Route path="dashboard" element={<ContentDashboard />} />
