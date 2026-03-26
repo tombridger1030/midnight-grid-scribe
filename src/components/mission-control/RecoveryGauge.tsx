@@ -7,6 +7,7 @@ interface RecoveryGaugeProps {
   strain: number | null;
   sleepHours: number | null;
   whoopConnected: boolean;
+  recoveryAvg: number | null;
 }
 
 function getRecoveryColor(recovery: number | null): string {
@@ -33,6 +34,7 @@ export function RecoveryGauge({
   strain,
   sleepHours,
   whoopConnected,
+  recoveryAvg,
 }: RecoveryGaugeProps) {
   const offset =
     recovery !== null ? CIRCUMFERENCE * (1 - recovery / 100) : CIRCUMFERENCE;
@@ -213,6 +215,20 @@ export function RecoveryGauge({
             <span style={{ color: mcTokens.colors.text.secondary }}> h</span>
           </span>
         </div>
+      </div>
+      {/* 30-day recovery average */}
+      <div
+        style={{
+          textAlign: "center",
+          marginTop: "4px",
+          fontSize: "9px",
+          fontFamily: mcTokens.typography.fontFamily,
+          color: mcTokens.colors.text.dim,
+          letterSpacing: "0.5px",
+          textTransform: "uppercase",
+        }}
+      >
+        30D AVG: {recoveryAvg !== null ? `${Math.round(recoveryAvg)}%` : "--"}
       </div>
     </div>
   );

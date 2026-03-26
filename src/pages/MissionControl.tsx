@@ -392,6 +392,29 @@ function useHealthMetrics(health: HealthRow[]) {
       sleepLabels.push(`${shortMonths[dt.getMonth()]} ${dt.getDate()}`);
     }
 
+    // HRV and RHR sparklines: last 30 days
+    const hrvSpark: number[] = [];
+    const rhrSpark: number[] = [];
+    for (let i = 29; i >= 0; i--) {
+      const d = daysAgo(i);
+      hrvSpark.push(healthMap.get(d)?.hrv_ms ?? 0);
+      rhrSpark.push(healthMap.get(d)?.resting_hr ?? 0);
+    }
+
+    // 30-day rolling averages (only count non-null values)
+    const last30 = health.slice(-30);
+    function avg30(rows: HealthRow[], key: keyof HealthRow): number | null {
+      const vals = rows.map((r) => r[key]).filter((v) => v != null) as number[];
+      return vals.length > 0
+        ? vals.reduce((a, b) => a + b, 0) / vals.length
+        : null;
+    }
+    const hrvAvg = avg30(last30, "hrv_ms");
+    const rhrAvg = avg30(last30, "resting_hr");
+    const strainAvg = avg30(last30, "strain");
+    const calAvg = avg30(last30, "calories");
+    const recoveryAvg = avg30(last30, "recovery_score");
+
     // Prediction on recovery
     const sorted = [...health].sort((a, b) => a.date.localeCompare(b.date));
     const predData = sorted
@@ -425,6 +448,13 @@ function useHealthMetrics(health: HealthRow[]) {
       sparkLabels,
       sleepSpark,
       sleepLabels,
+      hrvSpark,
+      rhrSpark,
+      hrvAvg,
+      rhrAvg,
+      strainAvg,
+      calAvg,
+      recoveryAvg,
       prediction,
     };
   }, [health]);
@@ -619,6 +649,7 @@ const MissionControl: React.FC = () => {
             strain={healthM?.strain ?? null}
             sleepHours={healthM?.sleepHours ?? null}
             whoopConnected={whoopConnected}
+            recoveryAvg={healthM?.recoveryAvg ?? null}
           />
         </motion.div>
 
@@ -670,6 +701,12 @@ const MissionControl: React.FC = () => {
                 color: mcTokens.colors.text.secondary,
               }
             }
+            hrvSpark={healthM?.hrvSpark ?? []}
+            rhrSpark={healthM?.rhrSpark ?? []}
+            hrvAvg={healthM?.hrvAvg ?? null}
+            rhrAvg={healthM?.rhrAvg ?? null}
+            strainAvg={healthM?.strainAvg ?? null}
+            calAvg={healthM?.calAvg ?? null}
           />
         </motion.div>
 
