@@ -528,10 +528,16 @@ const MissionControl: React.FC = () => {
     color: mcTokens.colors.text.primary,
   };
 
+  // Scoped selection override — monochrome, no cyan bleed from global CSS
+  const selectionStyle = (
+    <style>{`.mc-root ::selection { background: #333; color: #e8e8e8; }`}</style>
+  );
+
   // ---- Loading state ----
   if (loading) {
     return (
       <div
+        className="mc-root"
         style={{
           ...fontBase,
           background: mcTokens.colors.bg.primary,
@@ -541,6 +547,7 @@ const MissionControl: React.FC = () => {
           justifyContent: "center",
         }}
       >
+        {selectionStyle}
         <Label>LOADING TELEMETRY...</Label>
       </div>
     );
@@ -550,6 +557,7 @@ const MissionControl: React.FC = () => {
   if (isEmpty) {
     return (
       <div
+        className="mc-root"
         style={{
           ...fontBase,
           background: mcTokens.colors.bg.primary,
@@ -559,6 +567,7 @@ const MissionControl: React.FC = () => {
           justifyContent: "center",
         }}
       >
+        {selectionStyle}
         <p
           style={{
             fontSize: mcTokens.typography.body.size,
@@ -582,8 +591,7 @@ const MissionControl: React.FC = () => {
         flexDirection: "column",
       }}
     >
-      {/* Scoped selection override — monochrome, no cyan bleed */}
-      <style>{`.mc-root ::selection { background: #333; color: #e8e8e8; }`}</style>
+      {selectionStyle}
 
       {/* ---- Status Bar ---- */}
       <header
