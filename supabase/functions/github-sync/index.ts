@@ -24,6 +24,13 @@ interface GitHubCommit {
   };
 }
 
+interface GitHubCommitDetail {
+  stats: {
+    additions: number;
+    deletions: number;
+  };
+}
+
 interface GitHubPR {
   created_at: string;
   merged_at: string | null;
@@ -186,6 +193,8 @@ Deno.serve(async (req) => {
             prsCreated: number;
             prsMerged: number;
             lastSha: string | null;
+            linesAdded: number;
+            linesDeleted: number;
           }
         >();
 
@@ -196,9 +205,21 @@ Deno.serve(async (req) => {
             prsCreated: 0,
             prsMerged: 0,
             lastSha: null,
+            linesAdded: 0,
+            linesDeleted: 0,
           };
           entry.commitCount++;
           entry.lastSha = c.sha;
+
+          // Fetch commit detail for line stats
+          const detailUrl = `${GITHUB_API}/repos/${repoFullName}/commits/${c.sha}`;
+          const detailRes = await githubFetch(detailUrl, token);
+          if (detailRes.ok) {
+            const detail = detailRes.data as GitHubCommitDetail;
+            entry.linesAdded += detail.stats?.additions ?? 0;
+            entry.linesDeleted += detail.stats?.deletions ?? 0;
+          }
+
           byDate.set(dateKey, entry);
         }
 
@@ -210,6 +231,8 @@ Deno.serve(async (req) => {
               prsCreated: 0,
               prsMerged: 0,
               lastSha: null,
+              linesAdded: 0,
+              linesDeleted: 0,
             };
             entry.prsCreated++;
             byDate.set(createdDate, entry);
@@ -223,6 +246,8 @@ Deno.serve(async (req) => {
                 prsCreated: 0,
                 prsMerged: 0,
                 lastSha: null,
+                linesAdded: 0,
+                linesDeleted: 0,
               };
               entry.prsMerged++;
               byDate.set(mergedDate, entry);
@@ -243,6 +268,8 @@ Deno.serve(async (req) => {
                 prs_created: stats.prsCreated,
                 prs_merged: stats.prsMerged,
                 last_commit_sha: stats.lastSha,
+                lines_added: stats.linesAdded,
+                lines_deleted: stats.linesDeleted,
                 synced_at: new Date().toISOString(),
               },
               { onConflict: "user_id,date,repo_name" },

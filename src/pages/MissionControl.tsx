@@ -15,6 +15,8 @@ interface CommitRow {
   commit_count: number;
   prs_created: number;
   prs_merged: number;
+  lines_added: number;
+  lines_deleted: number;
 }
 
 interface HealthRow {
@@ -33,6 +35,8 @@ interface SyncRow {
   whoop_connected: boolean;
   last_github_sync: string | null;
   last_whoop_sync: string | null;
+  github_sync_errors: unknown[];
+  whoop_sync_errors: unknown[];
 }
 
 interface Prediction {
@@ -291,7 +295,9 @@ function useMissionControlData() {
     const [commitRes, healthRes, syncRes] = await Promise.all([
       supabase
         .from("mission_control_commits")
-        .select("date, repo_name, commit_count, prs_created, prs_merged")
+        .select(
+          "date, repo_name, commit_count, prs_created, prs_merged, lines_added, lines_deleted",
+        )
         .eq("user_id", user.id)
         .gte("date", since)
         .order("date", { ascending: true }),
@@ -366,6 +372,8 @@ function useEngMetrics(commits: CommitRow[]) {
     let totalPRsCreated = 0;
     let totalPRsMerged = 0;
     let shipDays = 0;
+    let monthLinesAdded = 0;
+    let monthLinesDeleted = 0;
     const totalDaysThisMonth = daysInMonth();
 
     for (const [date, agg] of byDate) {
@@ -375,6 +383,14 @@ function useEngMetrics(commits: CommitRow[]) {
         totalPRsCreated += agg.prs_created;
         totalPRsMerged += agg.prs_merged;
         if (agg.commits > 0) shipDays++;
+      }
+    }
+
+    // Aggregate LoC across all repos for the month
+    for (const c of commits) {
+      if (c.date >= monthStart) {
+        monthLinesAdded += c.lines_added;
+        monthLinesDeleted += c.lines_deleted;
       }
     }
 
@@ -410,6 +426,8 @@ function useEngMetrics(commits: CommitRow[]) {
       totalPRsMerged,
       shipDays,
       totalDaysThisMonth,
+      monthLinesAdded,
+      monthLinesDeleted,
       spark,
       prediction,
     };
@@ -693,6 +711,16 @@ const MissionControl: React.FC = () => {
                 value={`${eng.shipDays}/${eng.totalDaysThisMonth}`}
                 trendLabel={pct(eng.shipDays, eng.totalDaysThisMonth)}
                 trendColor={mcTokens.colors.text.secondary}
+              />
+              <MetricRow
+                label="LINES ADDED"
+                value={eng.monthLinesAdded.toLocaleString()}
+                trendColor="#4a4"
+              />
+              <MetricRow
+                label="LINES DELETED"
+                value={eng.monthLinesDeleted.toLocaleString()}
+                trendColor="#a44"
               />
 
               {/* Prediction */}

@@ -11,6 +11,8 @@ CREATE TABLE IF NOT EXISTS mission_control_commits (
   prs_created int NOT NULL DEFAULT 0,
   prs_merged int NOT NULL DEFAULT 0,
   last_commit_sha text,
+  lines_added int NOT NULL DEFAULT 0,
+  lines_deleted int NOT NULL DEFAULT 0,
   synced_at timestamptz NOT NULL DEFAULT now(),
   UNIQUE(user_id, date, repo_name)
 );
