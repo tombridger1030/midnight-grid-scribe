@@ -114,14 +114,50 @@ function trend(
 function computePrediction(
   dataPoints: { x: number; y: number }[],
   unit: string,
+  mode: "cumulative" | "raw" = "raw",
 ): Prediction | null {
   if (dataPoints.length < 14) return null;
   const recent = dataPoints.slice(-90);
-  const data: [number, number][] = recent.map((p) => [p.x, p.y]);
-  const result = regression.linear(data);
-  if (result.r2 === null || result.r2 < 0.3) return null;
-  const slope = result.equation[0];
+
+  // For commit-style data, convert to cumulative (monotonically increasing)
+  // This produces a meaningful linear fit even when daily counts are noisy
+  let regressionInput: [number, number][];
+  if (mode === "cumulative") {
+    let cumulative = 0;
+    regressionInput = recent.map((p) => {
+      cumulative += p.y;
+      return [p.x, cumulative] as [number, number];
+    });
+  } else {
+    regressionInput = recent.map((p) => [p.x, p.y]);
+  }
+
+  const result = regression.linear(regressionInput);
+  if (result.r2 === null || result.r2 < 0.1) return null;
+  const slope = result.equation[0]; // daily rate (for cumulative: commits per day)
   if (slope === 0) return null;
+
+  if (mode === "cumulative") {
+    // Slope = average daily rate. Project forward.
+    const dailyRate = slope;
+    const daysRemaining =
+      new Date(
+        new Date().getFullYear(),
+        new Date().getMonth() + 1,
+        0,
+      ).getDate() - new Date().getDate();
+    const projectedMonthEnd = Math.round(
+      regressionInput[regressionInput.length - 1][1] +
+        dailyRate * daysRemaining,
+    );
+    const avgPerDay = Math.round(dailyRate * 10) / 10;
+    return {
+      text: `Averaging ${avgPerDay} ${unit}/day. On pace for ~${projectedMonthEnd.toLocaleString()} total ${unit} by end of month.`,
+      targetValue: projectedMonthEnd,
+    };
+  }
+
+  // Raw mode (for health metrics like recovery %)
   const lastX = recent[recent.length - 1].x;
   const projected = slope * (lastX + 30) + result.equation[1];
   return {
@@ -414,7 +450,7 @@ function useEngMetrics(commits: CommitRow[]) {
     // Prediction
     const sorted = [...byDate.entries()].sort(([a], [b]) => a.localeCompare(b));
     const predData = sorted.map(([, agg], i) => ({ x: i, y: agg.commits }));
-    const prediction = computePrediction(predData, "commits");
+    const prediction = computePrediction(predData, "commits", "cumulative");
 
     return {
       todayCommits,
