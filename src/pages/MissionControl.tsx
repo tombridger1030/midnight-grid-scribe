@@ -505,12 +505,19 @@ const MissionControl: React.FC = () => {
   const syncAge = lastSync
     ? Date.now() - new Date(lastSync).getTime()
     : Infinity;
-  const isStale = syncAge > 30 * 60 * 1000; // > 30 min
-  const syncLabel =
-    isStale && lastSync ? "SYNC ERROR" : `SYNCED ${minutesAgo(lastSync)}`;
-  const syncColor =
-    isStale && lastSync
-      ? mcTokens.colors.status.error
+  const hasErrors =
+    (sync?.github_sync_errors?.length ?? 0) >= 3 ||
+    (sync?.whoop_sync_errors?.length ?? 0) >= 3;
+  const isStale = syncAge > 60 * 60 * 1000; // > 1 hour
+  const syncLabel = hasErrors
+    ? "SYNC ERROR"
+    : isStale && lastSync
+      ? `STALE -- LAST DATA ${minutesAgo(lastSync)}`
+      : `SYNCED ${minutesAgo(lastSync)}`;
+  const syncColor = hasErrors
+    ? mcTokens.colors.status.error
+    : isStale && lastSync
+      ? mcTokens.colors.status.stale
       : mcTokens.colors.text.muted;
 
   if (!user) return null;
@@ -566,6 +573,7 @@ const MissionControl: React.FC = () => {
 
   return (
     <div
+      className="mc-root"
       style={{
         ...fontBase,
         background: mcTokens.colors.bg.primary,
@@ -574,6 +582,9 @@ const MissionControl: React.FC = () => {
         flexDirection: "column",
       }}
     >
+      {/* Scoped selection override — monochrome, no cyan bleed */}
+      <style>{`.mc-root ::selection { background: #333; color: #e8e8e8; }`}</style>
+
       {/* ---- Status Bar ---- */}
       <header
         style={{
