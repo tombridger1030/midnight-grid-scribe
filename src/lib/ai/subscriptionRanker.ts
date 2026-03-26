@@ -22,6 +22,7 @@ const RANKING_OVERRIDES_KEY = "noctisium-subscription-rankings";
 export interface RankedSubscription extends DetectedSubscription {
   aiReason?: string; // Why AI assigned this ranking
   cancelRecommendation?: string; // Suggestion for canceling
+  isCancelled?: boolean; // User marked as cancelled
 }
 
 interface RankingOverride {

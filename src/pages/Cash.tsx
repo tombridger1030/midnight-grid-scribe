@@ -27,11 +27,16 @@ import {
   BankStatementImporter,
   DailySpendingView,
   SubscriptionReview,
+  CategoryTransactionsModal,
 } from "@/components/cash";
 import { SummaryCards } from "@/components/cash/SummaryCards";
 import { WeeklyView } from "@/components/cash/WeeklyView";
 import { MonthlyView } from "@/components/cash/MonthlyView";
 import type { ParsedTransaction } from "@/lib/ai/bankStatementParser";
+import {
+  storeStatementRecord,
+  loadTransactionsFromSupabase,
+} from "@/lib/ai/bankStatementParser";
 import { detectSubscriptions } from "@/lib/ai/subscriptionDetector";
 import {
   rankSubscriptionsWithAI,
@@ -42,6 +47,7 @@ import {
   loadSubscriptions,
   saveAnalysisMetadata,
   loadAnalysisMetadata,
+  deleteSubscription,
 } from "@/lib/subscriptionStorage";
 
 type ViewTab = "daily" | "weekly" | "monthly" | "subscriptions";
@@ -57,7 +63,14 @@ const Cash: React.FC = () => {
   const [processingStep, setProcessingStep] = useState("");
   const [isLoading, setIsLoading] = useState(true);
 
-  // Load cached data on mount
+  // Category modal state
+  const [categoryModalOpen, setCategoryModalOpen] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState("");
+  const [categoryTransactions, setCategoryTransactions] = useState<
+    ParsedTransaction[]
+  >([]);
+
+  // Load cached data on mount (localStorage first, Supabase fallback)
   useEffect(() => {
     const loadData = async () => {
       setIsLoading(true);
@@ -74,12 +87,37 @@ const Cash: React.FC = () => {
           setSubscriptions(restored);
         }
 
-        // Load cached transactions
+        // Load transactions: localStorage first, then Supabase fallback
         const cachedTransactions = localStorage.getItem(
           "noctisium-transactions",
         );
         if (cachedTransactions) {
-          setTransactions(JSON.parse(cachedTransactions));
+          const parsed = JSON.parse(cachedTransactions);
+          if (parsed.length > 0) {
+            setTransactions(parsed);
+          } else {
+            // localStorage empty, try Supabase
+            const supabaseTransactions = await loadTransactionsFromSupabase();
+            if (supabaseTransactions.length > 0) {
+              setTransactions(supabaseTransactions);
+              // Sync back to localStorage
+              localStorage.setItem(
+                "noctisium-transactions",
+                JSON.stringify(supabaseTransactions),
+              );
+            }
+          }
+        } else {
+          // No localStorage data, load from Supabase
+          const supabaseTransactions = await loadTransactionsFromSupabase();
+          if (supabaseTransactions.length > 0) {
+            setTransactions(supabaseTransactions);
+            // Sync back to localStorage
+            localStorage.setItem(
+              "noctisium-transactions",
+              JSON.stringify(supabaseTransactions),
+            );
+          }
         }
       } catch (error) {
         console.error("Failed to load cached data:", error);
@@ -90,6 +128,55 @@ const Cash: React.FC = () => {
 
     loadData();
   }, []);
+
+  // Re-link transactions to subscriptions when both are loaded
+  useEffect(() => {
+    if (transactions.length === 0 || subscriptions.length === 0) return;
+
+    // Check if subscriptions need transaction linking (from cache)
+    const needsLinking = subscriptions.some(
+      (s) => s.source === "cache" && s.transactions.length === 0,
+    );
+    if (!needsLinking) return;
+
+    // Link transactions to subscriptions by matching merchant name
+    setSubscriptions((prev) =>
+      prev.map((sub) => {
+        if (sub.transactions.length > 0) return sub;
+
+        // Find matching transactions for this subscription
+        // Match by: merchantName contains description OR description contains merchantName/displayName
+        const matchingTxns = transactions
+          .filter((t) => {
+            const desc = t.description.toLowerCase();
+            const merchant = sub.merchantName.toLowerCase();
+            const display = sub.displayName.toLowerCase();
+
+            // Direct match or partial match
+            return (
+              desc === merchant ||
+              desc.includes(merchant) ||
+              merchant.includes(desc) ||
+              desc.includes(display) ||
+              display.includes(desc.split(" ")[0])
+            );
+          })
+          .map((t) => ({
+            date: t.date,
+            amount: t.amount,
+            description: t.description,
+          }))
+          .sort(
+            (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
+          );
+
+        return {
+          ...sub,
+          transactions: matchingTxns,
+        };
+      }),
+    );
+  }, [transactions, subscriptions]);
 
   // Handle imported transactions from bank statement
   const handleImportTransactions = useCallback(
@@ -110,6 +197,17 @@ const Cash: React.FC = () => {
 
         setTransactions(merged);
         localStorage.setItem("noctisium-transactions", JSON.stringify(merged));
+
+        // Persist to Supabase (fire and forget, don't block UI)
+        setProcessingStep("Saving to cloud...");
+        storeStatementRecord("import", "csv", {
+          transactions: uniqueNew,
+          totalAmount: uniqueNew.reduce(
+            (sum, t) => sum + Math.abs(t.amount),
+            0,
+          ),
+          confidence: 0.9,
+        }).catch((err) => console.error("Failed to save to Supabase:", err));
 
         // Detect subscriptions from all transactions
         setProcessingStep("Detecting subscriptions...");
@@ -290,6 +388,11 @@ const Cash: React.FC = () => {
                 transactions={transactions}
                 subscriptions={subscriptions}
                 hideBalances={hideBalances}
+                onCategoryClick={(category, txns) => {
+                  setSelectedCategory(category);
+                  setCategoryTransactions(txns);
+                  setCategoryModalOpen(true);
+                }}
               />
             </motion.div>
           )}
@@ -385,18 +488,22 @@ const Cash: React.FC = () => {
                       hideBalances={hideBalances}
                       isLoading={isProcessing}
                       onUpdateName={(id, name) => {
-                        setSubscriptions((prev) =>
-                          prev.map((s) =>
+                        setSubscriptions((prev) => {
+                          const updated = prev.map((s) =>
                             s.id === id ? { ...s, displayName: name } : s,
-                          ),
-                        );
+                          );
+                          saveSubscriptions(updated);
+                          return updated;
+                        });
                       }}
                       onUpdateImportance={(id, importance) => {
-                        setSubscriptions((prev) =>
-                          prev.map((s) =>
+                        setSubscriptions((prev) => {
+                          const updated = prev.map((s) =>
                             s.id === id ? { ...s, importance } : s,
-                          ),
-                        );
+                          );
+                          saveSubscriptions(updated);
+                          return updated;
+                        });
                       }}
                       onDismissSuggestion={(id) => {
                         setSubscriptions((prev) =>
@@ -406,6 +513,33 @@ const Cash: React.FC = () => {
                               : s,
                           ),
                         );
+                      }}
+                      onDelete={(id) => {
+                        // Remove from UI state
+                        setSubscriptions((prev) =>
+                          prev.filter((s) => s.id !== id),
+                        );
+                        // Remove from localStorage
+                        deleteSubscription(id);
+                      }}
+                      onToggleCancelled={(id, cancelled) => {
+                        setSubscriptions((prev) => {
+                          const updated = prev.map((s) =>
+                            s.id === id ? { ...s, isCancelled: cancelled } : s,
+                          );
+                          // Save to localStorage
+                          saveSubscriptions(updated);
+                          return updated;
+                        });
+                      }}
+                      onUpdateCategory={(id, category) => {
+                        setSubscriptions((prev) => {
+                          const updated = prev.map((s) =>
+                            s.id === id ? { ...s, category } : s,
+                          );
+                          saveSubscriptions(updated);
+                          return updated;
+                        });
                       }}
                     />
                   )}
@@ -439,6 +573,15 @@ const Cash: React.FC = () => {
           <InvestmentsTab hideBalances={hideBalances} />
         </motion.div>
       )}
+
+      {/* Category Transactions Modal */}
+      <CategoryTransactionsModal
+        category={selectedCategory}
+        transactions={categoryTransactions}
+        isOpen={categoryModalOpen}
+        onClose={() => setCategoryModalOpen(false)}
+        hideBalances={hideBalances}
+      />
     </div>
   );
 };

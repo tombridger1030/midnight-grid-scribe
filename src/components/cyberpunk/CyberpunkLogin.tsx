@@ -1,97 +1,71 @@
-import React, { useState, useEffect } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
-import MatrixBackground from './MatrixBackground';
-import GlitchText from './GlitchText';
-import TerminalBootSequence from './TerminalBootSequence';
-import HackerAnimation from './HackerAnimation';
-import CodeRainEffect from './CodeRainEffect';
-import TerminalFlicker from './TerminalFlicker';
-import { Eye, EyeOff, Loader2, AlertTriangle } from 'lucide-react';
+/**
+ * CyberpunkLogin Component
+ *
+ * Clean, fast login/signup form matching the main app aesthetic.
+ * No theatrical animations - instant form display, immediate redirect.
+ */
+
+import React, { useState } from "react";
+import { useAuth } from "@/contexts/AuthContext";
+import { Eye, EyeOff, Loader2, AlertCircle } from "lucide-react";
+import { motion } from "framer-motion";
+import { colors } from "@/styles/design-tokens";
 
 interface CyberpunkLoginProps {
   onSuccess?: () => void;
 }
 
-const CyberpunkLogin: React.FC<CyberpunkLoginProps> = ({ onSuccess }) => {
+const CyberpunkLogin: React.FC<CyberpunkLoginProps> = () => {
   const { signIn, signUp } = useAuth();
-  const [showBoot, setShowBoot] = useState(true);
-  const [showHackerAnimation, setShowHackerAnimation] = useState(false);
-  const [authenticatedUsername, setAuthenticatedUsername] = useState('');
-  const [mode, setMode] = useState<'signin' | 'signup'>('signin');
+  const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [formData, setFormData] = useState({
-    email: '',
-    password: '',
-    username: '',
-    displayName: '',
-    confirmPassword: ''
+    email: "",
+    password: "",
+    username: "",
+    displayName: "",
+    confirmPassword: "",
   });
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [glitchTrigger, setGlitchTrigger] = useState(false);
-  const [terminalLines, setTerminalLines] = useState<string[]>([]);
-  const [currentPrompt, setCurrentPrompt] = useState('');
-
-  useEffect(() => {
-    if (!showBoot) {
-      // Initialize terminal
-      const lines = [
-        'SECURE CONNECTION ESTABLISHED',
-        'BIOMETRIC AUTHENTICATION REQUIRED',
-        'QUANTUM ENCRYPTION: ACTIVE',
-        ''
-      ];
-      setTerminalLines(lines);
-      setCurrentPrompt(mode === 'signin' ? 'user@noctisium:~$ authenticate' : 'user@noctisium:~$ register');
-    }
-  }, [showBoot, mode]);
+  const [error, setError] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
+    setError("");
     setLoading(true);
-
-    // Add typing sound effect
-    if (typeof window !== 'undefined' && (window as any).cyberpunkSounds) {
-      (window as any).cyberpunkSounds.playTyping();
-    }
-
-    setTerminalLines(prev => [
-      ...prev,
-      `> ${mode === 'signup' ? 'Registering new user...' : 'Authenticating credentials...'}`,
-      '> Establishing secure connection...'
-    ]);
 
     try {
       let result;
 
-      if (mode === 'signup') {
+      if (mode === "signup") {
         // Validation
         if (formData.password !== formData.confirmPassword) {
-          throw new Error('Passwords do not match');
+          throw new Error("Passwords do not match");
         }
         if (formData.password.length < 6) {
-          throw new Error('Password must be at least 6 characters');
+          throw new Error("Password must be at least 6 characters");
         }
         if (!formData.username.trim()) {
-          throw new Error('Username is required');
+          throw new Error("Username is required");
         }
         if (formData.username.length < 3) {
-          throw new Error('Username must be at least 3 characters');
+          throw new Error("Username must be at least 3 characters");
         }
         if (!/^[a-zA-Z0-9_-]+$/.test(formData.username)) {
-          throw new Error('Username can only contain letters, numbers, _ and -');
+          throw new Error(
+            "Username can only contain letters, numbers, _ and -",
+          );
         }
 
         result = await signUp(
           formData.email,
           formData.password,
           formData.username.trim(),
-          formData.displayName.trim() || formData.username.trim()
+          formData.displayName.trim() || formData.username.trim(),
         );
       } else {
         if (!formData.email || !formData.password) {
-          throw new Error('Email and password are required');
+          throw new Error("Email and password are required");
         }
 
         result = await signIn(formData.email, formData.password);
@@ -101,247 +75,371 @@ const CyberpunkLogin: React.FC<CyberpunkLoginProps> = ({ onSuccess }) => {
         throw new Error(result.error.message);
       }
 
-      // Success - trigger hacker animation
-      setTerminalLines(prev => [
-        ...prev,
-        `> ${mode === 'signup' ? 'User registered successfully' : 'Authentication successful'}`,
-        '> ACCESS GRANTED',
-        '> Initializing neural interface...'
-      ]);
-
-      // Store username for hacker animation
-      setAuthenticatedUsername(formData.username || formData.email.split('@')[0]);
-
-      setTimeout(() => {
-        setShowHackerAnimation(true);
-      }, 800);
-
+      // Success - auth state change will trigger redirect automatically
     } catch (err: any) {
-      const errorMessage = err.message || 'Authentication failed';
+      const errorMessage = err.message || "Authentication failed";
       setError(errorMessage);
-      setGlitchTrigger(true);
-      setTimeout(() => setGlitchTrigger(false), 300);
-
-      // Play error sound
-      if (typeof window !== 'undefined' && (window as any).cyberpunkSounds) {
-        (window as any).cyberpunkSounds.playError();
-      }
-
-      setTerminalLines(prev => [
-        ...prev,
-        `> ERROR: ${errorMessage}`,
-        '> ACCESS DENIED',
-        '> Connection terminated',
-        ''
-      ]);
     } finally {
       setLoading(false);
     }
   };
 
   const toggleMode = () => {
-    setMode(prev => prev === 'signin' ? 'signup' : 'signin');
+    setMode((prev) => (prev === "signin" ? "signup" : "signin"));
     setFormData({
-      email: '',
-      password: '',
-      username: '',
-      displayName: '',
-      confirmPassword: ''
+      email: "",
+      password: "",
+      username: "",
+      displayName: "",
+      confirmPassword: "",
     });
-    setError('');
+    setError("");
   };
 
-  const inputClasses = `
-    w-full bg-transparent border-b border-[#5FE3B3]/50
-    text-[#5FE3B3] placeholder-[#5FE3B3]/30
-    focus:border-[#5FE3B3] focus:outline-none
-    font-mono text-sm py-2 px-1
-    transition-all duration-300
-  `;
-
-  if (showBoot) {
-    return (
-      <>
-        <MatrixBackground opacity={0.05} />
-        <TerminalBootSequence onComplete={() => setShowBoot(false)} />
-      </>
-    );
-  }
-
-  if (showHackerAnimation) {
-    return (
-      <HackerAnimation
-        username={authenticatedUsername}
-        onComplete={() => onSuccess?.()}
-      />
-    );
-  }
-
   return (
-    <div className="fixed inset-0 bg-black flex items-center justify-center z-50">
-      <MatrixBackground opacity={0.08} />
-      <CodeRainEffect active={loading || !!error} intensity="medium" />
-
-      <TerminalFlicker enabled={true} flickerIntensity="low">
-        <div className="relative z-10 w-full max-w-lg mx-4">
-        {/* Terminal Window */}
-        <div className="border border-[#5FE3B3]/50 bg-black/90 backdrop-blur-sm">
-          {/* Terminal Header */}
-          <div className="border-b border-[#5FE3B3]/30 p-3 flex items-center">
-            <div className="flex space-x-2">
-              <div className="w-3 h-3 rounded-full bg-[#FF6B6B]"></div>
-              <div className="w-3 h-3 rounded-full bg-[#FFD700]"></div>
-              <div className="w-3 h-3 rounded-full bg-[#5FE3B3]"></div>
-            </div>
-            <div className="ml-4 text-[#5FE3B3] text-sm font-mono">
-              NOCTISIUM SECURE TERMINAL
-            </div>
+    <div
+      className="fixed inset-0 flex items-center justify-center"
+      style={{ backgroundColor: colors.background.primary }}
+    >
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+        className="w-full max-w-md mx-4"
+      >
+        {/* Login Card */}
+        <div
+          className="rounded-lg p-8"
+          style={{
+            backgroundColor: colors.background.secondary,
+            border: `1px solid ${colors.border.DEFAULT}`,
+          }}
+        >
+          {/* Header */}
+          <div className="text-center mb-8">
+            <h1
+              className="text-2xl font-bold tracking-wide mb-2"
+              style={{ color: colors.primary.DEFAULT }}
+            >
+              NOCTISIUM
+            </h1>
+            <p className="text-sm" style={{ color: colors.text.muted }}>
+              {mode === "signin"
+                ? "Sign in to continue"
+                : "Create your account"}
+            </p>
           </div>
 
-          {/* Terminal Content */}
-          <div className="p-6 font-mono">
-            {/* Terminal Output */}
-            <div className="mb-6 space-y-1 text-sm">
-              {terminalLines.map((line, index) => (
-                <div key={index} className="text-[#8A8D93]">
-                  {line}
-                </div>
-              ))}
-              <div className="text-[#5FE3B3]">
-                {currentPrompt}<span className="animate-pulse">_</span>
-              </div>
+          {/* Mode Toggle */}
+          <div
+            className="flex rounded-lg p-1 mb-6"
+            style={{ backgroundColor: colors.background.tertiary }}
+          >
+            <button
+              type="button"
+              onClick={() => mode !== "signin" && toggleMode()}
+              className="flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all"
+              style={{
+                backgroundColor:
+                  mode === "signin"
+                    ? colors.background.elevated
+                    : "transparent",
+                color:
+                  mode === "signin"
+                    ? colors.primary.DEFAULT
+                    : colors.text.muted,
+              }}
+            >
+              Sign In
+            </button>
+            <button
+              type="button"
+              onClick={() => mode !== "signup" && toggleMode()}
+              className="flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all"
+              style={{
+                backgroundColor:
+                  mode === "signup"
+                    ? colors.background.elevated
+                    : "transparent",
+                color:
+                  mode === "signup"
+                    ? colors.primary.DEFAULT
+                    : colors.text.muted,
+              }}
+            >
+              Sign Up
+            </button>
+          </div>
+
+          {/* Form */}
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Email */}
+            <div>
+              <label
+                className="block text-xs font-medium mb-1.5 uppercase tracking-wide"
+                style={{ color: colors.text.secondary }}
+              >
+                Email
+              </label>
+              <input
+                type="email"
+                placeholder="you@example.com"
+                className="w-full px-3 py-2.5 rounded-md text-sm outline-none transition-all"
+                style={{
+                  backgroundColor: colors.background.tertiary,
+                  border: `1px solid ${colors.border.accent}`,
+                  color: colors.text.primary,
+                }}
+                onFocus={(e) =>
+                  (e.target.style.borderColor = colors.primary.DEFAULT)
+                }
+                onBlur={(e) =>
+                  (e.target.style.borderColor = colors.border.accent)
+                }
+                value={formData.email}
+                onChange={(e) =>
+                  setFormData((prev) => ({ ...prev, email: e.target.value }))
+                }
+                required
+              />
             </div>
 
-            {/* Login Form */}
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-4">
-                <div>
-                  <div className="text-[#5FE3B3]/70 text-xs mb-1 font-mono">EMAIL ADDRESS</div>
-                  <input
-                    type="email"
-                    placeholder="user@noctisium.network"
-                    className={inputClasses}
-                    value={formData.email}
-                    onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
-                    required
-                  />
-                </div>
-
-                {mode === 'signup' && (
-                  <>
-                    <div>
-                      <div className="text-[#5FE3B3]/70 text-xs mb-1 font-mono">USERNAME</div>
-                      <input
-                        type="text"
-                        placeholder="midnight"
-                        className={inputClasses}
-                        value={formData.username}
-                        onChange={(e) => setFormData(prev => ({ ...prev, username: e.target.value }))}
-                        required
-                      />
-                    </div>
-                    <div>
-                      <div className="text-[#5FE3B3]/70 text-xs mb-1 font-mono">DISPLAY NAME (optional)</div>
-                      <input
-                        type="text"
-                        placeholder="Midnight Operator"
-                        className={inputClasses}
-                        value={formData.displayName}
-                        onChange={(e) => setFormData(prev => ({ ...prev, displayName: e.target.value }))}
-                      />
-                    </div>
-                  </>
-                )}
-
-                <div>
-                  <div className="text-[#5FE3B3]/70 text-xs mb-1 font-mono">PASSWORD</div>
-                  <div className="relative">
-                    <input
-                      type={showPassword ? 'text' : 'password'}
-                      placeholder="••••••••••••"
-                      className={inputClasses}
-                      value={formData.password}
-                      onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
-                      required
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-2 top-2 text-[#5FE3B3]/50 hover:text-[#5FE3B3]"
-                    >
-                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                    </button>
-                  </div>
-                </div>
-
-                {mode === 'signup' && (
-                  <div>
-                    <div className="text-[#5FE3B3]/70 text-xs mb-1 font-mono">CONFIRM PASSWORD</div>
-                    <input
-                      type={showPassword ? 'text' : 'password'}
-                      placeholder="••••••••••••"
-                      className={inputClasses}
-                      value={formData.confirmPassword}
-                      onChange={(e) => setFormData(prev => ({ ...prev, confirmPassword: e.target.value }))}
-                      required
-                    />
-                  </div>
-                )}
-              </div>
-
-              {error && (
-                <div className="flex items-center space-x-2 text-[#FF6B6B] text-sm">
-                  <AlertTriangle size={16} />
-                  <GlitchText text={error} triggerGlitch={glitchTrigger} />
-                </div>
-              )}
-
-              {/* Action Buttons */}
-              <div className="flex flex-col space-y-3 pt-4">
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className={`
-                    w-full p-3 border border-[#5FE3B3] text-[#5FE3B3]
-                    hover:bg-[#5FE3B3] hover:text-black transition-all duration-300
-                    font-mono text-sm uppercase tracking-wide
-                    disabled:opacity-50 disabled:cursor-not-allowed
-                    flex items-center justify-center space-x-2
-                  `}
+            {/* Username (signup only) */}
+            {mode === "signup" && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+              >
+                <label
+                  className="block text-xs font-medium mb-1.5 uppercase tracking-wide"
+                  style={{ color: colors.text.secondary }}
                 >
-                  {loading ? (
-                    <>
-                      <Loader2 size={16} className="animate-spin" />
-                      <span>PROCESSING...</span>
-                    </>
-                  ) : (
-                    <span>{mode === 'signin' ? 'ACCESS NETWORK' : 'JOIN NETWORK'}</span>
-                  )}
-                </button>
+                  Username
+                </label>
+                <input
+                  type="text"
+                  placeholder="yourname"
+                  className="w-full px-3 py-2.5 rounded-md text-sm outline-none transition-all"
+                  style={{
+                    backgroundColor: colors.background.tertiary,
+                    border: `1px solid ${colors.border.accent}`,
+                    color: colors.text.primary,
+                  }}
+                  onFocus={(e) =>
+                    (e.target.style.borderColor = colors.primary.DEFAULT)
+                  }
+                  onBlur={(e) =>
+                    (e.target.style.borderColor = colors.border.accent)
+                  }
+                  value={formData.username}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      username: e.target.value,
+                    }))
+                  }
+                  required
+                />
+              </motion.div>
+            )}
 
+            {/* Display Name (signup only) */}
+            {mode === "signup" && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+              >
+                <label
+                  className="block text-xs font-medium mb-1.5 uppercase tracking-wide"
+                  style={{ color: colors.text.secondary }}
+                >
+                  Display Name{" "}
+                  <span style={{ color: colors.text.muted }}>(optional)</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="Your Name"
+                  className="w-full px-3 py-2.5 rounded-md text-sm outline-none transition-all"
+                  style={{
+                    backgroundColor: colors.background.tertiary,
+                    border: `1px solid ${colors.border.accent}`,
+                    color: colors.text.primary,
+                  }}
+                  onFocus={(e) =>
+                    (e.target.style.borderColor = colors.primary.DEFAULT)
+                  }
+                  onBlur={(e) =>
+                    (e.target.style.borderColor = colors.border.accent)
+                  }
+                  value={formData.displayName}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      displayName: e.target.value,
+                    }))
+                  }
+                />
+              </motion.div>
+            )}
+
+            {/* Password */}
+            <div>
+              <label
+                className="block text-xs font-medium mb-1.5 uppercase tracking-wide"
+                style={{ color: colors.text.secondary }}
+              >
+                Password
+              </label>
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Enter password"
+                  className="w-full px-3 py-2.5 pr-10 rounded-md text-sm outline-none transition-all"
+                  style={{
+                    backgroundColor: colors.background.tertiary,
+                    border: `1px solid ${colors.border.accent}`,
+                    color: colors.text.primary,
+                  }}
+                  onFocus={(e) =>
+                    (e.target.style.borderColor = colors.primary.DEFAULT)
+                  }
+                  onBlur={(e) =>
+                    (e.target.style.borderColor = colors.border.accent)
+                  }
+                  value={formData.password}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      password: e.target.value,
+                    }))
+                  }
+                  required
+                />
                 <button
                   type="button"
-                  onClick={toggleMode}
-                  className="text-[#5FE3B3]/70 hover:text-[#5FE3B3] transition-colors text-sm font-mono"
-                >
-                  {mode === 'signin'
-                    ? '> New user? Register for network access'
-                    : '> Already have access? Sign in'
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 transition-colors"
+                  style={{ color: colors.text.muted }}
+                  onMouseEnter={(e) =>
+                    (e.currentTarget.style.color = colors.text.primary)
                   }
+                  onMouseLeave={(e) =>
+                    (e.currentTarget.style.color = colors.text.muted)
+                  }
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
               </div>
-            </form>
-
-            {/* Footer */}
-            <div className="mt-8 pt-4 border-t border-[#5FE3B3]/20 text-center">
-              <div className="text-[#5FE3B3]/50 text-xs font-mono">
-                NOCTISIUM NETWORK v3.7.2 | QUANTUM ENCRYPTED
-              </div>
             </div>
+
+            {/* Confirm Password (signup only) */}
+            {mode === "signup" && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+              >
+                <label
+                  className="block text-xs font-medium mb-1.5 uppercase tracking-wide"
+                  style={{ color: colors.text.secondary }}
+                >
+                  Confirm Password
+                </label>
+                <input
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Confirm password"
+                  className="w-full px-3 py-2.5 rounded-md text-sm outline-none transition-all"
+                  style={{
+                    backgroundColor: colors.background.tertiary,
+                    border: `1px solid ${colors.border.accent}`,
+                    color: colors.text.primary,
+                  }}
+                  onFocus={(e) =>
+                    (e.target.style.borderColor = colors.primary.DEFAULT)
+                  }
+                  onBlur={(e) =>
+                    (e.target.style.borderColor = colors.border.accent)
+                  }
+                  value={formData.confirmPassword}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      confirmPassword: e.target.value,
+                    }))
+                  }
+                  required
+                />
+              </motion.div>
+            )}
+
+            {/* Error Message */}
+            {error && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex items-center gap-2 p-3 rounded-md"
+                style={{
+                  backgroundColor: `${colors.danger.DEFAULT}15`,
+                  border: `1px solid ${colors.danger.DEFAULT}30`,
+                }}
+              >
+                <AlertCircle
+                  size={16}
+                  style={{ color: colors.danger.DEFAULT }}
+                />
+                <span
+                  className="text-sm"
+                  style={{ color: colors.danger.DEFAULT }}
+                >
+                  {error}
+                </span>
+              </motion.div>
+            )}
+
+            {/* Submit Button */}
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full py-3 rounded-md text-sm font-medium transition-all flex items-center justify-center gap-2"
+              style={{
+                backgroundColor: colors.primary.DEFAULT,
+                color: colors.background.primary,
+                opacity: loading ? 0.7 : 1,
+              }}
+              onMouseEnter={(e) => {
+                if (!loading) {
+                  e.currentTarget.style.boxShadow = `0 0 20px ${colors.primary.glow}`;
+                }
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.boxShadow = "none";
+              }}
+            >
+              {loading ? (
+                <>
+                  <Loader2 size={18} className="animate-spin" />
+                  <span>Processing...</span>
+                </>
+              ) : (
+                <span>{mode === "signin" ? "Sign In" : "Create Account"}</span>
+              )}
+            </button>
+          </form>
+
+          {/* Footer */}
+          <div
+            className="mt-6 pt-6 text-center text-xs"
+            style={{
+              borderTop: `1px solid ${colors.border.DEFAULT}`,
+              color: colors.text.muted,
+            }}
+          >
+            Noctisium
           </div>
         </div>
-        </div>
-      </TerminalFlicker>
+      </motion.div>
     </div>
   );
 };

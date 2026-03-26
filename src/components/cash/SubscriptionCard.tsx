@@ -6,7 +6,7 @@
  */
 
 import React, { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
   Star,
   Edit3,
@@ -15,8 +15,9 @@ import {
   Calendar,
   RefreshCw,
   AlertTriangle,
-  ChevronDown,
-  ChevronUp,
+  Trash2,
+  CheckCircle,
+  Circle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { RankedSubscription } from "@/lib/ai/subscriptionRanker";
@@ -25,6 +26,7 @@ import {
   getRankingColor,
   getRankingBgColor,
 } from "@/lib/ai/subscriptionRanker";
+import type { MerchantCategory } from "@/lib/ai/knownMerchants";
 
 interface SubscriptionCardProps {
   subscription: RankedSubscription;
@@ -32,7 +34,28 @@ interface SubscriptionCardProps {
   onUpdateName: (id: string, newName: string) => void;
   onUpdateImportance: (id: string, importance: 1 | 2 | 3 | 4 | 5) => void;
   onDismissSuggestion?: (id: string) => void;
+  onDelete?: (id: string) => void;
+  onClick?: () => void;
+  onToggleCancelled?: (id: string, cancelled: boolean) => void;
+  onUpdateCategory?: (id: string, category: MerchantCategory) => void;
 }
+
+// Available categories for dropdown
+const CATEGORY_OPTIONS: { value: MerchantCategory; label: string }[] = [
+  { value: "entertainment", label: "Entertainment" },
+  { value: "gaming", label: "Gaming" },
+  { value: "productivity", label: "Productivity" },
+  { value: "utilities", label: "Utilities" },
+  { value: "finance", label: "Finance" },
+  { value: "health", label: "Health" },
+  { value: "education", label: "Education" },
+  { value: "news", label: "News" },
+  { value: "lifestyle", label: "Lifestyle" },
+  { value: "food", label: "Food" },
+  { value: "shopping", label: "Shopping" },
+  { value: "transportation", label: "Transportation" },
+  { value: "other", label: "Other" },
+];
 
 // Category icons/emojis
 function getCategoryIcon(category?: string): string {
@@ -88,10 +111,13 @@ export const SubscriptionCard: React.FC<SubscriptionCardProps> = ({
   onUpdateName,
   onUpdateImportance,
   onDismissSuggestion,
+  onDelete,
+  onClick,
+  onToggleCancelled,
+  onUpdateCategory,
 }) => {
   const [isEditingName, setIsEditingName] = useState(false);
   const [editedName, setEditedName] = useState(subscription.displayName);
-  const [showDetails, setShowDetails] = useState(false);
 
   const formatCurrency = (value: number): string => {
     if (hideBalances) return "•••••";
@@ -119,9 +145,10 @@ export const SubscriptionCard: React.FC<SubscriptionCardProps> = ({
       {[1, 2, 3, 4, 5].map((level) => (
         <button
           key={level}
-          onClick={() =>
-            onUpdateImportance(subscription.id, level as 1 | 2 | 3 | 4 | 5)
-          }
+          onClick={(e) => {
+            e.stopPropagation();
+            onUpdateImportance(subscription.id, level as 1 | 2 | 3 | 4 | 5);
+          }}
           className={cn(
             "p-0.5 transition-colors",
             level <= subscription.importance
@@ -146,12 +173,17 @@ export const SubscriptionCard: React.FC<SubscriptionCardProps> = ({
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
+      onClick={onClick}
       className={cn(
         "relative rounded-lg border transition-colors group",
-        "bg-surface-secondary",
-        showCancelWarning
+        onClick && "cursor-pointer",
+        subscription.isCancelled
+          ? "bg-surface-secondary/50 border-green-500/30"
+          : "bg-surface-secondary",
+        !subscription.isCancelled && showCancelWarning
           ? "border-orange-500/30 hover:border-orange-500/50"
-          : "border-line hover:border-terminal-accent/30",
+          : !subscription.isCancelled &&
+              "border-line hover:border-terminal-accent/30",
       )}
     >
       {/* Main Content */}
@@ -166,7 +198,10 @@ export const SubscriptionCard: React.FC<SubscriptionCardProps> = ({
               {/* Name Row */}
               <div className="flex items-center gap-2">
                 {isEditingName ? (
-                  <div className="flex items-center gap-1">
+                  <div
+                    className="flex items-center gap-1"
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     <input
                       type="text"
                       value={editedName}
@@ -181,13 +216,19 @@ export const SubscriptionCard: React.FC<SubscriptionCardProps> = ({
                                  focus:outline-none w-40"
                     />
                     <button
-                      onClick={handleSaveName}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleSaveName();
+                      }}
                       className="p-1 text-[#5FE3B3] hover:bg-[#5FE3B3]/20 rounded"
                     >
                       <Check size={14} />
                     </button>
                     <button
-                      onClick={handleCancelEdit}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleCancelEdit();
+                      }}
                       className="p-1 text-terminal-accent/60 hover:bg-terminal-accent/20 rounded"
                     >
                       <X size={14} />
@@ -195,27 +236,78 @@ export const SubscriptionCard: React.FC<SubscriptionCardProps> = ({
                   </div>
                 ) : (
                   <>
-                    <span className="font-bold text-terminal-accent truncate">
+                    <span
+                      className={cn(
+                        "font-bold truncate",
+                        subscription.isCancelled
+                          ? "text-terminal-accent/50 line-through"
+                          : "text-terminal-accent",
+                      )}
+                    >
                       {subscription.displayName}
                     </span>
+                    {subscription.isCancelled && (
+                      <span className="text-xs px-1.5 py-0.5 rounded bg-green-500/20 text-green-400">
+                        Cancelled
+                      </span>
+                    )}
                     <button
-                      onClick={() => setIsEditingName(true)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setIsEditingName(true);
+                      }}
                       className="p-1 text-terminal-accent/30 hover:text-terminal-accent/70
                                  opacity-0 group-hover:opacity-100 transition-all rounded"
                       title="Edit name"
                     >
                       <Edit3 size={12} />
                     </button>
+                    {onDelete && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDelete(subscription.id);
+                        }}
+                        className="p-1 text-terminal-accent/30 hover:text-red-400
+                                   opacity-0 group-hover:opacity-100 transition-all rounded"
+                        title="Delete subscription"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    )}
                   </>
                 )}
               </div>
 
               {/* Category and Frequency */}
               <div className="flex items-center gap-2 mt-1">
-                {subscription.category && (
-                  <span className="text-xs text-terminal-accent/50 capitalize">
-                    {subscription.category}
-                  </span>
+                {onUpdateCategory ? (
+                  <select
+                    value={subscription.category || "other"}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      onUpdateCategory(
+                        subscription.id,
+                        e.target.value as MerchantCategory,
+                      );
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="text-xs text-terminal-accent/70 bg-transparent border-none
+                               cursor-pointer hover:text-terminal-accent focus:outline-none
+                               focus:ring-1 focus:ring-terminal-accent/30 rounded px-1 -ml-1"
+                  >
+                    {CATEGORY_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  subscription.category && (
+                    <span className="text-xs text-terminal-accent/50 capitalize">
+                      {subscription.category}
+                    </span>
+                  )
                 )}
                 <span className="text-xs text-terminal-accent/30">•</span>
                 <div className="flex items-center gap-1 text-xs text-terminal-accent/50">
@@ -292,7 +384,10 @@ export const SubscriptionCard: React.FC<SubscriptionCardProps> = ({
                 </p>
                 {onDismissSuggestion && (
                   <button
-                    onClick={() => onDismissSuggestion(subscription.id)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDismissSuggestion(subscription.id);
+                    }}
                     className="text-xs text-terminal-accent/50 hover:text-terminal-accent/70 mt-1"
                   >
                     Dismiss suggestion
@@ -303,52 +398,34 @@ export const SubscriptionCard: React.FC<SubscriptionCardProps> = ({
           </motion.div>
         )}
 
-        {/* Expand Button for Transaction History */}
-        {subscription.transactions.length > 0 && (
+        {/* Cancelled Toggle Button */}
+        {onToggleCancelled && (
           <button
-            onClick={() => setShowDetails(!showDetails)}
-            className="flex items-center gap-1 mt-3 text-xs text-terminal-accent/50
-                       hover:text-terminal-accent/70 transition-colors"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleCancelled(subscription.id, !subscription.isCancelled);
+            }}
+            className={cn(
+              "flex items-center gap-1.5 mt-3 text-xs transition-colors",
+              subscription.isCancelled
+                ? "text-green-400 hover:text-green-300"
+                : "text-terminal-accent/50 hover:text-terminal-accent/70",
+            )}
           >
-            {showDetails ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-            {subscription.transactions.length} transactions
+            {subscription.isCancelled ? (
+              <>
+                <CheckCircle size={14} />
+                Marked as cancelled
+              </>
+            ) : (
+              <>
+                <Circle size={14} />
+                Mark as cancelled
+              </>
+            )}
           </button>
         )}
       </div>
-
-      {/* Transaction History */}
-      <AnimatePresence>
-        {showDetails && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="border-t border-line/50 overflow-hidden"
-          >
-            <div className="p-3 bg-surface-primary/50 max-h-40 overflow-y-auto">
-              {subscription.transactions.map((txn, idx) => (
-                <div
-                  key={idx}
-                  className="flex items-center justify-between py-1.5 text-sm
-                             border-b border-line/30 last:border-b-0"
-                >
-                  <span className="text-terminal-accent/60">
-                    {new Date(txn.date).toLocaleDateString("en-US", {
-                      month: "short",
-                      day: "numeric",
-                      year: "numeric",
-                    })}
-                  </span>
-                  <span className="font-mono text-terminal-accent/80">
-                    {formatCurrency(Math.abs(txn.amount))}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/* Confidence Indicator */}
       {subscription.confidence < 0.8 && (
