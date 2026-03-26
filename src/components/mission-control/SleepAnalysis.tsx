@@ -20,9 +20,10 @@ export function SleepAnalysis({
     sleepHours !== null ? Math.min((sleepHours / 8) * 100, 100) : 0;
 
   const avg = useMemo(() => {
-    if (sleepSpark.length === 0) return null;
-    const sum = sleepSpark.reduce((a, b) => a + b, 0);
-    return (sum / sleepSpark.length).toFixed(1);
+    const valid = sleepSpark.filter((v) => v > 0);
+    if (valid.length === 0) return null;
+    const sum = valid.reduce((a, b) => a + b, 0);
+    return (sum / valid.length).toFixed(1);
   }, [sleepSpark]);
 
   const hasData = sleepHours !== null;
