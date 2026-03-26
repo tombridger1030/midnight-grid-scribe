@@ -33,6 +33,11 @@ export const mcTokens = {
       amber: "#ffb800", // recovery 34-66%
       red: "#ff3366", // recovery 0-33%
     },
+    trend: {
+      positive: "#00ff88", // upward trends
+      negative: "#ff3366", // downward trends
+      neutral: "#5a7a9e", // no change / insufficient data
+    },
     heatmap: {
       empty: "#0d1f3c", // 0 commits
       low: "#00a3cc", // 1-3 commits

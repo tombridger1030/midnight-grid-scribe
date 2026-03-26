@@ -4,6 +4,18 @@ import regression from "regression";
 import { mcTokens } from "@/styles/mission-control-tokens";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
+import {
+  MissionTimer,
+  EngineeringSummary,
+  CommitHeatmap,
+  RepoStatusTable,
+  RecoveryGauge,
+  LocTelemetry,
+  PrPipeline,
+  VitalsReadout,
+  SleepAnalysis,
+  TrajectoryBar,
+} from "@/components/mission-control";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -56,16 +68,6 @@ function daysAgo(n: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-function minutesAgo(iso: string | null): string {
-  if (!iso) return "never";
-  const diff = Date.now() - new Date(iso).getTime();
-  const mins = Math.round(diff / 60_000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.round(mins / 60);
-  return `${hrs}h ago`;
-}
-
 function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
@@ -86,11 +88,6 @@ function startOfMonth(): string {
 function daysInMonth(): number {
   const d = new Date();
   return new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
-}
-
-function pct(a: number, b: number): string {
-  if (b === 0) return "--";
-  return `${Math.round((a / b) * 100)}%`;
 }
 
 function trend(
@@ -167,237 +164,6 @@ function computePrediction(
 }
 
 // ---------------------------------------------------------------------------
-// Sparkline (interactive SVG with hover crosshair + tooltip)
-// ---------------------------------------------------------------------------
-
-function Sparkline({
-  data,
-  labels,
-  unit,
-}: {
-  data: number[];
-  labels?: string[];
-  unit?: string;
-}) {
-  const points = data.slice(-30);
-  const pointLabels = labels ? labels.slice(-30) : undefined;
-  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
-
-  if (points.length < 2) return null;
-  const max = Math.max(...points, 1);
-  const min = Math.min(...points, 0);
-  const range = max - min || 1;
-  const w = 400;
-  const h = 60;
-  const step = w / (points.length - 1);
-
-  const polyline = points
-    .map((v, i) => `${i * step},${h - ((v - min) / range) * (h - 4) - 2}`)
-    .join(" ");
-
-  const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
-    const svg = e.currentTarget;
-    const rect = svg.getBoundingClientRect();
-    const relativeX = (e.clientX - rect.left) / rect.width;
-    const idx = Math.round(relativeX * (points.length - 1));
-    const clamped = Math.max(0, Math.min(points.length - 1, idx));
-    setHoverIndex(clamped);
-  };
-
-  const handleMouseLeave = () => {
-    setHoverIndex(null);
-  };
-
-  const hoverX = hoverIndex !== null ? hoverIndex * step : 0;
-  const hoverY =
-    hoverIndex !== null
-      ? h - ((points[hoverIndex] - min) / range) * (h - 4) - 2
-      : 0;
-  const hoverValue = hoverIndex !== null ? points[hoverIndex] : 0;
-  const hoverLabel =
-    hoverIndex !== null && pointLabels ? pointLabels[hoverIndex] : null;
-
-  // Tooltip positioning: flip to left side if near right edge
-  const tooltipFlip = hoverIndex !== null && hoverIndex > points.length * 0.75;
-
-  return (
-    <div style={{ position: "relative" }}>
-      <svg
-        viewBox={`0 0 ${w} ${h}`}
-        preserveAspectRatio="none"
-        style={{
-          width: "100%",
-          height: 60,
-          display: "block",
-          cursor: "crosshair",
-        }}
-        onMouseMove={handleMouseMove}
-        onMouseLeave={handleMouseLeave}
-      >
-        {[0.25, 0.5, 0.75].map((f) => (
-          <line
-            key={f}
-            x1={0}
-            y1={h * f}
-            x2={w}
-            y2={h * f}
-            stroke={mcTokens.colors.border.subtle}
-            strokeWidth={0.5}
-          />
-        ))}
-        <polyline
-          points={polyline}
-          fill="none"
-          stroke={mcTokens.colors.text.primary}
-          strokeWidth={1.5}
-        />
-        {hoverIndex !== null && (
-          <>
-            {/* Crosshair vertical line */}
-            <line
-              x1={hoverX}
-              y1={0}
-              x2={hoverX}
-              y2={h}
-              stroke="#333"
-              strokeWidth={1}
-              strokeDasharray="2,2"
-            />
-            {/* Dot marker */}
-            <circle
-              cx={hoverX}
-              cy={hoverY}
-              r={3}
-              fill={mcTokens.colors.text.primary}
-              stroke="#080808"
-              strokeWidth={1}
-            />
-          </>
-        )}
-      </svg>
-      {/* Tooltip rendered outside SVG for proper text rendering */}
-      {hoverIndex !== null && (
-        <div
-          style={{
-            position: "absolute",
-            top: -8,
-            left: tooltipFlip
-              ? `calc(${(hoverX / w) * 100}% - 120px)`
-              : `calc(${(hoverX / w) * 100}% + 8px)`,
-            background: "#141414",
-            border: "1px solid #151515",
-            padding: "4px 8px",
-            fontSize: "10px",
-            fontFamily: mcTokens.typography.fontFamily,
-            color: "#e8e8e8",
-            whiteSpace: "nowrap",
-            pointerEvents: "none",
-            zIndex: 10,
-          }}
-        >
-          {hoverLabel ? `${hoverLabel}: ` : ""}
-          {hoverValue}
-          {unit ? ` ${unit}` : ""}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Sub-components
-// ---------------------------------------------------------------------------
-
-const fadeVariant = {
-  hidden: { opacity: 0, y: 12 },
-  visible: (i: number) => ({
-    opacity: 1,
-    y: 0,
-    transition: {
-      delay: i * mcTokens.animation.staggerDelay,
-      duration: mcTokens.animation.fadeIn.duration,
-      ease: mcTokens.animation.fadeIn.ease,
-    },
-  }),
-};
-
-function Label({ children }: { children: React.ReactNode }) {
-  return (
-    <span
-      style={{
-        fontSize: mcTokens.typography.label.size,
-        fontWeight: mcTokens.typography.label.weight,
-        letterSpacing: mcTokens.typography.label.letterSpacing,
-        textTransform: mcTokens.typography.label.textTransform,
-        color: mcTokens.colors.text.secondary,
-      }}
-    >
-      {children}
-    </span>
-  );
-}
-
-function MetricRow({
-  label,
-  value,
-  suffix,
-  trendLabel,
-  trendColor,
-}: {
-  label: string;
-  value: string | number;
-  suffix?: string;
-  trendLabel?: string;
-  trendColor?: string;
-}) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "baseline",
-        padding: `${mcTokens.spacing.inner} 0`,
-        borderBottom: `1px solid ${mcTokens.colors.border.default}`,
-      }}
-    >
-      <Label>{label}</Label>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-        <span
-          style={{
-            fontSize: mcTokens.typography.metric.size,
-            fontWeight: mcTokens.typography.metric.weight,
-            color: mcTokens.colors.text.primary,
-          }}
-        >
-          {value}
-          {suffix && (
-            <span
-              style={{
-                fontSize: mcTokens.typography.body.size,
-                color: mcTokens.colors.text.secondary,
-                marginLeft: 4,
-              }}
-            >
-              {suffix}
-            </span>
-          )}
-        </span>
-        {trendLabel && (
-          <span
-            style={{
-              fontSize: mcTokens.typography.body.size,
-              color: trendColor ?? mcTokens.colors.trend.neutral,
-            }}
-          >
-            {trendLabel}
-          </span>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // Data hook
 // ---------------------------------------------------------------------------
 
@@ -433,7 +199,7 @@ function useMissionControlData() {
       supabase
         .from("mission_control_sync")
         .select(
-          "github_repos, whoop_connected, last_github_sync, last_whoop_sync",
+          "github_repos, whoop_connected, last_github_sync, last_whoop_sync, github_sync_errors, whoop_sync_errors",
         )
         .eq("user_id", user.id)
         .maybeSingle(),
@@ -616,6 +382,16 @@ function useHealthMetrics(health: HealthRow[]) {
       sparkLabels.push(`${shortMonths[dt.getMonth()]} ${dt.getDate()}`);
     }
 
+    // Sleep sparkline: last 30 days of sleep hours + labels
+    const sleepSpark: number[] = [];
+    const sleepLabels: string[] = [];
+    for (let i = 29; i >= 0; i--) {
+      const d = daysAgo(i);
+      sleepSpark.push(healthMap.get(d)?.sleep_hours ?? 0);
+      const dt = new Date(d + "T12:00:00");
+      sleepLabels.push(`${shortMonths[dt.getMonth()]} ${dt.getDate()}`);
+    }
+
     // Prediction on recovery
     const sorted = [...health].sort((a, b) => a.date.localeCompare(b.date));
     const predData = sorted
@@ -647,21 +423,34 @@ function useHealthMetrics(health: HealthRow[]) {
       },
       spark,
       sparkLabels,
+      sleepSpark,
+      sleepLabels,
       prediction,
     };
   }, [health]);
 }
 
 // ---------------------------------------------------------------------------
-// Page
+// Stagger animation variant
 // ---------------------------------------------------------------------------
 
-const panelStyle: React.CSSProperties = {
-  background: mcTokens.colors.bg.panel,
-  border: `1px solid ${mcTokens.colors.border.default}`,
-  borderTop: `2px solid #1a1a1a`,
-  padding: mcTokens.spacing.section,
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- framer-motion v12 Variants type doesn't support function variants
+const fadeVariant: any = {
+  hidden: { opacity: 0, y: 12 },
+  visible: (i: number) => ({
+    opacity: 1,
+    y: 0,
+    transition: {
+      delay: i * mcTokens.animation.staggerDelay,
+      duration: mcTokens.animation.fadeIn.duration,
+      ease: [...mcTokens.animation.fadeIn.ease],
+    },
+  }),
 };
+
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
 
 const MissionControl: React.FC = () => {
   const { user } = useAuth();
@@ -669,78 +458,31 @@ const MissionControl: React.FC = () => {
   const eng = useEngMetrics(commits);
   const healthM = useHealthMetrics(health);
 
-  // Ticking clock
-  const [clockStr, setClockStr] = useState(() => {
-    const now = new Date();
-    const mm = String(now.getMonth() + 1).padStart(2, "0");
-    const dd = String(now.getDate()).padStart(2, "0");
-    const yyyy = now.getFullYear();
-    const hh = String(now.getHours()).padStart(2, "0");
-    const mi = String(now.getMinutes()).padStart(2, "0");
-    const ss = String(now.getSeconds()).padStart(2, "0");
-    return `${mm}/${dd}/${yyyy} ${hh}:${mi}:${ss}`;
-  });
-
-  useEffect(() => {
-    const tick = setInterval(() => {
-      const now = new Date();
-      const mm = String(now.getMonth() + 1).padStart(2, "0");
-      const dd = String(now.getDate()).padStart(2, "0");
-      const yyyy = now.getFullYear();
-      const hh = String(now.getHours()).padStart(2, "0");
-      const mi = String(now.getMinutes()).padStart(2, "0");
-      const ss = String(now.getSeconds()).padStart(2, "0");
-      setClockStr(`${mm}/${dd}/${yyyy} ${hh}:${mi}:${ss}`);
-    }, 1000);
-    return () => clearInterval(tick);
-  }, []);
-
-  const githubConnected = sync !== null && (sync.github_repos?.length ?? 0) > 0;
-  const whoopConnected = sync?.whoop_connected ?? false;
-  const isEmpty = !githubConnected && !whoopConnected;
-
-  // Determine sync status
+  // Sync status
   const lastSync = [sync?.last_github_sync, sync?.last_whoop_sync]
     .filter(Boolean)
     .sort()
-    .pop();
-  const syncAge = lastSync
-    ? Date.now() - new Date(lastSync).getTime()
-    : Infinity;
-  const hasErrors =
+    .pop() as string | null;
+
+  const syncErrors =
     (sync?.github_sync_errors?.length ?? 0) >= 3 ||
     (sync?.whoop_sync_errors?.length ?? 0) >= 3;
-  const isStale = syncAge > 60 * 60 * 1000; // > 1 hour
-  const isFresh = !hasErrors && (!isStale || !lastSync);
-  const syncLabel = hasErrors
-    ? "SYNC ERROR"
-    : isStale && lastSync
-      ? `STALE -- LAST DATA ${minutesAgo(lastSync)}`
-      : `SYNCED ${minutesAgo(lastSync)}`;
-  const syncColor = hasErrors
-    ? mcTokens.colors.status.error
-    : isStale && lastSync
-      ? mcTokens.colors.status.stale
-      : mcTokens.colors.text.muted;
+
+  const lastCommitDate =
+    commits.length > 0
+      ? commits.reduce(
+          (latest, c) => (c.date > latest ? c.date : latest),
+          commits[0].date,
+        )
+      : null;
+
+  const whoopConnected = sync?.whoop_connected ?? false;
+  const repoCount = sync?.github_repos?.length ?? 0;
+
+  const githubConnected = repoCount > 0;
+  const isEmpty = !githubConnected && !whoopConnected;
 
   if (!user) return null;
-
-  // ---- Shared font base ----
-  const fontBase: React.CSSProperties = {
-    fontFamily: mcTokens.typography.fontFamily,
-    color: mcTokens.colors.text.primary,
-  };
-
-  // Scoped selection override + pulsing green dot animation
-  const selectionStyle = (
-    <style>{`
-      .mc-root ::selection { background: #333; color: #e8e8e8; }
-      @keyframes mc-pulse {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.3; }
-      }
-    `}</style>
-  );
 
   // ---- Loading state ----
   if (loading) {
@@ -748,16 +490,21 @@ const MissionControl: React.FC = () => {
       <div
         className="mc-root"
         style={{
-          ...fontBase,
+          fontFamily: mcTokens.typography.fontFamily,
           background: mcTokens.colors.bg.primary,
+          color: mcTokens.colors.accent.teal,
           minHeight: "100vh",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
+          fontSize: mcTokens.typography.label.size,
+          fontWeight: mcTokens.typography.label.weight,
+          letterSpacing: mcTokens.typography.label.letterSpacing,
+          textTransform: mcTokens.typography.label.textTransform,
         }}
       >
-        {selectionStyle}
-        <Label>LOADING TELEMETRY...</Label>
+        <style>{`.mc-root ::selection { background: #1a3a6e; color: #c8d6e5; }`}</style>
+        LOADING TELEMETRY...
       </div>
     );
   }
@@ -768,23 +515,21 @@ const MissionControl: React.FC = () => {
       <div
         className="mc-root"
         style={{
-          ...fontBase,
+          fontFamily: mcTokens.typography.fontFamily,
           background: mcTokens.colors.bg.primary,
+          color: mcTokens.colors.text.secondary,
           minHeight: "100vh",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
+          fontSize: mcTokens.typography.label.size,
+          fontWeight: mcTokens.typography.label.weight,
+          letterSpacing: mcTokens.typography.label.letterSpacing,
+          textTransform: mcTokens.typography.label.textTransform,
         }}
       >
-        {selectionStyle}
-        <p
-          style={{
-            fontSize: mcTokens.typography.body.size,
-            color: mcTokens.colors.text.secondary,
-          }}
-        >
-          Connect GitHub and Whoop in Settings to begin.
-        </p>
+        <style>{`.mc-root ::selection { background: #1a3a6e; color: #c8d6e5; }`}</style>
+        CONNECT GITHUB AND WHOOP IN SETTINGS
       </div>
     );
   }
@@ -793,354 +538,161 @@ const MissionControl: React.FC = () => {
     <div
       className="mc-root"
       style={{
-        ...fontBase,
+        fontFamily: mcTokens.typography.fontFamily,
         background: mcTokens.colors.bg.primary,
+        color: mcTokens.colors.text.primary,
         minHeight: "100vh",
         display: "flex",
         flexDirection: "column",
       }}
     >
-      {selectionStyle}
+      <style>{`.mc-root ::selection { background: #1a3a6e; color: #c8d6e5; }`}</style>
 
-      {/* ---- Status Bar ---- */}
-      <header
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          padding: `${mcTokens.spacing.inner} ${mcTokens.spacing.page}`,
-          borderBottom: `1px solid ${mcTokens.colors.border.default}`,
-        }}
-      >
-        <Label>NOCTISIUM</Label>
-        <span
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            fontSize: mcTokens.typography.tiny.size,
-            letterSpacing: mcTokens.typography.tiny.letterSpacing,
-            textTransform: mcTokens.typography.tiny.textTransform,
-            color: syncColor,
-          }}
-        >
-          <span
-            style={{
-              display: "inline-block",
-              width: 5,
-              height: 5,
-              borderRadius: "50%",
-              background: isFresh ? "#4a4" : syncColor,
-              animation: !isFresh ? "mc-pulse 2s ease-in-out infinite" : "none",
-              flexShrink: 0,
-            }}
-          />
-          {syncLabel}
-        </span>
-        <Label>{clockStr}</Label>
-      </header>
+      {/* Row 0: Mission Timer (full width) */}
+      <MissionTimer
+        lastSync={lastSync}
+        syncErrors={syncErrors}
+        lastCommitDate={lastCommitDate}
+      />
 
-      {/* ---- Main Grid ---- */}
-      <main
-        className="grid grid-cols-1 md:grid-cols-2"
+      {/* Main Grid: 4 columns, 2 rows */}
+      <div
+        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4"
         style={{
           flex: 1,
-          gap: 0,
+          gap: mcTokens.spacing.gap,
           padding: mcTokens.spacing.page,
-          paddingTop: mcTokens.spacing.section,
         }}
       >
-        {/* =========== ENGINEERING OUTPUT =========== */}
-        <motion.section
-          style={{
-            ...panelStyle,
-            borderRight: `1px solid #1a1a1a`,
-          }}
+        {/* Row 1 */}
+        <motion.div
+          style={mcTokens.panel}
           custom={0}
           variants={fadeVariant}
           initial="hidden"
           animate="visible"
         >
-          <Label>ENGINEERING OUTPUT</Label>
+          <EngineeringSummary
+            monthCommits={eng.monthCommits}
+            weekCommits={eng.weekCommits}
+            weekTrend={eng.weekTrend}
+            totalPRsCreated={eng.totalPRsCreated}
+            totalPRsMerged={eng.totalPRsMerged}
+            shipDays={eng.shipDays}
+            totalDaysThisMonth={eng.totalDaysThisMonth}
+            monthLinesAdded={eng.monthLinesAdded}
+            monthLinesDeleted={eng.monthLinesDeleted}
+          />
+        </motion.div>
 
-          {githubConnected ? (
-            <>
-              {/* Hero */}
-              <div style={{ marginTop: mcTokens.spacing.section }}>
-                <span
-                  style={{
-                    fontSize:
-                      eng.todayCommits === 0
-                        ? "80px"
-                        : mcTokens.typography.hero.size,
-                    fontWeight: mcTokens.typography.hero.weight,
-                    lineHeight: mcTokens.typography.hero.lineHeight,
-                    color: mcTokens.colors.text.primary,
-                    display: "block",
-                  }}
-                >
-                  {eng.todayCommits}
-                </span>
-                <span
-                  style={{
-                    fontSize: mcTokens.typography.body.size,
-                    color: mcTokens.colors.text.secondary,
-                  }}
-                >
-                  commits today
-                  {eng.repos > 0 &&
-                    ` across ${eng.repos} repositor${eng.repos === 1 ? "y" : "ies"}`}
-                </span>
-              </div>
-
-              {/* Sparkline */}
-              <div style={{ margin: `${mcTokens.spacing.section} 0` }}>
-                <Sparkline
-                  data={eng.spark}
-                  labels={eng.sparkLabels}
-                  unit="commits"
-                />
-              </div>
-
-              {/* Metric rows */}
-              <MetricRow
-                label="THIS WEEK"
-                value={eng.weekCommits}
-                trendLabel={eng.weekTrend.label}
-                trendColor={eng.weekTrend.color}
-              />
-              <MetricRow label="THIS MONTH" value={eng.monthCommits} />
-              <MetricRow label="PRS CREATED" value={eng.totalPRsCreated} />
-              <MetricRow
-                label="PRS MERGED"
-                value={eng.totalPRsMerged}
-                trendLabel={
-                  eng.totalPRsCreated > 0
-                    ? pct(eng.totalPRsMerged, eng.totalPRsCreated)
-                    : undefined
-                }
-                trendColor={mcTokens.colors.text.secondary}
-              />
-              <MetricRow
-                label="SHIP DAYS"
-                value={`${eng.shipDays}/${eng.totalDaysThisMonth}`}
-                trendLabel={pct(eng.shipDays, eng.totalDaysThisMonth)}
-                trendColor={mcTokens.colors.text.secondary}
-              />
-              <MetricRow
-                label="LINES ADDED"
-                value={eng.monthLinesAdded.toLocaleString()}
-                trendColor="#4a4"
-              />
-              <MetricRow
-                label="LINES DELETED"
-                value={eng.monthLinesDeleted.toLocaleString()}
-                trendColor="#a44"
-              />
-
-              {/* Prediction */}
-              <div style={{ marginTop: mcTokens.spacing.section }}>
-                <Label>TRAJECTORY</Label>
-                <p
-                  style={{
-                    fontSize: mcTokens.typography.body.size,
-                    color: mcTokens.colors.text.secondary,
-                    marginTop: 8,
-                  }}
-                >
-                  {eng.prediction ? eng.prediction.text : "Collecting data..."}
-                </p>
-              </div>
-            </>
-          ) : (
-            <p
-              style={{
-                fontSize: mcTokens.typography.body.size,
-                color: mcTokens.colors.text.secondary,
-                marginTop: mcTokens.spacing.section,
-              }}
-            >
-              Connect GitHub in Settings to begin.
-            </p>
-          )}
-        </motion.section>
-
-        {/* =========== HEALTH TELEMETRY =========== */}
-        <motion.section
-          style={panelStyle}
+        <motion.div
+          style={mcTokens.panel}
           custom={1}
           variants={fadeVariant}
           initial="hidden"
           animate="visible"
         >
-          <Label>HEALTH TELEMETRY</Label>
+          <CommitHeatmap commits={commits} />
+        </motion.div>
 
-          {whoopConnected && healthM ? (
-            <>
-              {/* Hero */}
-              <div style={{ marginTop: mcTokens.spacing.section }}>
-                <span
-                  style={{
-                    fontSize: mcTokens.typography.hero.size,
-                    fontWeight: mcTokens.typography.hero.weight,
-                    lineHeight: mcTokens.typography.hero.lineHeight,
-                    color: mcTokens.colors.text.primary,
-                    display: "block",
-                  }}
-                >
-                  {healthM.recovery != null
-                    ? `${Math.round(healthM.recovery)}%`
-                    : "--"}
-                </span>
-                <span
-                  style={{
-                    fontSize: mcTokens.typography.body.size,
-                    color: mcTokens.colors.text.secondary,
-                  }}
-                >
-                  Whoop &middot; synced{" "}
-                  {minutesAgo(sync?.last_whoop_sync ?? null)}
-                </span>
-              </div>
-
-              {/* Sparkline */}
-              <div style={{ margin: `${mcTokens.spacing.section} 0` }}>
-                <Sparkline
-                  data={healthM.spark}
-                  labels={healthM.sparkLabels}
-                  unit="% recovery"
-                />
-              </div>
-
-              {/* Metric rows */}
-              <MetricRow
-                label="HRV"
-                value={healthM.hrv != null ? Math.round(healthM.hrv) : "--"}
-                suffix="ms"
-                trendLabel={healthM.hrvTrend.label}
-                trendColor={healthM.hrvTrend.color}
-              />
-              <MetricRow
-                label="RESTING HR"
-                value={
-                  healthM.restingHR != null
-                    ? Math.round(healthM.restingHR)
-                    : "--"
-                }
-                suffix="bpm"
-                trendLabel={healthM.hrTrend.label}
-                trendColor={healthM.hrTrend.color}
-              />
-              <MetricRow
-                label="SLEEP"
-                value={
-                  healthM.sleepHours != null
-                    ? healthM.sleepHours.toFixed(1)
-                    : "--"
-                }
-                suffix="h"
-                trendLabel={
-                  healthM.sleepEfficiency != null
-                    ? `${Math.round(healthM.sleepEfficiency)}%`
-                    : undefined
-                }
-                trendColor={mcTokens.colors.text.secondary}
-              />
-              <MetricRow
-                label="STRAIN"
-                value={
-                  healthM.strain != null ? healthM.strain.toFixed(1) : "--"
-                }
-              />
-              <MetricRow
-                label="CALORIES"
-                value={
-                  healthM.calories != null
-                    ? healthM.calories.toLocaleString("en-US")
-                    : "--"
-                }
-              />
-
-              {/* Prediction */}
-              <div style={{ marginTop: mcTokens.spacing.section }}>
-                <Label>TRAJECTORY</Label>
-                <p
-                  style={{
-                    fontSize: mcTokens.typography.body.size,
-                    color: mcTokens.colors.text.secondary,
-                    marginTop: 8,
-                  }}
-                >
-                  {healthM.prediction
-                    ? healthM.prediction.text
-                    : "Collecting data..."}
-                </p>
-              </div>
-            </>
-          ) : (
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flex: 1,
-                minHeight: 200,
-                marginTop: mcTokens.spacing.section,
-              }}
-            >
-              <div
-                style={{
-                  border: `1px dashed ${mcTokens.colors.text.muted}`,
-                  padding: "20px 32px",
-                  textAlign: "center",
-                }}
-              >
-                <p
-                  style={{
-                    fontSize: mcTokens.typography.body.size,
-                    color: mcTokens.colors.text.secondary,
-                    margin: 0,
-                  }}
-                >
-                  Connect Whoop in Settings
-                </p>
-              </div>
-            </div>
-          )}
-        </motion.section>
-      </main>
-
-      {/* ---- Footer ---- */}
-      <footer
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          padding: `${mcTokens.spacing.inner} ${mcTokens.spacing.page}`,
-          borderTop: `1px solid #151515`,
-        }}
-      >
-        <span
-          style={{
-            fontSize: mcTokens.typography.tiny.size,
-            letterSpacing: mcTokens.typography.tiny.letterSpacing,
-            textTransform: mcTokens.typography.tiny.textTransform,
-            color: mcTokens.colors.text.muted,
-          }}
+        <motion.div
+          style={mcTokens.panel}
+          custom={2}
+          variants={fadeVariant}
+          initial="hidden"
+          animate="visible"
         >
-          GitHub API &middot; Whoop API
-        </span>
-        <span
-          style={{
-            fontSize: mcTokens.typography.tiny.size,
-            letterSpacing: mcTokens.typography.tiny.letterSpacing,
-            textTransform: mcTokens.typography.tiny.textTransform,
-            color: mcTokens.colors.text.muted,
-          }}
+          <RepoStatusTable commits={commits} repoCount={repoCount} />
+        </motion.div>
+
+        <motion.div
+          style={mcTokens.panel}
+          custom={3}
+          variants={fadeVariant}
+          initial="hidden"
+          animate="visible"
         >
-          90-day rolling linear regression
-        </span>
-      </footer>
+          <RecoveryGauge
+            recovery={healthM?.recovery ?? null}
+            hrv={healthM?.hrv ?? null}
+            strain={healthM?.strain ?? null}
+            sleepHours={healthM?.sleepHours ?? null}
+            whoopConnected={whoopConnected}
+          />
+        </motion.div>
+
+        {/* Row 2 */}
+        <motion.div
+          style={mcTokens.panel}
+          custom={4}
+          variants={fadeVariant}
+          initial="hidden"
+          animate="visible"
+        >
+          <LocTelemetry commits={commits} />
+        </motion.div>
+
+        <motion.div
+          style={mcTokens.panel}
+          custom={5}
+          variants={fadeVariant}
+          initial="hidden"
+          animate="visible"
+        >
+          <PrPipeline
+            totalPRsCreated={eng.totalPRsCreated}
+            totalPRsMerged={eng.totalPRsMerged}
+          />
+        </motion.div>
+
+        <motion.div
+          style={mcTokens.panel}
+          custom={6}
+          variants={fadeVariant}
+          initial="hidden"
+          animate="visible"
+        >
+          <VitalsReadout
+            hrv={healthM?.hrv ?? null}
+            restingHR={healthM?.restingHR ?? null}
+            strain={healthM?.strain ?? null}
+            calories={healthM?.calories ?? null}
+            hrvTrend={
+              healthM?.hrvTrend ?? {
+                label: "--",
+                color: mcTokens.colors.text.secondary,
+              }
+            }
+            hrTrend={
+              healthM?.hrTrend ?? {
+                label: "--",
+                color: mcTokens.colors.text.secondary,
+              }
+            }
+          />
+        </motion.div>
+
+        <motion.div
+          style={mcTokens.panel}
+          custom={7}
+          variants={fadeVariant}
+          initial="hidden"
+          animate="visible"
+        >
+          <SleepAnalysis
+            sleepHours={healthM?.sleepHours ?? null}
+            sleepEfficiency={healthM?.sleepEfficiency ?? null}
+            sleepSpark={healthM?.sleepSpark ?? []}
+            sleepLabels={healthM?.sleepLabels ?? []}
+          />
+        </motion.div>
+      </div>
+
+      {/* Row 3: Trajectory (full width) */}
+      <TrajectoryBar
+        engPrediction={eng.prediction}
+        healthPrediction={healthM?.prediction ?? null}
+      />
     </div>
   );
 };
