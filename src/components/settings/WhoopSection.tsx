@@ -59,11 +59,14 @@ export const WhoopSection: React.FC = () => {
     }
 
     const redirectUri = `${SUPABASE_URL}/functions/v1/whoop-callback`;
+    const state = crypto.randomUUID().replace(/-/g, "").slice(0, 16);
+    sessionStorage.setItem("whoop_oauth_state", state);
     const params = new URLSearchParams({
       client_id: WHOOP_CLIENT_ID,
       redirect_uri: redirectUri,
       response_type: "code",
       scope: WHOOP_SCOPES,
+      state,
     });
 
     window.location.href = `${WHOOP_AUTH_URL}?${params.toString()}`;

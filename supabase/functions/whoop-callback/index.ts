@@ -12,9 +12,47 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // Supabase Edge Functions may not pass query params via req.url correctly.
+    // Try multiple methods to extract the authorization code.
     const url = new URL(req.url);
-    const code = url.searchParams.get("code");
-    if (!code) return errorResponse("Missing authorization code", 400);
+    let code = url.searchParams.get("code");
+
+    // Fallback: check raw URL string for code param
+    if (!code) {
+      const rawMatch = req.url.match(/[?&]code=([^&]+)/);
+      if (rawMatch) code = decodeURIComponent(rawMatch[1]);
+    }
+
+    // Fallback: check request body (some OAuth providers POST the code)
+    if (!code && req.method === "POST") {
+      try {
+        const body = await req.text();
+        const bodyParams = new URLSearchParams(body);
+        code = bodyParams.get("code");
+      } catch {
+        /* ignore */
+      }
+    }
+
+    // Fallback: check x-forwarded-uri or referer headers
+    if (!code) {
+      const forwarded =
+        req.headers.get("x-forwarded-uri") ||
+        req.headers.get("x-original-url") ||
+        "";
+      const fwdMatch = forwarded.match(/[?&]code=([^&]+)/);
+      if (fwdMatch) code = decodeURIComponent(fwdMatch[1]);
+    }
+
+    if (!code) {
+      console.error(
+        "No code found. req.url:",
+        req.url,
+        "headers:",
+        JSON.stringify(Object.fromEntries(req.headers)),
+      );
+      return errorResponse("Missing authorization code. URL: " + req.url, 400);
+    }
 
     const clientId = Deno.env.get("WHOOP_CLIENT_ID");
     const clientSecret = Deno.env.get("WHOOP_CLIENT_SECRET");
