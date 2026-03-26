@@ -73,7 +73,7 @@ async function whoopFetch<T>(
 
     if (!res.ok) {
       const body = await res.text().catch(() => "");
-      console.error(`Whoop API ${res.status}: ${body}`);
+      console.error(`Whoop API error: status ${res.status}`);
       return { ok: false, status: res.status, data: null };
     }
 
@@ -118,7 +118,7 @@ async function refreshAccessToken(refreshToken: string): Promise<{
 
     if (!res.ok) {
       const body = await res.text().catch(() => "");
-      console.error(`Token refresh failed (${res.status}): ${body}`);
+      console.error(`Token refresh failed: status ${res.status}`);
       return { ok: false, status: res.status };
     }
 
@@ -416,6 +416,6 @@ Deno.serve(async (req) => {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("whoop-sync fatal error:", msg);
-    return errorResponse(msg, 500);
+    return errorResponse("Whoop sync failed", 500);
   }
 });

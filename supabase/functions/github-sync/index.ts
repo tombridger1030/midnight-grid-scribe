@@ -284,6 +284,6 @@ Deno.serve(async (req) => {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("github-sync fatal error:", msg);
-    return errorResponse(msg, 500);
+    return errorResponse("GitHub sync failed", 500);
   }
 });

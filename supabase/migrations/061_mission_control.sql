@@ -80,8 +80,21 @@ AS $$
   UPDATE vault.secrets SET secret = new_secret WHERE name = secret_name;
 $$;
 
+-- Helper function to create vault secrets (for initial OAuth token storage)
+CREATE OR REPLACE FUNCTION public.create_vault_secret(secret_name text, secret_value text)
+RETURNS void
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  INSERT INTO vault.secrets (name, secret) VALUES (secret_name, secret_value)
+  ON CONFLICT (name) DO UPDATE SET secret = EXCLUDED.secret;
+$$;
+
 -- Restrict vault helper functions to service_role only
 REVOKE ALL ON FUNCTION public.get_vault_secret(text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.get_vault_secret(text) TO service_role;
 REVOKE ALL ON FUNCTION public.update_vault_secret(text, text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.update_vault_secret(text, text) TO service_role;
+REVOKE ALL ON FUNCTION public.create_vault_secret(text, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.create_vault_secret(text, text) TO service_role;

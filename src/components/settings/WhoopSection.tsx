@@ -6,7 +6,7 @@
 import React, { useState, useEffect } from "react";
 import { Activity, Loader2, CheckCircle2, XCircle, Unlink } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/lib/supabase";
+import { supabase, SUPABASE_URL } from "@/lib/supabase";
 import { SettingsSection } from "./SettingsSection";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -58,7 +58,7 @@ export const WhoopSection: React.FC = () => {
       return;
     }
 
-    const redirectUri = `${window.location.origin}/settings?whoop_callback=true`;
+    const redirectUri = `${SUPABASE_URL}/functions/v1/whoop-callback`;
     const params = new URLSearchParams({
       client_id: WHOOP_CLIENT_ID,
       redirect_uri: redirectUri,
