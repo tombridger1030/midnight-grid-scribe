@@ -166,20 +166,23 @@ function computePrediction(
   };
 }
 
-function formatDate(): string {
-  return new Date().toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  });
-}
-
 // ---------------------------------------------------------------------------
-// Sparkline (pure SVG)
+// Sparkline (interactive SVG with hover crosshair + tooltip)
 // ---------------------------------------------------------------------------
 
-function Sparkline({ data }: { data: number[] }) {
+function Sparkline({
+  data,
+  labels,
+  unit,
+}: {
+  data: number[];
+  labels?: string[];
+  unit?: string;
+}) {
   const points = data.slice(-30);
+  const pointLabels = labels ? labels.slice(-30) : undefined;
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+
   if (points.length < 2) return null;
   const max = Math.max(...points, 1);
   const min = Math.min(...points, 0);
@@ -192,30 +195,112 @@ function Sparkline({ data }: { data: number[] }) {
     .map((v, i) => `${i * step},${h - ((v - min) / range) * (h - 4) - 2}`)
     .join(" ");
 
+  const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
+    const svg = e.currentTarget;
+    const rect = svg.getBoundingClientRect();
+    const relativeX = (e.clientX - rect.left) / rect.width;
+    const idx = Math.round(relativeX * (points.length - 1));
+    const clamped = Math.max(0, Math.min(points.length - 1, idx));
+    setHoverIndex(clamped);
+  };
+
+  const handleMouseLeave = () => {
+    setHoverIndex(null);
+  };
+
+  const hoverX = hoverIndex !== null ? hoverIndex * step : 0;
+  const hoverY =
+    hoverIndex !== null
+      ? h - ((points[hoverIndex] - min) / range) * (h - 4) - 2
+      : 0;
+  const hoverValue = hoverIndex !== null ? points[hoverIndex] : 0;
+  const hoverLabel =
+    hoverIndex !== null && pointLabels ? pointLabels[hoverIndex] : null;
+
+  // Tooltip positioning: flip to left side if near right edge
+  const tooltipFlip = hoverIndex !== null && hoverIndex > points.length * 0.75;
+
   return (
-    <svg
-      viewBox={`0 0 ${w} ${h}`}
-      preserveAspectRatio="none"
-      style={{ width: "100%", height: 60, display: "block" }}
-    >
-      {[0.25, 0.5, 0.75].map((f) => (
-        <line
-          key={f}
-          x1={0}
-          y1={h * f}
-          x2={w}
-          y2={h * f}
-          stroke={mcTokens.colors.border.subtle}
-          strokeWidth={0.5}
+    <div style={{ position: "relative" }}>
+      <svg
+        viewBox={`0 0 ${w} ${h}`}
+        preserveAspectRatio="none"
+        style={{
+          width: "100%",
+          height: 60,
+          display: "block",
+          cursor: "crosshair",
+        }}
+        onMouseMove={handleMouseMove}
+        onMouseLeave={handleMouseLeave}
+      >
+        {[0.25, 0.5, 0.75].map((f) => (
+          <line
+            key={f}
+            x1={0}
+            y1={h * f}
+            x2={w}
+            y2={h * f}
+            stroke={mcTokens.colors.border.subtle}
+            strokeWidth={0.5}
+          />
+        ))}
+        <polyline
+          points={polyline}
+          fill="none"
+          stroke={mcTokens.colors.text.primary}
+          strokeWidth={1.5}
         />
-      ))}
-      <polyline
-        points={polyline}
-        fill="none"
-        stroke={mcTokens.colors.text.primary}
-        strokeWidth={1.5}
-      />
-    </svg>
+        {hoverIndex !== null && (
+          <>
+            {/* Crosshair vertical line */}
+            <line
+              x1={hoverX}
+              y1={0}
+              x2={hoverX}
+              y2={h}
+              stroke="#333"
+              strokeWidth={1}
+              strokeDasharray="2,2"
+            />
+            {/* Dot marker */}
+            <circle
+              cx={hoverX}
+              cy={hoverY}
+              r={3}
+              fill={mcTokens.colors.text.primary}
+              stroke="#080808"
+              strokeWidth={1}
+            />
+          </>
+        )}
+      </svg>
+      {/* Tooltip rendered outside SVG for proper text rendering */}
+      {hoverIndex !== null && (
+        <div
+          style={{
+            position: "absolute",
+            top: -8,
+            left: tooltipFlip
+              ? `calc(${(hoverX / w) * 100}% - 120px)`
+              : `calc(${(hoverX / w) * 100}% + 8px)`,
+            background: "#141414",
+            border: "1px solid #151515",
+            padding: "4px 8px",
+            fontSize: "10px",
+            fontFamily: mcTokens.typography.fontFamily,
+            color: "#e8e8e8",
+            whiteSpace: "nowrap",
+            pointerEvents: "none",
+            zIndex: 10,
+          }}
+        >
+          {hoverLabel ? `${hoverLabel}: ` : ""}
+          {hoverValue}
+          {unit ? ` ${unit}` : ""}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -440,11 +525,28 @@ function useEngMetrics(commits: CommitRow[]) {
 
     const weekTrend = trend(weekCommits, prevWeekCommits);
 
-    // Sparkline data: last 30 days
+    // Sparkline data + labels: last 30 days
     const spark: number[] = [];
+    const sparkLabels: string[] = [];
+    const shortMonths = [
+      "Jan",
+      "Feb",
+      "Mar",
+      "Apr",
+      "May",
+      "Jun",
+      "Jul",
+      "Aug",
+      "Sep",
+      "Oct",
+      "Nov",
+      "Dec",
+    ];
     for (let i = 29; i >= 0; i--) {
       const d = daysAgo(i);
       spark.push(byDate.get(d)?.commits ?? 0);
+      const dt = new Date(d + "T12:00:00");
+      sparkLabels.push(`${shortMonths[dt.getMonth()]} ${dt.getDate()}`);
     }
 
     // Prediction
@@ -465,6 +567,7 @@ function useEngMetrics(commits: CommitRow[]) {
       monthLinesAdded,
       monthLinesDeleted,
       spark,
+      sparkLabels,
       prediction,
     };
   }, [commits]);
@@ -488,12 +591,29 @@ function useHealthMetrics(health: HealthRow[]) {
     const hrvTrend = avg(last7, "hrv_ms") - avg(prior7, "hrv_ms");
     const hrTrend = avg(last7, "resting_hr") - avg(prior7, "resting_hr");
 
-    // Sparkline: last 30 days of recovery
+    // Sparkline: last 30 days of recovery + labels
     const spark: number[] = [];
+    const sparkLabels: string[] = [];
+    const shortMonths = [
+      "Jan",
+      "Feb",
+      "Mar",
+      "Apr",
+      "May",
+      "Jun",
+      "Jul",
+      "Aug",
+      "Sep",
+      "Oct",
+      "Nov",
+      "Dec",
+    ];
     const healthMap = new Map(health.map((h) => [h.date, h]));
     for (let i = 29; i >= 0; i--) {
       const d = daysAgo(i);
       spark.push(healthMap.get(d)?.recovery_score ?? 0);
+      const dt = new Date(d + "T12:00:00");
+      sparkLabels.push(`${shortMonths[dt.getMonth()]} ${dt.getDate()}`);
     }
 
     // Prediction on recovery
@@ -526,6 +646,7 @@ function useHealthMetrics(health: HealthRow[]) {
             : mcTokens.colors.trend.negative,
       },
       spark,
+      sparkLabels,
       prediction,
     };
   }, [health]);
@@ -538,14 +659,41 @@ function useHealthMetrics(health: HealthRow[]) {
 const panelStyle: React.CSSProperties = {
   background: mcTokens.colors.bg.panel,
   border: `1px solid ${mcTokens.colors.border.default}`,
+  borderTop: `2px solid #1a1a1a`,
   padding: mcTokens.spacing.section,
 };
 
 const MissionControl: React.FC = () => {
   const { user } = useAuth();
-  const { commits, health, sync, loading, lastFetch } = useMissionControlData();
+  const { commits, health, sync, loading } = useMissionControlData();
   const eng = useEngMetrics(commits);
   const healthM = useHealthMetrics(health);
+
+  // Ticking clock
+  const [clockStr, setClockStr] = useState(() => {
+    const now = new Date();
+    const mm = String(now.getMonth() + 1).padStart(2, "0");
+    const dd = String(now.getDate()).padStart(2, "0");
+    const yyyy = now.getFullYear();
+    const hh = String(now.getHours()).padStart(2, "0");
+    const mi = String(now.getMinutes()).padStart(2, "0");
+    const ss = String(now.getSeconds()).padStart(2, "0");
+    return `${mm}/${dd}/${yyyy} ${hh}:${mi}:${ss}`;
+  });
+
+  useEffect(() => {
+    const tick = setInterval(() => {
+      const now = new Date();
+      const mm = String(now.getMonth() + 1).padStart(2, "0");
+      const dd = String(now.getDate()).padStart(2, "0");
+      const yyyy = now.getFullYear();
+      const hh = String(now.getHours()).padStart(2, "0");
+      const mi = String(now.getMinutes()).padStart(2, "0");
+      const ss = String(now.getSeconds()).padStart(2, "0");
+      setClockStr(`${mm}/${dd}/${yyyy} ${hh}:${mi}:${ss}`);
+    }, 1000);
+    return () => clearInterval(tick);
+  }, []);
 
   const githubConnected = sync !== null && (sync.github_repos?.length ?? 0) > 0;
   const whoopConnected = sync?.whoop_connected ?? false;
@@ -563,6 +711,7 @@ const MissionControl: React.FC = () => {
     (sync?.github_sync_errors?.length ?? 0) >= 3 ||
     (sync?.whoop_sync_errors?.length ?? 0) >= 3;
   const isStale = syncAge > 60 * 60 * 1000; // > 1 hour
+  const isFresh = !hasErrors && (!isStale || !lastSync);
   const syncLabel = hasErrors
     ? "SYNC ERROR"
     : isStale && lastSync
@@ -582,9 +731,15 @@ const MissionControl: React.FC = () => {
     color: mcTokens.colors.text.primary,
   };
 
-  // Scoped selection override — monochrome, no cyan bleed from global CSS
+  // Scoped selection override + pulsing green dot animation
   const selectionStyle = (
-    <style>{`.mc-root ::selection { background: #333; color: #e8e8e8; }`}</style>
+    <style>{`
+      .mc-root ::selection { background: #333; color: #e8e8e8; }
+      @keyframes mc-pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.3; }
+      }
+    `}</style>
   );
 
   // ---- Loading state ----
@@ -660,15 +815,29 @@ const MissionControl: React.FC = () => {
         <Label>NOCTISIUM</Label>
         <span
           style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
             fontSize: mcTokens.typography.tiny.size,
             letterSpacing: mcTokens.typography.tiny.letterSpacing,
             textTransform: mcTokens.typography.tiny.textTransform,
             color: syncColor,
           }}
         >
+          <span
+            style={{
+              display: "inline-block",
+              width: 5,
+              height: 5,
+              borderRadius: "50%",
+              background: isFresh ? "#4a4" : syncColor,
+              animation: !isFresh ? "mc-pulse 2s ease-in-out infinite" : "none",
+              flexShrink: 0,
+            }}
+          />
           {syncLabel}
         </span>
-        <Label>{formatDate()}</Label>
+        <Label>{clockStr}</Label>
       </header>
 
       {/* ---- Main Grid ---- */}
@@ -676,14 +845,17 @@ const MissionControl: React.FC = () => {
         className="grid grid-cols-1 md:grid-cols-2"
         style={{
           flex: 1,
-          gap: 1,
+          gap: 0,
           padding: mcTokens.spacing.page,
           paddingTop: mcTokens.spacing.section,
         }}
       >
         {/* =========== ENGINEERING OUTPUT =========== */}
         <motion.section
-          style={panelStyle}
+          style={{
+            ...panelStyle,
+            borderRight: `1px solid #1a1a1a`,
+          }}
           custom={0}
           variants={fadeVariant}
           initial="hidden"
@@ -697,7 +869,10 @@ const MissionControl: React.FC = () => {
               <div style={{ marginTop: mcTokens.spacing.section }}>
                 <span
                   style={{
-                    fontSize: mcTokens.typography.hero.size,
+                    fontSize:
+                      eng.todayCommits === 0
+                        ? "80px"
+                        : mcTokens.typography.hero.size,
                     fontWeight: mcTokens.typography.hero.weight,
                     lineHeight: mcTokens.typography.hero.lineHeight,
                     color: mcTokens.colors.text.primary,
@@ -720,7 +895,11 @@ const MissionControl: React.FC = () => {
 
               {/* Sparkline */}
               <div style={{ margin: `${mcTokens.spacing.section} 0` }}>
-                <Sparkline data={eng.spark} />
+                <Sparkline
+                  data={eng.spark}
+                  labels={eng.sparkLabels}
+                  unit="commits"
+                />
               </div>
 
               {/* Metric rows */}
@@ -826,7 +1005,11 @@ const MissionControl: React.FC = () => {
 
               {/* Sparkline */}
               <div style={{ margin: `${mcTokens.spacing.section} 0` }}>
-                <Sparkline data={healthM.spark} />
+                <Sparkline
+                  data={healthM.spark}
+                  labels={healthM.sparkLabels}
+                  unit="% recovery"
+                />
               </div>
 
               {/* Metric rows */}
@@ -895,15 +1078,34 @@ const MissionControl: React.FC = () => {
               </div>
             </>
           ) : (
-            <p
+            <div
               style={{
-                fontSize: mcTokens.typography.body.size,
-                color: mcTokens.colors.text.secondary,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flex: 1,
+                minHeight: 200,
                 marginTop: mcTokens.spacing.section,
               }}
             >
-              Connect Whoop in Settings to begin.
-            </p>
+              <div
+                style={{
+                  border: `1px dashed ${mcTokens.colors.text.muted}`,
+                  padding: "20px 32px",
+                  textAlign: "center",
+                }}
+              >
+                <p
+                  style={{
+                    fontSize: mcTokens.typography.body.size,
+                    color: mcTokens.colors.text.secondary,
+                    margin: 0,
+                  }}
+                >
+                  Connect Whoop in Settings
+                </p>
+              </div>
+            </div>
           )}
         </motion.section>
       </main>
@@ -915,7 +1117,7 @@ const MissionControl: React.FC = () => {
           justifyContent: "space-between",
           alignItems: "center",
           padding: `${mcTokens.spacing.inner} ${mcTokens.spacing.page}`,
-          borderTop: `1px solid ${mcTokens.colors.border.default}`,
+          borderTop: `1px solid #151515`,
         }}
       >
         <span
