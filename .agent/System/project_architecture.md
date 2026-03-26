@@ -94,11 +94,28 @@ src/
 - **Progress Visualization**: Skill advancement charts
 - **KPI Integration**: Skills tied to performance metrics
 
-#### 7. Mission Control Dashboard
+#### 7. Mission Control Dashboard (V2)
 
-- **SpaceX Aesthetic**: Full-screen, immersive telemetry-style interface with custom design tokens (`src/styles/mission-control-tokens.ts`)
-- **Engineering Telemetry**: GitHub commit/PR activity per repo per day, synced via `github-sync` edge function
+- **NASA/SpaceX Aesthetic**: Full-screen, 10-panel telemetry dashboard with navy + cyan design system (`src/styles/mission-control-tokens.ts`)
+- **Design Tokens**: Dedicated color palette (deep navy backgrounds, cyan/teal accents, status green/amber/red), JetBrains Mono typography, dense spacing system
+- **12 Components** (`src/components/mission-control/`):
+  - `PanelHeader` — consistent header for each telemetry panel
+  - `Sparkline` — reusable SVG sparkline with conditional coloring
+  - `MissionTimer` — live mission elapsed time bar
+  - `EngineeringSummary` — daily commit/PR/LoC aggregate counters
+  - `CommitHeatmap` — interactive GitHub-style contribution heatmap
+  - `RepoStatusTable` — per-repo activity breakdown table
+  - `RecoveryGauge` — SVG ring gauge for Whoop recovery score (green/amber/red zones)
+  - `LocTelemetry` — dual-line (added/deleted) lines-of-code sparkline
+  - `PrPipeline` — PR created vs merged pipeline visualization
+  - `VitalsReadout` — 30-day health averages with conditional sparklines
+  - `SleepAnalysis` — sleep hours and efficiency trends
+  - `TrajectoryBar` — weekly commit trajectory indicator
+- **Engineering Telemetry**: GitHub commit/PR/LoC activity per repo per day, synced via `github-sync` edge function
 - **Health Telemetry**: Whoop recovery, HRV, sleep, strain data synced via `whoop-sync` edge function
+- **Whoop OAuth**: `whoop-callback` edge function handles OAuth code exchange and token storage in Vault
+- **Automated Sync**: `pg_cron` jobs run GitHub sync every 15 minutes and Whoop sync every 30 minutes
+- **Lines of Code Tracking**: `lines_added` and `lines_deleted` columns on `mission_control_commits` for LoC telemetry
 - **Prediction Engine**: Forecasting logic with Vitest test coverage (`src/__tests__/predictions.test.ts`)
 - **Private Route**: `/mission-control`, behind authentication
 - **Settings Integration**: `WhoopSection` component in Settings for OAuth connection management
@@ -204,14 +221,15 @@ Supabase Real-Time Channel (useRealtimeSync)
 
 ### Supabase Edge Functions
 
-- **`github-sync`**: Syncs GitHub commit and PR data into `mission_control_commits` per repo per day
-- **`whoop-sync`**: Syncs Whoop health telemetry (recovery, HRV, sleep, strain) into `mission_control_health`; handles OAuth token refresh via Vault
+- **`github-sync`**: Syncs GitHub commit, PR, and lines-of-code data into `mission_control_commits` per repo per day; invoked by `pg_cron` every 15 minutes
+- **`whoop-sync`**: Syncs Whoop health telemetry (recovery, HRV, sleep, strain) into `mission_control_health`; handles OAuth token refresh via Vault; invoked by `pg_cron` every 30 minutes
+- **`whoop-callback`**: Handles Whoop OAuth authorization code exchange, stores access/refresh tokens in Supabase Vault, and updates `mission_control_sync` connection status
 
 ### External Services
 
 - **Supabase**: Database, auth, real-time features, and edge functions
-- **GitHub API**: Development metrics (PRs and commits via `lib/github.ts`, auto-sync via `hooks/useAutoSync.ts`; Mission Control uses `github-sync` edge function for per-repo telemetry)
-- **Whoop API**: Health telemetry (recovery, HRV, sleep, strain) via `whoop-sync` edge function with OAuth; tokens stored in Supabase Vault
+- **GitHub API**: Development metrics (PRs, commits, and lines of code via `lib/github.ts`, auto-sync via `hooks/useAutoSync.ts`; Mission Control uses `github-sync` edge function for per-repo telemetry with LoC tracking)
+- **Whoop API**: Health telemetry (recovery, HRV, sleep, strain) via `whoop-sync` edge function with OAuth; `whoop-callback` handles code exchange; tokens stored in Supabase Vault
 
 ### Internal Integrations
 

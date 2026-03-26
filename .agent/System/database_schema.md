@@ -483,6 +483,8 @@ CREATE TABLE mission_control_commits (
   prs_created int NOT NULL DEFAULT 0,
   prs_merged int NOT NULL DEFAULT 0,
   last_commit_sha text,
+  lines_added int NOT NULL DEFAULT 0,
+  lines_deleted int NOT NULL DEFAULT 0,
   synced_at timestamptz NOT NULL DEFAULT now(),
   UNIQUE(user_id, date, repo_name)
 );
@@ -492,6 +494,7 @@ CREATE TABLE mission_control_commits (
 
 - **Per-Repo Granularity**: Separate rows per repo per day
 - **PR Tracking**: Both created and merged PR counts
+- **Lines of Code**: `lines_added` and `lines_deleted` for LoC telemetry (dual-line sparkline in UI)
 - **Sync Metadata**: `last_commit_sha` and `synced_at` for incremental sync
 
 ### Mission Control Health (`mission_control_health`)
@@ -547,11 +550,16 @@ CREATE TABLE mission_control_sync (
 - **Error Logging**: JSONB arrays for sync error history
 - **No Secrets**: Tokens stored in Supabase Vault, not in this table
 
+### Mission Control Automated Sync (`pg_cron`)
+
+- **GitHub Sync**: Runs every 15 minutes via `pg_cron`, invokes `github-sync` edge function
+- **Whoop Sync**: Runs every 30 minutes via `pg_cron`, invokes `whoop-sync` edge function
+
 ### Mission Control Security
 
 - All three tables have RLS enabled
 - Users can only read/write their own data via `auth.uid() = user_id` policies
-- Vault helper functions (`get_vault_secret`, `update_vault_secret`) restricted to `service_role` only
+- Vault helper functions (`get_vault_secret`, `update_vault_secret`, `create_vault_secret`) restricted to `service_role` only
 
 ### Mission Control Indexes
 
