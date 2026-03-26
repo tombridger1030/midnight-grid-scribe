@@ -107,10 +107,12 @@ Deno.serve(async (req) => {
   try {
     const userId = getMissionControlUserId();
 
-    // 1. Get GitHub token from Vault
-    const token = await getVaultSecret(supabase, "github_token");
+    // 1. Get GitHub token from Vault, fall back to env var
+    const token =
+      (await getVaultSecret(supabase, "github_token")) ||
+      Deno.env.get("GITHUB_TOKEN");
     if (!token) {
-      return errorResponse("GitHub token not found in Vault", 500);
+      return errorResponse("GitHub token not configured", 500);
     }
 
     // 2. Get sync state (repos list, last sync time, existing errors)
