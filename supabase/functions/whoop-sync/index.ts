@@ -28,7 +28,9 @@ interface WhoopRecoveryResponse {
 interface WhoopSleepResponse {
   records?: Array<{
     score?: {
-      total_in_bed_time_milli?: number;
+      stage_summary?: {
+        total_in_bed_time_milli?: number;
+      };
       sleep_efficiency_percentage?: number;
     };
   }>;
@@ -297,10 +299,8 @@ Deno.serve(async (req) => {
 
     if (sleepRes.ok && sleepRes.data?.records?.[0]?.score) {
       const score = sleepRes.data.records[0].score;
-      sleepHours =
-        score.total_in_bed_time_milli != null
-          ? score.total_in_bed_time_milli / 3_600_000
-          : null;
+      const totalInBed = score.stage_summary?.total_in_bed_time_milli;
+      sleepHours = totalInBed != null ? totalInBed / 3_600_000 : null;
       sleepEfficiency = score.sleep_efficiency_percentage ?? null;
     } else if (!sleepRes.ok) {
       syncErrors = appendSyncError(

@@ -82,7 +82,7 @@ export function SleepAnalysis({
         }}
       >
         {sleepEfficiency !== null
-          ? `${sleepEfficiency}% efficiency`
+          ? `${Math.round(sleepEfficiency)}% efficiency`
           : "-- efficiency"}
       </div>
       {/* Progress bar */}

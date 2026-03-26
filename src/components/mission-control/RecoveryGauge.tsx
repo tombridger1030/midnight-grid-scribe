@@ -194,20 +194,22 @@ export function RecoveryGauge({
         <div style={miniStatStyle}>
           <span style={miniLabelStyle}>HRV</span>
           <span style={miniValueStyle}>
-            {hrv !== null ? hrv : "--"}
+            {hrv !== null ? Math.round(hrv) : "--"}
             <span style={{ color: mcTokens.colors.text.secondary }}> ms</span>
           </span>
         </div>
         <div style={separatorStyle} />
         <div style={miniStatStyle}>
           <span style={miniLabelStyle}>STRAIN</span>
-          <span style={miniValueStyle}>{strain !== null ? strain : "--"}</span>
+          <span style={miniValueStyle}>
+            {strain !== null ? strain.toFixed(1) : "--"}
+          </span>
         </div>
         <div style={separatorStyle} />
         <div style={miniStatStyle}>
           <span style={miniLabelStyle}>SLEEP</span>
           <span style={miniValueStyle}>
-            {sleepHours !== null ? sleepHours : "--"}
+            {sleepHours !== null ? sleepHours.toFixed(1) : "--"}
             <span style={{ color: mcTokens.colors.text.secondary }}> h</span>
           </span>
         </div>

@@ -24,8 +24,9 @@ interface VitalRow {
 
 function formatValue(v: number | null): string {
   if (v === null) return "--";
-  if (v >= 1000) return v.toLocaleString();
-  return String(v);
+  if (v >= 1000) return Math.round(v).toLocaleString();
+  if (Number.isInteger(v)) return String(v);
+  return v.toFixed(1);
 }
 
 export function VitalsReadout({
