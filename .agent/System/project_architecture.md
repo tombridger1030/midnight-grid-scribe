@@ -7,6 +7,7 @@ Noctisium is a terminal-inspired personal metrics tracking system designed for e
 ## Tech Stack
 
 ### Frontend
+
 - **Framework**: React 18.3.1 with TypeScript
 - **Build Tool**: Vite 5.4.1 with SWC plugin
 - **UI Components**: Radix UI primitives with shadcn/ui components
@@ -18,12 +19,14 @@ Noctisium is a terminal-inspired personal metrics tracking system designed for e
 - **Query Client**: TanStack Query 5.56.2 for server state
 
 ### Backend & Database
+
 - **Database**: Supabase (PostgreSQL)
 - **Authentication**: Supabase Auth
 - **Real-time**: Supabase real-time subscriptions
 - **Storage**: LocalStorage fallback with Supabase persistence
 
 ### Development Tools
+
 - **Package Manager**: npm (with bun.lockb present)
 - **Linting**: ESLint with TypeScript support
 - **Type Checking**: TypeScript 5.5.3
@@ -50,6 +53,7 @@ src/
 ### Key Features
 
 #### 1. Authentication & User Management
+
 - Cyberpunk-themed authentication interface
 - Supabase-based user authentication with admin support
 - Profile management with preferences and module configuration
@@ -57,6 +61,7 @@ src/
 - User configuration management for integrations (GitHub, etc.)
 
 #### 2. Metrics Tracking System
+
 - **Configurable KPIs**: User-defined key performance indicators with advanced options
 - **Daily Metrics**: JSON-based flexible metric storage
 - **Weekly Reviews**: Structured weekly performance analysis with completion tracking
@@ -64,32 +69,46 @@ src/
 - **Average & Reverse Scoring**: Advanced KPI calculation methods
 
 #### 3. Sprint Management
+
 - **Customizable Cycles**: Configurable ON/OFF day periods
 - **Auto-Status Updates**: Sprint transitions (planned → active → completed)
 - **Visual Calendar**: Color-coded sprint phases and habit compliance
 - **Historical Tracking**: Complete sprint history with editable periods
 
 #### 4. Content Creation Tracking
+
 - **Multi-Platform Support**: Track content across different platforms
 - **Performance Metrics**: Views, engagement, swipe rates, revenue
 - **Weekly Analytics**: Content performance trends and insights
 - **Import/Export**: Data portability via JSON and CSV
 
 #### 5. Financial Dashboard
+
 - **Revenue Tracking**: MRR and financial metrics
 - **Runway Calculator**: Financial sustainability projections
 - **Cash Console**: Financial metrics visualization
 
 #### 6. Skill Progression System
+
 - **Skill Tracking**: Competency development monitoring
 - **Progress Visualization**: Skill advancement charts
 - **KPI Integration**: Skills tied to performance metrics
+
+#### 7. Mission Control Dashboard
+
+- **SpaceX Aesthetic**: Full-screen, immersive telemetry-style interface with custom design tokens (`src/styles/mission-control-tokens.ts`)
+- **Engineering Telemetry**: GitHub commit/PR activity per repo per day, synced via `github-sync` edge function
+- **Health Telemetry**: Whoop recovery, HRV, sleep, strain data synced via `whoop-sync` edge function
+- **Prediction Engine**: Forecasting logic with Vitest test coverage (`src/__tests__/predictions.test.ts`)
+- **Private Route**: `/mission-control`, behind authentication
+- **Settings Integration**: `WhoopSection` component in Settings for OAuth connection management
 
 ## Database Architecture
 
 ### Core Tables
 
 #### Main Schema (`main_schema.sql`)
+
 - **goals**: Yearly and monthly goal tracking with progress calculation
 - **metrics**: Daily metric data storage (JSONB for flexibility)
 - **financial_metrics**: Financial data (MRR, net worth)
@@ -97,6 +116,7 @@ src/
 - **roadmaps**: Goal and milestone tracking
 
 #### Extended Core Schema (via 018_complete_database_setup_fixed.sql)
+
 - **user_profiles**: User authentication and preferences with admin support
 - **user_configs**: User-specific configuration settings (GitHub integrations, etc.)
 - **user_kpis**: User-defined KPI configurations with advanced options
@@ -106,24 +126,34 @@ src/
 - **platform_metrics**: General platform performance tracking
 
 #### Kanban Schema (`kanban_schema.sql`)
+
 - **kanban_boards**: Project/Initiative boards
 - **kanban_columns**: Task status columns
 - **kanban_tasks**: Individual tasks with soft delete support
 
 #### Advanced Features Schema (via migrations)
+
 - **content_items**: Content creation tracking
 - **skill_progression**: Skill development tracking
 - **ranking_system**: Performance categorization and scoring
 
+#### Mission Control Schema (`061_mission_control.sql`)
+
+- **mission_control_commits**: Per-repo per-day GitHub commit/PR counts with sync metadata
+- **mission_control_health**: Per-day Whoop health telemetry (recovery, HRV, sleep, strain, calories)
+- **mission_control_sync**: Per-user sync state (connected repos, Whoop connection status, last sync times, error logs)
+
 ### Key Design Patterns
 
 #### Data Storage
+
 - **JSONB Usage**: Flexible metric storage in `metrics.data` and `goals.monthly`
 - **Soft Deletes**: Tasks marked as deleted rather than removed
 - **Timestamp Triggers**: Automatic `updated_at` management
 - **Progress Calculation**: Automated goal progress computation
 
 #### Security
+
 - **Row Level Security**: User data isolation
 - **User-Based Filtering**: All queries filtered by `user_id`
 - **Auth Integration**: Supabase auth with user context
@@ -131,6 +161,7 @@ src/
 ## State Management
 
 ### Client-Side State
+
 - **Zustand Stores**: Feature-specific state management
   - `skillProgressionStore`: Skill progression state
   - `progressionStore`: User XP and level progression
@@ -138,11 +169,13 @@ src/
 - **TanStack Query**: Server state caching and synchronization
 
 ### Real-Time Synchronization
+
 - **Supabase Real-Time**: `useRealtimeSync` hook subscribes to database changes
 - **Event System**: Custom events for cross-component updates (`REALTIME_EVENTS`)
 - **Auto-Sync**: External data sources (GitHub, Deep Work timer) sync automatically
 
 ### Data Flow
+
 1. **User Interaction** → Component Event Handlers
 2. **State Updates** → Local state or API calls
 3. **API Calls** → Supabase queries/mutations
@@ -151,6 +184,7 @@ src/
 6. **UI Re-render** → Automatic via state changes and event listeners
 
 ### Live Update Architecture
+
 ```
 Database Change (weekly_kpis, goals_v2, etc.)
        │
@@ -168,11 +202,19 @@ Supabase Real-Time Channel (useRealtimeSync)
 
 ## Integration Points
 
+### Supabase Edge Functions
+
+- **`github-sync`**: Syncs GitHub commit and PR data into `mission_control_commits` per repo per day
+- **`whoop-sync`**: Syncs Whoop health telemetry (recovery, HRV, sleep, strain) into `mission_control_health`; handles OAuth token refresh via Vault
+
 ### External Services
-- **Supabase**: Database, auth, and real-time features
-- **GitHub API**: Integration for development metrics (PRs and commits via `lib/github.ts`, auto-sync via `hooks/useAutoSync.ts`)
+
+- **Supabase**: Database, auth, real-time features, and edge functions
+- **GitHub API**: Development metrics (PRs and commits via `lib/github.ts`, auto-sync via `hooks/useAutoSync.ts`; Mission Control uses `github-sync` edge function for per-repo telemetry)
+- **Whoop API**: Health telemetry (recovery, HRV, sleep, strain) via `whoop-sync` edge function with OAuth; tokens stored in Supabase Vault
 
 ### Internal Integrations
+
 - **Storage Layer**: Abstracted storage (`lib/storage.ts`, `lib/userStorage.ts`)
 - **KPI System**: Configurable metrics management (`lib/configurableKpis.ts`)
 - **Real-Time Sync**: Live updates across components (`hooks/useRealtimeSync.ts`)
@@ -181,6 +223,7 @@ Supabase Real-Time Channel (useRealtimeSync)
 - **Chart Utilities**: Data visualization helpers (`lib/chartUtils.ts`)
 
 ### KPI to Analytics Data Flow
+
 ```
 KPIs (useWeeklyKPIs)
        │
@@ -200,6 +243,7 @@ KPIs (useWeeklyKPIs)
 ```
 
 ### GitHub KPI Integration
+
 - **PRs Created**: Auto-synced from GitHub Search API (`github_prs`)
 - **Commits Created**: Auto-synced from GitHub Search API (`github_commits`)
 - **Config Storage**: `user_configs` table with `github_settings` key
@@ -215,6 +259,7 @@ KPIs (useWeeklyKPIs)
 /roadmap                   → Goals and milestones
 /cash                      → Financial dashboard
 /profile                   → User profile and settings
+/mission-control           → Mission Control telemetry dashboard (private)
 /content/                  → Content tracking section
   /dashboard               → Content overview
   /weekly                  → Weekly content analytics
@@ -224,17 +269,20 @@ KPIs (useWeeklyKPIs)
 ## Key Features Deep Dive
 
 ### Terminal Aesthetics
+
 - **Monospace Fonts**: Terminal-inspired typography
 - **System Stat Indicators**: Simulated CPU/RAM usage displays
 - **Typewriter Effects**: Animated text rendering
 - **Color Scheme**: Terminal-inspired green/cyan color palette
 
 ### Import/Export System
+
 - **JSON Support**: Full data serialization/deserialization
 - **CSV Export**: Spreadsheet-compatible data export
 - **Backup/Restore**: Complete user data backup functionality
 
 ### Performance Optimizations
+
 - **React Query**: Intelligent caching and background refetching
 - **Component Memoization**: Selective re-rendering optimization
 - **Lazy Loading**: Route-based code splitting
@@ -243,16 +291,19 @@ KPIs (useWeeklyKPIs)
 ## Development Workflow
 
 ### Local Development
+
 1. Install dependencies: `npm install`
 2. Start development server: `npm run dev`
 3. Build for production: `npm run build`
 
 ### Database Management
+
 - Schema files in `database/schemas/`
 - Numbered migrations in `database/migrations/`
 - Policies and functions in respective subdirectories
 
 ### Component Development
+
 - UI components extend shadcn/ui library
 - Feature components in organized subdirectories
 - Consistent TypeScript patterns throughout
@@ -260,6 +311,7 @@ KPIs (useWeeklyKPIs)
 ---
 
 ## Related Documentation
+
 - [Database Schema Documentation](./database_schema.md)
 - [Development SOP](../SOP/development_sop.md)
 - [Tasks & Features](../tasks/)

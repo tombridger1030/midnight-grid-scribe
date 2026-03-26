@@ -19,7 +19,7 @@ import ContentMetrics from "./pages/ContentMetrics";
 import Settings from "./pages/Settings";
 import KPIManage from "./pages/KPIManage";
 import DailyReview from "./pages/DailyReview";
-import Progression from "./pages/Progression";
+import MissionControl from "@/pages/MissionControl";
 import { useState, useEffect } from "react";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import CyberpunkLogin from "@/components/cyberpunk/CyberpunkLogin";
@@ -139,7 +139,6 @@ const AppContent = () => {
               element={<Navigate to="/settings" replace />}
             />
             <Route path="daily-review" element={<DailyReview />} />
-            <Route path="progression" element={<Progression />} />
             <Route path="content" element={<Content />}>
               <Route index element={<ContentDashboard />} />
               <Route path="dashboard" element={<ContentDashboard />} />
@@ -148,6 +147,7 @@ const AppContent = () => {
               <Route path="metrics" element={<ContentMetrics />} />
             </Route>
           </Route>
+          <Route path="/mission-control" element={<MissionControl />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

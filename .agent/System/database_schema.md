@@ -7,11 +7,13 @@ Noctisium uses Supabase (PostgreSQL) as its database backend with a comprehensiv
 ## Core Architecture
 
 ### Multi-Tenancy Design
+
 - **User Isolation**: All tables include `user_id` field for data segregation
 - **RLS Policies**: Row Level Security ensures users can only access their own data
 - **Scalable Structure**: Schema supports multiple users with identical data structures
 
 ### Data Storage Patterns
+
 - **Structured Data**: Traditional relational tables for well-defined entities
 - **Semi-Structured**: JSONB columns for flexible metric storage
 - **Soft Deletes**: Tasks marked as deleted rather than physically removed
@@ -44,12 +46,14 @@ CREATE TABLE goals (
 ```
 
 **Key Features**:
+
 - **Progress Calculation**: Automatic progress percentage computation
 - **Monthly Tracking**: JSONB storage for monthly values and targets
 - **Category Classification**: Professional, fitness, financial, personal
 - **Data Types**: Support for both numeric and non-numeric goals
 
 **Triggers**:
+
 - `recalculate_goal_progress_trigger`: Automatically updates `current_total` and `progress_pct`
 
 ### 2. Metrics Table (`metrics`)
@@ -69,6 +73,7 @@ CREATE TABLE metrics (
 ```
 
 **Key Features**:
+
 - **Flexible Schema**: JSONB `data` column allows any metric structure
 - **Daily Granularity**: One record per user per day
 - **Date Format**: Text-based date storage for consistency
@@ -90,6 +95,7 @@ CREATE TABLE sprints (
 ```
 
 **Key Features**:
+
 - **Sprint Tracking**: 21-day ON / 7-day OFF cycle management
 - **Status Management**: Active, completed, planned states
 - **Date-Based**: Text date storage for consistency with other tables
@@ -111,6 +117,7 @@ CREATE TABLE financial_metrics (
 ```
 
 **Key Features**:
+
 - **Monthly Recurring Revenue**: MRR tracking
 - **Net Worth**: Financial net worth monitoring
 - **Single Record**: One record per user
@@ -224,6 +231,7 @@ CREATE TABLE user_profiles (
 ```
 
 **Key Features**:
+
 - **Admin Support**: User role management for administrative functions
 - **Module Configuration**: User can enable/disable specific modules
 - **Theme Preferences**: Terminal style and animation settings
@@ -246,6 +254,7 @@ CREATE TABLE user_configs (
 ```
 
 **Usage Examples**:
+
 - GitHub API tokens and repository settings
 - Third-party integration configurations
 - Custom user preferences
@@ -275,6 +284,7 @@ CREATE TABLE user_kpis (
 ```
 
 **Enhanced Features**:
+
 - **Minimum Targets**: Support for target ranges
 - **Sorting**: Custom order for KPI display
 - **Average Calculation**: Option to calculate averages instead of totals
@@ -324,6 +334,7 @@ CREATE TABLE weekly_kpi_entries (
 ```
 
 **Key Features**:
+
 - **Completion Tracking**: Automatic completion status calculation
 - **Performance Rates**: Completion percentage tracking
 - **Weekly Granularity**: Detailed week-by-week analysis
@@ -387,6 +398,7 @@ CREATE TABLE user_kpis (
 ```
 
 **Key Features**:
+
 - **Configurable Metrics**: User-defined KPI configurations
 - **Visual Customization**: Color coding for charts
 - **Scoring Options**: Normal and reverse scoring support
@@ -395,6 +407,7 @@ CREATE TABLE user_kpis (
 ### Content Tracking Tables
 
 #### Content Items (`content_items`)
+
 **Purpose**: Track content creation across platforms.
 
 ```sql
@@ -413,6 +426,7 @@ CREATE TABLE content_items (
 ```
 
 #### Content Metrics (`content_metrics`)
+
 **Purpose**: Store performance metrics for content items.
 
 ```sql
@@ -453,11 +467,103 @@ CREATE TABLE skill_progression (
 );
 ```
 
+## Mission Control Schema (`061_mission_control.sql`)
+
+### Mission Control Commits (`mission_control_commits`)
+
+**Purpose**: Track daily GitHub engineering output per repository.
+
+```sql
+CREATE TABLE mission_control_commits (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  date date NOT NULL,
+  repo_name text NOT NULL,
+  commit_count int NOT NULL DEFAULT 0,
+  prs_created int NOT NULL DEFAULT 0,
+  prs_merged int NOT NULL DEFAULT 0,
+  last_commit_sha text,
+  synced_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE(user_id, date, repo_name)
+);
+```
+
+**Key Features**:
+
+- **Per-Repo Granularity**: Separate rows per repo per day
+- **PR Tracking**: Both created and merged PR counts
+- **Sync Metadata**: `last_commit_sha` and `synced_at` for incremental sync
+
+### Mission Control Health (`mission_control_health`)
+
+**Purpose**: Store daily Whoop health telemetry.
+
+```sql
+CREATE TABLE mission_control_health (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  date date NOT NULL,
+  recovery_score numeric,
+  hrv_ms numeric,
+  resting_hr numeric,
+  sleep_hours numeric,
+  sleep_efficiency numeric,
+  strain numeric,
+  calories numeric,
+  whoop_cycle_id text,
+  synced_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE(user_id, date)
+);
+```
+
+**Key Features**:
+
+- **Daily Granularity**: One row per user per day
+- **Comprehensive Metrics**: Recovery, HRV, resting HR, sleep hours/efficiency, strain, calories
+- **Whoop Cycle Tracking**: `whoop_cycle_id` for deduplication
+
+### Mission Control Sync (`mission_control_sync`)
+
+**Purpose**: Track sync state and connection status for external integrations.
+
+```sql
+CREATE TABLE mission_control_sync (
+  user_id uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  github_repos text[] DEFAULT '{}',
+  whoop_connected boolean DEFAULT false,
+  whoop_token_expires_at timestamptz,
+  last_github_sync timestamptz,
+  last_whoop_sync timestamptz,
+  github_sync_errors jsonb DEFAULT '[]',
+  whoop_sync_errors jsonb DEFAULT '[]'
+);
+```
+
+**Key Features**:
+
+- **Single Row Per User**: Primary key is `user_id`
+- **Repo Configuration**: Array of tracked GitHub repo names
+- **Connection State**: Whoop OAuth connection status and token expiry
+- **Error Logging**: JSONB arrays for sync error history
+- **No Secrets**: Tokens stored in Supabase Vault, not in this table
+
+### Mission Control Security
+
+- All three tables have RLS enabled
+- Users can only read/write their own data via `auth.uid() = user_id` policies
+- Vault helper functions (`get_vault_secret`, `update_vault_secret`) restricted to `service_role` only
+
+### Mission Control Indexes
+
+- `idx_mc_commits_user_date`: `(user_id, date DESC)` on `mission_control_commits`
+- `idx_mc_health_user_date`: `(user_id, date DESC)` on `mission_control_health`
+
 ## Database Functions and Triggers
 
 ### 1. Timestamp Management
 
 **Function**: `update_updated_at_column()`
+
 ```sql
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
@@ -473,6 +579,7 @@ $$ LANGUAGE plpgsql;
 ### 2. Goal Progress Calculation
 
 **Function**: `recalculate_goal_progress()`
+
 ```sql
 CREATE OR REPLACE FUNCTION recalculate_goal_progress()
 RETURNS TRIGGER AS $$
@@ -521,11 +628,13 @@ CREATE POLICY "Users can update own goals" ON goals
 ## Migration Strategy
 
 ### Numbered Migrations
+
 - Migrations are numbered sequentially (001, 002, etc.)
 - Each migration handles specific schema additions or modifications
 - Backward compatibility is maintained where possible
 
 ### Key Migration Categories
+
 1. **Core Schema**: Initial table structure
 2. **Feature Additions**: New functionality (content tracking, KPIs)
 3. **Schema Fixes**: Bug corrections and optimizations
@@ -534,6 +643,7 @@ CREATE POLICY "Users can update own goals" ON goals
 ## Data Relationships
 
 ### Entity Relationship Overview
+
 ```
 users (via auth.uid())
   ├── goals (1:many)
@@ -547,17 +657,22 @@ users (via auth.uid())
   │   └── kanban_tasks (1:many)
   ├── content_items (1:many)
   │   └── content_metrics (1:many)
-  └── skill_progression (1:many)
+  ├── skill_progression (1:many)
+  ├── mission_control_commits (1:many - per repo per day)
+  ├── mission_control_health (1:many - daily)
+  └── mission_control_sync (1:1)
 ```
 
 ## Performance Considerations
 
 ### Indexing Strategy
+
 - **Composite Indexes**: `(user_id, date)` for time-series queries
 - **Unique Constraints**: Enforce data integrity
 - **JSONB Indexes**: GIN indexes on JSONB columns for efficient queries
 
 ### Query Optimization
+
 - **User Filtering**: All queries include `user_id` filtering
 - **Date Ranges**: Efficient date-based queries
 - **JSON Operations**: Optimized JSONB query patterns
@@ -565,6 +680,7 @@ users (via auth.uid())
 ---
 
 ## Related Documentation
+
 - [Project Architecture](./project_architecture.md)
 - [Development SOP](../SOP/development_sop.md)
 - [Tasks & Features](../tasks/)
