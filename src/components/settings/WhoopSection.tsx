@@ -22,6 +22,39 @@ export const WhoopSection: React.FC = () => {
   const [isConnected, setIsConnected] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
 
+  // Handle OAuth callback — exchange code for tokens via edge function
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get("code");
+    if (!code || !user) return;
+
+    const exchangeToken = async () => {
+      const redirectUri =
+        sessionStorage.getItem("whoop_redirect_uri") ||
+        `${window.location.origin}/settings`;
+      try {
+        const res = await fetch(
+          `${SUPABASE_URL}/functions/v1/whoop-callback?code=${encodeURIComponent(code)}&state=${params.get("state") || ""}&redirect_uri=${encodeURIComponent(redirectUri)}`,
+        );
+        if (res.ok) {
+          toast.success("Whoop connected successfully");
+          setIsConnected(true);
+        } else {
+          const err = await res.json();
+          toast.error(`Whoop connection failed: ${err.error}`);
+        }
+      } catch {
+        toast.error("Failed to connect Whoop");
+      }
+      // Clean URL
+      window.history.replaceState({}, "", "/settings");
+      sessionStorage.removeItem("whoop_oauth_state");
+      sessionStorage.removeItem("whoop_redirect_uri");
+    };
+
+    exchangeToken();
+  }, [user]);
+
   // Check connection status from mission_control_sync table
   useEffect(() => {
     const checkConnection = async () => {
@@ -58,9 +91,11 @@ export const WhoopSection: React.FC = () => {
       return;
     }
 
-    const redirectUri = `${SUPABASE_URL}/functions/v1/whoop-callback`;
+    // Redirect back to our own settings page — Whoop will append ?code=...
+    const redirectUri = `${window.location.origin}/settings`;
     const state = crypto.randomUUID().replace(/-/g, "").slice(0, 16);
     sessionStorage.setItem("whoop_oauth_state", state);
+    sessionStorage.setItem("whoop_redirect_uri", redirectUri);
     const params = new URLSearchParams({
       client_id: WHOOP_CLIENT_ID,
       redirect_uri: redirectUri,

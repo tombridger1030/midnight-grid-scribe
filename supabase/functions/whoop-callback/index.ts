@@ -56,7 +56,10 @@ Deno.serve(async (req) => {
 
     const clientId = Deno.env.get("WHOOP_CLIENT_ID");
     const clientSecret = Deno.env.get("WHOOP_CLIENT_SECRET");
-    const redirectUri = Deno.env.get("WHOOP_REDIRECT_URI");
+    // Accept redirect_uri from query param (frontend passes it) or fall back to env
+    const redirectUri =
+      url.searchParams.get("redirect_uri") ||
+      Deno.env.get("WHOOP_REDIRECT_URI");
 
     if (!clientId || !clientSecret || !redirectUri) {
       return errorResponse("Whoop OAuth not configured", 500);
@@ -102,13 +105,7 @@ Deno.serve(async (req) => {
       { onConflict: "user_id" },
     );
 
-    // Redirect back to settings page
-    return new Response(null, {
-      status: 302,
-      headers: {
-        Location: `${Deno.env.get("ALLOWED_ORIGIN") || ""}/settings?whoop=connected`,
-      },
-    });
+    return jsonResponse({ success: true, connected: true });
   } catch (err) {
     console.error(
       "Whoop callback error:",
