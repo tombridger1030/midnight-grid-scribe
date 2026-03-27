@@ -90,7 +90,7 @@ Deno.serve(async (req) => {
     const supabase = createServiceClient();
     const userId = getMissionControlUserId();
 
-    // Store tokens in sync table
+    // Store tokens in sync table and clear any stale sync errors
     const expiresAt = new Date(
       Date.now() + tokens.expires_in * 1000,
     ).toISOString();
@@ -101,9 +101,26 @@ Deno.serve(async (req) => {
         whoop_access_token: tokens.access_token,
         whoop_refresh_token: tokens.refresh_token,
         whoop_token_expires_at: expiresAt,
+        whoop_sync_errors: [],
       },
       { onConflict: "user_id" },
     );
+
+    // Trigger an immediate sync so the user sees fresh data right away
+    // instead of waiting up to 30 min for the next pg_cron run
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (supabaseUrl && serviceKey) {
+      fetch(`${supabaseUrl}/functions/v1/whoop-sync`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${serviceKey}`,
+          "Content-Type": "application/json",
+        },
+      }).catch(() => {
+        // Fire-and-forget — don't block the callback response
+      });
+    }
 
     return jsonResponse({ success: true, connected: true });
   } catch (err) {

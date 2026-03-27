@@ -15,35 +15,62 @@ const WHOOP_API = "https://api.prod.whoop.com";
 const WHOOP_TOKEN_URL = `${WHOOP_API}/oauth/oauth2/token`;
 const MAX_SYNC_ERRORS = 10;
 
+interface WhoopRecoveryRecord {
+  cycle_id?: number;
+  created_at?: string;
+  score?: {
+    recovery_score?: number;
+    hrv_rmssd_milli?: number;
+    resting_heart_rate?: number;
+  };
+}
+
 interface WhoopRecoveryResponse {
-  records?: Array<{
-    score?: {
-      recovery_score?: number;
-      hrv_rmssd_milli?: number;
-      resting_heart_rate?: number;
+  records?: WhoopRecoveryRecord[];
+}
+
+interface WhoopSleepRecord {
+  id?: number;
+  start?: string;
+  end?: string;
+  score?: {
+    stage_summary?: {
+      total_in_bed_time_milli?: number;
     };
-  }>;
+    sleep_efficiency_percentage?: number;
+  };
 }
 
 interface WhoopSleepResponse {
-  records?: Array<{
-    score?: {
-      stage_summary?: {
-        total_in_bed_time_milli?: number;
-      };
-      sleep_efficiency_percentage?: number;
-    };
-  }>;
+  records?: WhoopSleepRecord[];
+}
+
+interface WhoopCycleRecord {
+  id?: number;
+  start?: string;
+  end?: string;
+  score?: {
+    strain?: number;
+    kilojoule?: number;
+  };
 }
 
 interface WhoopCycleResponse {
-  records?: Array<{
-    id?: number;
-    score?: {
-      strain?: number;
-      kilojoule?: number;
-    };
-  }>;
+  records?: WhoopCycleRecord[];
+}
+
+interface HealthRow {
+  user_id: string;
+  date: string;
+  recovery_score: number | null;
+  hrv_ms: number | null;
+  resting_hr: number | null;
+  sleep_hours: number | null;
+  sleep_efficiency: number | null;
+  strain: number | null;
+  calories: number | null;
+  whoop_cycle_id: string | null;
+  synced_at: string;
 }
 
 /** Get today's date as YYYY-MM-DD in UTC. */
@@ -244,18 +271,26 @@ Deno.serve(async (req) => {
       return errorResponse("No valid access token available", 401);
     }
 
-    // 3. Fetch data from Whoop API v2 (all three endpoints in parallel)
+    // 3. Determine fetch limit: backfill 30 days if we have few records, otherwise just latest
+    const { count: existingRows } = await supabase
+      .from("mission_control_health")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", userId);
+
+    const fetchLimit = (existingRows ?? 0) < 7 ? 25 : 1;
+
+    // 4. Fetch data from Whoop API v2 (all three endpoints in parallel)
     const [recoveryRes, sleepRes, cycleRes] = await Promise.all([
       whoopFetch<WhoopRecoveryResponse>(
-        `${WHOOP_API}/developer/v2/recovery?limit=1`,
+        `${WHOOP_API}/developer/v2/recovery?limit=${fetchLimit}`,
         accessToken,
       ),
       whoopFetch<WhoopSleepResponse>(
-        `${WHOOP_API}/developer/v2/activity/sleep?limit=1`,
+        `${WHOOP_API}/developer/v2/activity/sleep?limit=${fetchLimit}`,
         accessToken,
       ),
       whoopFetch<WhoopCycleResponse>(
-        `${WHOOP_API}/developer/v2/cycle?limit=1`,
+        `${WHOOP_API}/developer/v2/cycle?limit=${fetchLimit}`,
         accessToken,
       ),
     ]);
@@ -277,51 +312,43 @@ Deno.serve(async (req) => {
       return errorResponse("Whoop API rejected token (401)", 401);
     }
 
-    // 4. Extract data, handling partial/null responses gracefully
-    let recoveryScore: number | null = null;
-    let hrvMs: number | null = null;
-    let restingHr: number | null = null;
+    // 5. Build per-date health rows by merging cycle, recovery, and sleep data
+    const now = new Date().toISOString();
+    const dateMap = new Map<string, HealthRow>();
 
-    if (recoveryRes.ok && recoveryRes.data?.records?.[0]?.score) {
-      const score = recoveryRes.data.records[0].score;
-      recoveryScore = score.recovery_score ?? null;
-      hrvMs = score.hrv_rmssd_milli ?? null;
-      restingHr = score.resting_heart_rate ?? null;
-    } else if (!recoveryRes.ok) {
-      syncErrors = appendSyncError(
-        syncErrors,
-        `Recovery fetch failed (${recoveryRes.status})`,
-      );
-    }
+    const getOrCreate = (date: string): HealthRow =>
+      dateMap.get(date) ?? {
+        user_id: userId,
+        date,
+        recovery_score: null,
+        hrv_ms: null,
+        resting_hr: null,
+        sleep_hours: null,
+        sleep_efficiency: null,
+        strain: null,
+        calories: null,
+        whoop_cycle_id: null,
+        synced_at: now,
+      };
 
-    let sleepHours: number | null = null;
-    let sleepEfficiency: number | null = null;
+    // Build cycle map: cycle_id -> date, and populate strain/calories
+    const cycleIdToDate = new Map<number, string>();
 
-    if (sleepRes.ok && sleepRes.data?.records?.[0]?.score) {
-      const score = sleepRes.data.records[0].score;
-      const totalInBed = score.stage_summary?.total_in_bed_time_milli;
-      sleepHours = totalInBed != null ? totalInBed / 3_600_000 : null;
-      sleepEfficiency = score.sleep_efficiency_percentage ?? null;
-    } else if (!sleepRes.ok) {
-      syncErrors = appendSyncError(
-        syncErrors,
-        `Sleep fetch failed (${sleepRes.status})`,
-      );
-    }
-
-    let strain: number | null = null;
-    let calories: number | null = null;
-    let whoopCycleId: string | null = null;
-
-    if (cycleRes.ok && cycleRes.data?.records?.[0]) {
-      const record = cycleRes.data.records[0];
-      whoopCycleId = record.id != null ? String(record.id) : null;
-      if (record.score) {
-        strain = record.score.strain ?? null;
-        calories =
-          record.score.kilojoule != null
-            ? record.score.kilojoule / 4.184
-            : null;
+    if (cycleRes.ok && cycleRes.data?.records) {
+      for (const cycle of cycleRes.data.records) {
+        const date = cycle.start?.slice(0, 10);
+        if (!date) continue;
+        const row = getOrCreate(date);
+        row.whoop_cycle_id = cycle.id != null ? String(cycle.id) : null;
+        if (cycle.score) {
+          row.strain = cycle.score.strain ?? null;
+          row.calories =
+            cycle.score.kilojoule != null
+              ? cycle.score.kilojoule / 4.184
+              : null;
+        }
+        dateMap.set(date, row);
+        if (cycle.id != null) cycleIdToDate.set(cycle.id, date);
       }
     } else if (!cycleRes.ok) {
       syncErrors = appendSyncError(
@@ -330,43 +357,71 @@ Deno.serve(async (req) => {
       );
     }
 
-    // 5. Upsert today's health data
-    const today = todayUTC();
-    const { error: upsertError } = await supabase
-      .from("mission_control_health")
-      .upsert(
-        {
-          user_id: userId,
-          date: today,
-          recovery_score: recoveryScore,
-          hrv_ms: hrvMs,
-          resting_hr: restingHr,
-          sleep_hours: sleepHours,
-          sleep_efficiency: sleepEfficiency,
-          strain,
-          calories,
-          whoop_cycle_id: whoopCycleId,
-          synced_at: new Date().toISOString(),
-        },
-        { onConflict: "user_id,date" },
-      );
-
-    if (upsertError) {
+    // Map recovery to dates via cycle_id, fallback to created_at
+    if (recoveryRes.ok && recoveryRes.data?.records) {
+      for (const rec of recoveryRes.data.records) {
+        const date =
+          (rec.cycle_id != null ? cycleIdToDate.get(rec.cycle_id) : null) ??
+          rec.created_at?.slice(0, 10);
+        if (!date || !rec.score) continue;
+        const row = getOrCreate(date);
+        row.recovery_score = rec.score.recovery_score ?? null;
+        row.hrv_ms = rec.score.hrv_rmssd_milli ?? null;
+        row.resting_hr = rec.score.resting_heart_rate ?? null;
+        dateMap.set(date, row);
+      }
+    } else if (!recoveryRes.ok) {
       syncErrors = appendSyncError(
         syncErrors,
-        `Upsert failed: ${upsertError.message}`,
-      );
-      await supabase
-        .from("mission_control_sync")
-        .update({ whoop_sync_errors: syncErrors })
-        .eq("user_id", userId);
-      return errorResponse(
-        `Failed to upsert health data: ${upsertError.message}`,
-        500,
+        `Recovery fetch failed (${recoveryRes.status})`,
       );
     }
 
-    // 6. Update sync state -- clear errors on success
+    // Map sleep to dates via end time (the day you woke up)
+    if (sleepRes.ok && sleepRes.data?.records) {
+      for (const slp of sleepRes.data.records) {
+        const date = slp.end?.slice(0, 10) ?? slp.start?.slice(0, 10);
+        if (!date || !slp.score) continue;
+        const row = getOrCreate(date);
+        const totalInBed = slp.score.stage_summary?.total_in_bed_time_milli;
+        row.sleep_hours = totalInBed != null ? totalInBed / 3_600_000 : null;
+        row.sleep_efficiency = slp.score.sleep_efficiency_percentage ?? null;
+        dateMap.set(date, row);
+      }
+    } else if (!sleepRes.ok) {
+      syncErrors = appendSyncError(
+        syncErrors,
+        `Sleep fetch failed (${sleepRes.status})`,
+      );
+    }
+
+    // 6. Upsert all health rows
+    const rows = Array.from(dateMap.values());
+    let upsertedCount = 0;
+
+    if (rows.length > 0) {
+      const { error: upsertError } = await supabase
+        .from("mission_control_health")
+        .upsert(rows, { onConflict: "user_id,date" });
+
+      if (upsertError) {
+        syncErrors = appendSyncError(
+          syncErrors,
+          `Upsert failed: ${upsertError.message}`,
+        );
+        await supabase
+          .from("mission_control_sync")
+          .update({ whoop_sync_errors: syncErrors })
+          .eq("user_id", userId);
+        return errorResponse(
+          `Failed to upsert health data: ${upsertError.message}`,
+          500,
+        );
+      }
+      upsertedCount = rows.length;
+    }
+
+    // 7. Update sync state -- clear errors on success
     const { error: updateError } = await supabase
       .from("mission_control_sync")
       .update({
@@ -379,19 +434,26 @@ Deno.serve(async (req) => {
       console.error("Failed to update sync state:", updateError.message);
     }
 
+    // Return most recent day's data for backwards compatibility
+    const today = todayUTC();
+    const todayRow = dateMap.get(today) ?? rows[0];
+
     return jsonResponse({
       synced: true,
       date: today,
-      fields: {
-        recovery_score: recoveryScore,
-        hrv_ms: hrvMs,
-        resting_hr: restingHr,
-        sleep_hours: sleepHours,
-        sleep_efficiency: sleepEfficiency,
-        strain,
-        calories,
-        whoop_cycle_id: whoopCycleId,
-      },
+      days: upsertedCount,
+      fields: todayRow
+        ? {
+            recovery_score: todayRow.recovery_score,
+            hrv_ms: todayRow.hrv_ms,
+            resting_hr: todayRow.resting_hr,
+            sleep_hours: todayRow.sleep_hours,
+            sleep_efficiency: todayRow.sleep_efficiency,
+            strain: todayRow.strain,
+            calories: todayRow.calories,
+            whoop_cycle_id: todayRow.whoop_cycle_id,
+          }
+        : null,
       partialErrors: syncErrors.length,
     });
   } catch (err) {

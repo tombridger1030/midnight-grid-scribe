@@ -80,6 +80,7 @@ export const CommitHeatmap: React.FC<CommitHeatmapProps> = ({ commits }) => {
         height: "100%",
       }}
     >
+      <style>{`@media (max-width: 900px) { .heatmap-count { display: none !important; } }`}</style>
       <PanelHeader title="COMMIT ACTIVITY" status="nominal" />
 
       <div style={{ display: "flex", gap: "4px", flex: 1, minHeight: 0 }}>
@@ -135,8 +136,31 @@ export const CommitHeatmap: React.FC<CommitHeatmapProps> = ({ commits }) => {
                   cursor: "pointer",
                   position: "relative",
                   minHeight: 0,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
                 }}
               >
+                {/* Show commit count inside cell when large enough */}
+                {day.count > 0 && (
+                  <span
+                    className="heatmap-count"
+                    style={{
+                      fontFamily: mcTokens.typography.fontFamily,
+                      fontSize: "9px",
+                      fontWeight: 600,
+                      fontVariantNumeric: "tabular-nums",
+                      color:
+                        day.count > 3
+                          ? mcTokens.colors.bg.primary
+                          : mcTokens.colors.text.primary,
+                      lineHeight: 1,
+                      pointerEvents: "none",
+                    }}
+                  >
+                    {day.count}
+                  </span>
+                )}
                 {hoveredIdx === idx && (
                   <div
                     style={{

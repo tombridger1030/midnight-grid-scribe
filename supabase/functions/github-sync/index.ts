@@ -151,6 +151,8 @@ Deno.serve(async (req) => {
         const commitsRes = await githubFetch(commitsUrl, token);
 
         if (!commitsRes.ok) {
+          // 409 = empty repo — skip silently, not an error
+          if (commitsRes.status === 409) continue;
           syncErrors = appendSyncError(
             syncErrors,
             repoFullName,
