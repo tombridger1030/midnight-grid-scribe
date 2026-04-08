@@ -527,6 +527,22 @@ class FocusService {
       throw new Error("End time must be after start time");
     }
 
+    if (!endedAt) {
+      const existingSession = await this.getSessionById(sessionId);
+      if (!existingSession) {
+        return null;
+      }
+
+      if (!existingSession.is_active) {
+        const activeSession = await this.getActiveSession();
+        if (activeSession && activeSession.id !== sessionId) {
+          throw new Error(
+            "Stop the current active session before reopening another one",
+          );
+        }
+      }
+    }
+
     const updatePayload = {
       started_at: startedAt.toISOString(),
       ended_at: endedAt ? endedAt.toISOString() : null,
