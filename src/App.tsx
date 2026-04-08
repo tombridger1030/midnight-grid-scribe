@@ -40,6 +40,7 @@ const KPIManage = lazy(() => import("./pages/KPIManage"));
 const DailyReview = lazy(() => import("./pages/DailyReview"));
 const MissionControl = lazy(() => import("@/pages/MissionControl"));
 const WeeklyLog = lazy(() => import("@/pages/WeeklyLog"));
+const Focus = lazy(() => import("@/pages/Focus"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -195,6 +196,7 @@ const AppContent = () => {
               <Route path="dashboard" element={<Dashboard />} />
               <Route path="visualizer" element={<Visualizer />} />
               <Route path="activity" element={<Activity />} />
+              <Route path="focus" element={<Focus />} />
               <Route path="cash" element={<Cash />} />
               <Route path="settings" element={<Settings />} />
               <Route path="kpis/manage" element={<KPIManage />} />
