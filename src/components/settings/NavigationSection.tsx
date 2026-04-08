@@ -6,6 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Layout,
+  Activity,
   LayoutDashboard,
   BarChart3,
   Ship,
@@ -13,6 +14,8 @@ import {
   GitBranch,
   Network,
   FileText,
+  Calendar,
+  TimerReset,
   LucideIcon,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -24,12 +27,15 @@ import { toast } from 'sonner';
 // Icon mapping
 const iconMap: Record<string, LucideIcon> = {
   LayoutDashboard,
+  Activity,
   BarChart3,
   Ship,
   TrendingUp,
   GitBranch,
   Network,
   FileText,
+  Calendar,
+  TimerReset,
 };
 
 export const NavigationSection: React.FC = () => {

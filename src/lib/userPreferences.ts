@@ -42,6 +42,7 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
     "dashboard",
     "kpis",
     "activity",
+    "focus",
     "progression",
     "cash",
     "content",
@@ -91,6 +92,12 @@ export const AVAILABLE_MODULES = [
     name: "Activity",
     icon: "Activity",
     description: "Yearly activity heatmaps",
+  },
+  {
+    id: "focus",
+    name: "Focus",
+    icon: "TimerReset",
+    description: "Clock sessions and build your work heatmap",
   },
   {
     id: "progression",
@@ -150,6 +157,15 @@ export class UserPreferencesManager {
       // Auto-enable progression module for all users
       if (!enabledModules.includes("progression")) {
         enabledModules.push("progression");
+      }
+
+      if (!enabledModules.includes("focus")) {
+        const activityIndex = enabledModules.indexOf("activity");
+        if (activityIndex !== -1) {
+          enabledModules.splice(activityIndex + 1, 0, "focus");
+        } else {
+          enabledModules.push("focus");
+        }
       }
 
       // Merge with defaults to ensure all keys exist

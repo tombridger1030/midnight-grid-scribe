@@ -169,8 +169,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         enabled_modules: [
           "dashboard",
           "kpis",
-          "visualizer",
-          "roadmap",
+          "activity",
+          "focus",
           "cash",
           "content",
         ],
@@ -208,8 +208,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           enabled_modules: [
             "dashboard",
             "kpis",
-            "visualizer",
-            "roadmap",
+            "activity",
+            "focus",
             "cash",
             "content",
           ],

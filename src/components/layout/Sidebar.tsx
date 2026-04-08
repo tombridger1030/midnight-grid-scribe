@@ -15,6 +15,7 @@ import {
   Settings,
   Calendar,
   TrendingUp,
+  TimerReset,
   LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -38,6 +39,7 @@ const iconMap: Record<string, LucideIcon> = {
   dashboard: LayoutDashboard,
   kpis: BarChart3,
   activity: Activity,
+  focus: TimerReset,
   visualizer: TrendingUp,
   progression: TrendingUp,
   cash: Network,
@@ -50,6 +52,7 @@ const pathMap: Record<string, string> = {
   dashboard: "/",
   kpis: "/kpis",
   activity: "/activity",
+  focus: "/focus",
   visualizer: "/visualizer",
   progression: "/progression",
   cash: "/cash",
