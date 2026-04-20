@@ -8,3 +8,14 @@
 - pg_cron: github-sync every 15min, whoop-sync every 30min
 - Interactive heatmap, sparklines with hover tooltips, ring gauge
 - 44 commits, 61 files, +9,014/-529 lines
+
+## 2026-04-20: Brutal 12h Focus Heatmap (PR #14)
+- /focus Work Heatmap reweighted around 12h/day goal
+- Breakpoints: 0 / 2h / 5h / 8h / 12h / 12h+ (kept 2h and 5h as sub-floor markers)
+- Levels 1–3 darkened (#0f1b10 / #15291a / #1c3822) so <8h days read as wasteland
+- Level 4 (#55bf5e) stays as the bright jump at 8h — the defended floor
+- Level 5 (#aef7a8) now fires only at ≥12h — goal hit
+- Target band header: 10h+ → 12h+
+- Also fixed pre-existing `let cursor` → `const cursor` lint error in FocusHeatmap
+- Files: src/styles/focus-tokens.ts, src/components/focus/FocusHeatmap.tsx
+- Merged 3b3b9da, deployed via Vercel (bundle index-BupHSSn1.js), /focus verified 200
