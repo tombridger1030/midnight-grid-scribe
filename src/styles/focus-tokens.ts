@@ -15,9 +15,9 @@ export const focusTokens = {
     danger: "#ff8e8e",
     heatmap: {
       empty: "#090909",
-      level1: "#102511",
-      level2: "#1a421d",
-      level3: "#2f7a33",
+      level1: "#0f1b10",
+      level2: "#15291a",
+      level3: "#1c3822",
       level4: "#55bf5e",
       level5: "#aef7a8",
     },
@@ -27,4 +27,3 @@ export const focusTokens = {
     mono: "'JetBrains Mono', 'Fira Mono', ui-monospace, monospace",
   },
 } as const;
-
