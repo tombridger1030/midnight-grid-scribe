@@ -4,6 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
 import {
   type BlockInstanceWithLabel,
+  type BlockKind,
   clockIn,
   clockOut,
   findActiveBlock,
@@ -12,6 +13,7 @@ import {
 } from "@/lib/blockService";
 import {
   type DailyInputs,
+  computeSleepOffsetMin,
   formatLocalHHMM,
   getInputs,
   getInputsRange,
@@ -20,6 +22,10 @@ import {
   setExercise,
   setWakeTime,
 } from "@/lib/inputsService";
+import {
+  type OperatorSettings,
+  getOperatorSettings,
+} from "@/lib/operatorSettingsService";
 import {
   type DailyFlow,
   getFlow,
@@ -117,7 +123,7 @@ function ClockOutModal({
     setBusy(true);
     setError(null);
     try {
-      await clockOut(block.id, text);
+      await clockOut(block.id, block.kind, text);
       onSaved();
       onClose();
     } catch (err) {
@@ -133,6 +139,19 @@ function ClockOutModal({
     return () => clearInterval(t);
   }, []);
 
+  const isJudged = block.kind === "judged";
+  const prompt = isJudged
+    ? "WHAT DID YOU DO? (THE LLM JUDGES IF IT WAS A GOOD USE OF TIME)"
+    : "ANY NOTES? (OPTIONAL — JUST FOR YOUR LOG, NO LLM JUDGMENT)";
+  const placeholder = isJudged
+    ? "be specific. artifacts, decisions, distractions"
+    : "thoughts, takeaways, anything worth remembering";
+  const submitLabel = busy
+    ? isJudged
+      ? "judging..."
+      : "saving..."
+    : "⏹ CLOCK OUT";
+
   return (
     <div className="fixed inset-0 bg-black/80 flex items-start justify-center pt-24 z-50 px-4">
       <div className="w-full max-w-xl bg-black border border-[#444] p-6 font-mono">
@@ -142,16 +161,14 @@ function ClockOutModal({
           {trimSec(block.end_time)} ·{" "}
           <span className="tabular-nums">{fmtElapsed(block.started_at)}</span>
         </div>
-        <div className={`text-xs ${ACCENT.muted} mb-2`}>
-          WHAT DID YOU DO? (THE LLM JUDGES IF IT WAS A GOOD USE OF TIME)
-        </div>
+        <div className={`text-xs ${ACCENT.muted} mb-2`}>{prompt}</div>
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
           maxLength={500}
           rows={5}
           autoFocus
-          placeholder="be specific. artifacts, decisions, distractions"
+          placeholder={placeholder}
           className="w-full bg-black border border-[#444] text-white p-3 text-sm focus:border-[#00D4FF] focus:outline-none resize-none"
         />
         <div className={`text-xs ${ACCENT.dim} text-right mt-1`}>
@@ -161,10 +178,10 @@ function ClockOutModal({
         <div className="flex gap-2 mt-4">
           <button
             onClick={submit}
-            disabled={busy || !text.trim()}
+            disabled={busy || (isJudged && !text.trim())}
             className={`flex-1 border ${ACCENT.cyan} border-current py-2 text-xs hover:bg-[#00D4FF]/10 disabled:opacity-30`}
           >
-            {busy ? "judging..." : "⏹ CLOCK OUT"}
+            {submitLabel}
           </button>
           <button
             onClick={onClose}
@@ -243,6 +260,7 @@ const Terminal: React.FC = () => {
     useState<BlockInstanceWithLabel | null>(null);
   const [scoring, setScoring] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [settings, setSettings] = useState<OperatorSettings | null>(null);
 
   const loadAll = useCallback(async () => {
     const start = offsetDateStr(6);
@@ -251,16 +269,19 @@ const Terminal: React.FC = () => {
       f: DailyFlow | null = null,
       g: MonthlyGoal[] = [],
       range7Inputs: DailyInputs[] = [],
-      range7Flow: DailyFlow[] = [];
+      range7Flow: DailyFlow[] = [],
+      s: OperatorSettings | null = null;
     try {
-      [b, i, f, g, range7Inputs, range7Flow] = await Promise.all([
+      [b, i, f, g, range7Inputs, range7Flow, s] = await Promise.all([
         listForDate(today).catch(() => []),
         getInputs(today).catch(() => null),
         getFlow(today).catch(() => null),
         listGoalsForMonth().catch(() => []),
         getInputsRange(start, today).catch(() => []),
         getFlowRange(start, today).catch(() => []),
+        getOperatorSettings().catch(() => null),
       ]);
+      setSettings(s);
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : String(err));
     }
@@ -303,6 +324,26 @@ const Terminal: React.FC = () => {
     (b) => b.status === "captured" || b.status === "adhoc",
   ).length;
   const dayLabel = profile?.display_name?.toUpperCase() ?? "OPERATOR";
+
+  // Today's sleep offset from target schedule (client-side, since SQL fn extracts UTC).
+  const targetBed = settings?.target_bedtime?.slice(0, 5) ?? "23:00";
+  const targetWake = settings?.target_wake_time?.slice(0, 5) ?? "07:00";
+  const todayOffset = computeSleepOffsetMin(
+    inputs?.sleep_start_at ?? null,
+    inputs?.sleep_end_at ?? null,
+    targetBed,
+    targetWake,
+  );
+
+  const handleClockOut = async (b: BlockInstanceWithLabel) => {
+    if (b.kind === "routine") {
+      // Instant clock-out, no modal, no LLM
+      await clockOut(b.id, "routine", "");
+      loadAll();
+    } else {
+      setCaptureBlock(b);
+    }
+  };
 
   const triggerScore = async () => {
     setScoring(true);
@@ -356,7 +397,7 @@ const Terminal: React.FC = () => {
               </span>
             </span>
             <button
-              onClick={() => setCaptureBlock(active)}
+              onClick={() => handleClockOut(active)}
               className={`px-3 py-1 text-xs ${ACCENT.amber} hover:bg-[#FFB800]/10`}
             >
               [ ⏹ CLOCK OUT ]
@@ -399,18 +440,19 @@ const Terminal: React.FC = () => {
               <span className={ACCENT.muted}>OFF </span>
               <span
                 className={
-                  inputs?.sleep_sigma_7d == null
+                  todayOffset == null
                     ? ACCENT.dim
-                    : inputs.sleep_sigma_7d <= 15
+                    : todayOffset <= 15
                       ? ACCENT.green
-                      : inputs.sleep_sigma_7d <= 45
+                      : todayOffset <= 45
                         ? "text-white"
-                        : inputs.sleep_sigma_7d <= 90
+                        : todayOffset <= 90
                           ? ACCENT.amber
                           : ACCENT.red
                 }
+                title={`vs target ${targetBed}–${targetWake}`}
               >
-                {inputs?.sleep_sigma_7d?.toFixed(0) ?? "—"}
+                {todayOffset?.toFixed(0) ?? "—"}
               </span>
               <span className={ACCENT.muted}>m</span>
             </span>
@@ -482,13 +524,22 @@ const Terminal: React.FC = () => {
                           {b.status === "active" && (
                             <span className={ACCENT.amber}>▶ ACTIVE</span>
                           )}
-                          {b.status === "captured" && (
+                          {b.status === "captured" && b.kind === "routine" && (
+                            <span className={ACCENT.green}>DONE</span>
+                          )}
+                          {b.status === "captured" && b.kind === "note" && (
+                            <span className={ACCENT.muted}>
+                              {b.results_text ?? "noted"}
+                            </span>
+                          )}
+                          {b.status === "captured" && b.kind === "judged" && (
                             <>
                               {b.quality_score !== null && (
-                                <span className={`${qualityColor} mr-2`}>
+                                <span className={`${qualityColor} font-bold`}>
                                   {b.quality_score}
                                 </span>
                               )}
+                              {b.quality_score !== null && " "}
                               <span className={ACCENT.muted}>
                                 {b.quality_verdict ??
                                   b.results_summary ??
@@ -535,7 +586,7 @@ const Terminal: React.FC = () => {
                         )}
                         {b.status === "active" && (
                           <button
-                            onClick={() => setCaptureBlock(b)}
+                            onClick={() => handleClockOut(b)}
                             className={`text-xs ${ACCENT.amber} hover:underline`}
                           >
                             [ ⏹ CLOCK OUT ]

@@ -43,10 +43,11 @@ Output via emit_judgment tool:
       - References specific artifacts/metrics if present.
       - Names the misalignment concretely if score is low.
       - No encouragement. No "good job." No emojis.
+      - Do NOT include the score in the verdict text — the score is a separate field.
       Examples:
-        "shipped migration + edge fn — block aligned · 92"
-        "scrolled twitter, no output named · 18"
-        "drafted plan, off-purpose for cortal block · 42"
+        "shipped migration + edge fn — block aligned"
+        "scrolled twitter, no output named"
+        "drafted plan, off-purpose for cortal block"
 
 The block label tells you what the operator INTENDED to do. Judge alignment between intent and
 what they actually did. Penalize shallow, off-purpose, or unclear output.
@@ -291,19 +292,17 @@ async function scoreDay(userId: string, dateStr?: string) {
     verdict: string;
   };
 
-  await supabase
-    .from("daily_flow")
-    .upsert(
-      {
-        user_id: userId,
-        date,
-        flow_score,
-        verdict,
-        model: JUDGE_MODEL,
-        generated_at: new Date().toISOString(),
-      },
-      { onConflict: "user_id,date" },
-    );
+  await supabase.from("daily_flow").upsert(
+    {
+      user_id: userId,
+      date,
+      flow_score,
+      verdict,
+      model: JUDGE_MODEL,
+      generated_at: new Date().toISOString(),
+    },
+    { onConflict: "user_id,date" },
+  );
 
   return jsonResponse({ date, flow_score, verdict });
 }

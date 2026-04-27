@@ -8,6 +8,8 @@ export type BlockStatus =
   | "adhoc"
   | "skipped";
 
+export type BlockKind = "routine" | "note" | "judged";
+
 export interface BlockInstance {
   id: string;
   user_id: string;
@@ -24,6 +26,7 @@ export interface BlockInstance {
     label: string;
     start_time: string;
     end_time: string;
+    kind: BlockKind;
   } | null;
 }
 
@@ -31,6 +34,7 @@ export interface BlockInstanceWithLabel extends BlockInstance {
   label: string;
   start_time: string | null;
   end_time: string | null;
+  kind: BlockKind;
 }
 
 function joinLabel(b: BlockInstance): BlockInstanceWithLabel {
@@ -39,6 +43,7 @@ function joinLabel(b: BlockInstance): BlockInstanceWithLabel {
     label: b.schedule_blocks?.label ?? "ad-hoc",
     start_time: b.schedule_blocks?.start_time ?? null,
     end_time: b.schedule_blocks?.end_time ?? null,
+    kind: b.schedule_blocks?.kind ?? "judged",
   };
 }
 
@@ -47,7 +52,7 @@ export async function listForDate(
 ): Promise<BlockInstanceWithLabel[]> {
   const { data, error } = await supabase
     .from("block_instances")
-    .select("*, schedule_blocks(label, start_time, end_time)")
+    .select("*, schedule_blocks(label, start_time, end_time, kind)")
     .eq("date", date);
   if (error) throw error;
   const rows = (data ?? []).map(joinLabel);
@@ -70,22 +75,33 @@ export async function clockIn(blockInstanceId: string): Promise<void> {
 }
 
 /**
- * Clock out: save results_text + ended_at, mark as captured (pending judgment).
- * Then fire-and-forget the LLM judge call which fills in quality_score/verdict.
+ * Clock out behavior depends on block kind:
+ *   routine — instant clock-out, no text, no LLM
+ *   note    — save text, no LLM
+ *   judged  — save text + invoke LLM judge → quality_score + verdict
  */
 export async function clockOut(
   blockInstanceId: string,
+  kind: BlockKind,
   resultsText: string,
 ): Promise<{ quality_score: number | null; quality_verdict: string | null }> {
   const trimmed = resultsText.trim();
-  if (!trimmed) throw new Error("results required");
+  if (kind !== "routine" && !trimmed) throw new Error("results required");
 
   const now = new Date().toISOString();
   const { error } = await supabase
     .from("block_instances")
-    .update({ results_text: trimmed, ended_at: now, status: "captured" })
+    .update({
+      results_text: kind === "routine" ? null : trimmed,
+      ended_at: now,
+      status: "captured",
+    })
     .eq("id", blockInstanceId);
   if (error) throw error;
+
+  if (kind !== "judged") {
+    return { quality_score: null, quality_verdict: null };
+  }
 
   try {
     const { data, error: fnError } = await supabase.functions.invoke(

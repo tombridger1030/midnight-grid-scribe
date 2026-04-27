@@ -133,3 +133,31 @@ export function formatLocalHHMM(iso: string | null): string {
   const d = new Date(iso);
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
+
+/**
+ * Compute total minutes off-target for one day's sleep window,
+ * given target bedtime + wake time as HH:MM strings (local).
+ * Returns |bed_offset| + |wake_offset| using shortest circular distance (mod 1440).
+ * Returns null if either timestamp is missing.
+ */
+export function computeSleepOffsetMin(
+  sleepStartIso: string | null,
+  sleepEndIso: string | null,
+  targetBedtime: string,
+  targetWakeTime: string,
+): number | null {
+  if (!sleepStartIso || !sleepEndIso) return null;
+  const bed = new Date(sleepStartIso);
+  const wake = new Date(sleepEndIso);
+  const bedMin = bed.getHours() * 60 + bed.getMinutes();
+  const wakeMin = wake.getHours() * 60 + wake.getMinutes();
+  const [tbH, tbM] = targetBedtime.split(":").map(Number);
+  const [twH, twM] = targetWakeTime.split(":").map(Number);
+  const tBed = tbH * 60 + tbM;
+  const tWake = twH * 60 + twM;
+  const circDist = (a: number, b: number) => {
+    const d = Math.abs(a - b);
+    return Math.min(d, 1440 - d);
+  };
+  return circDist(bedMin, tBed) + circDist(wakeMin, tWake);
+}
