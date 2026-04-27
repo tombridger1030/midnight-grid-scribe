@@ -232,17 +232,28 @@ const Terminal: React.FC = () => {
   const [captureBlock, setCaptureBlock] =
     useState<BlockInstanceWithLabel | null>(null);
   const [scoring, setScoring] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const loadAll = useCallback(async () => {
     const start = offsetDateStr(6);
-    const [b, i, f, g, range7Inputs, range7Flow] = await Promise.all([
-      listForDate(today),
-      getInputs(today),
-      getFlow(today),
-      listGoalsForMonth(),
-      getInputsRange(start, today),
-      getFlowRange(start, today),
-    ]);
+    let b: BlockInstanceWithLabel[] = [],
+      i: DailyInputs | null = null,
+      f: DailyFlow | null = null,
+      g: MonthlyGoal[] = [],
+      range7Inputs: DailyInputs[] = [],
+      range7Flow: DailyFlow[] = [];
+    try {
+      [b, i, f, g, range7Inputs, range7Flow] = await Promise.all([
+        listForDate(today).catch(() => []),
+        getInputs(today).catch(() => null),
+        getFlow(today).catch(() => null),
+        listGoalsForMonth().catch(() => []),
+        getInputsRange(start, today).catch(() => []),
+        getFlowRange(start, today).catch(() => []),
+      ]);
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : String(err));
+    }
     setBlocks(b);
     setInputs(i);
     setFlow(f);

@@ -65,19 +65,29 @@ function ScheduleEditor() {
     days: [1, 2, 3, 4, 5] as number[],
   });
 
-  const reload = () => listActiveBlocks().then(setBlocks);
+  const [error, setError] = useState<string | null>(null);
+  const reload = () =>
+    listActiveBlocks()
+      .then(setBlocks)
+      .catch((e) => setError(String(e)));
   useEffect(() => {
     reload();
   }, []);
 
   const submit = async () => {
     if (!draft.label.trim() || draft.days.length === 0) return;
-    await createBlock({
-      label: draft.label.trim(),
-      start_time: draft.start_time,
-      end_time: draft.end_time,
-      days_of_week: draft.days,
-    });
+    setError(null);
+    try {
+      await createBlock({
+        label: draft.label.trim(),
+        start_time: draft.start_time,
+        end_time: draft.end_time,
+        days_of_week: draft.days,
+      });
+    } catch (e) {
+      setError(String(e));
+      return;
+    }
     setDraft({
       label: "",
       start_time: "09:00",
@@ -98,6 +108,9 @@ function ScheduleEditor() {
 
   return (
     <div>
+      {error && (
+        <div className={`text-xs ${ACCENT.red} mb-2`}>error: {error}</div>
+      )}
       {blocks.length === 0 && !adding && (
         <div className={`text-xs ${ACCENT.dim} mb-2`}>no blocks defined</div>
       )}
@@ -210,7 +223,10 @@ function GoalsEditor() {
     threshold: "",
   });
 
-  const reload = () => listGoalsForMonth().then(setGoals);
+  const reload = () =>
+    listGoalsForMonth()
+      .then(setGoals)
+      .catch(() => setGoals([]));
   useEffect(() => {
     reload();
   }, []);
@@ -322,7 +338,10 @@ function AccountabilityEditor() {
   const [sending, setSending] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
 
-  const reload = () => listRecipients().then(setRecipients);
+  const reload = () =>
+    listRecipients()
+      .then(setRecipients)
+      .catch(() => setRecipients([]));
   useEffect(() => {
     reload();
   }, []);

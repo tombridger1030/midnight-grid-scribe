@@ -57,26 +57,27 @@ const Log: React.FC = () => {
   useEffect(() => {
     const start = offsetDateStr(days - 1);
     const end = offsetDateStr(0);
-    Promise.all([getInputsRange(start, end), getFlowRange(start, end)]).then(
-      ([inputs, flow]) => {
-        const map = new Map<string, LogRow>();
-        for (let n = 0; n < days; n++) {
-          const date = offsetDateStr(n);
-          map.set(date, { date });
-        }
-        for (const i of inputs) {
-          const r = map.get(i.date);
-          if (r) r.inputs = i;
-        }
-        for (const f of flow) {
-          const r = map.get(f.date);
-          if (r) r.flow = f;
-        }
-        setRows(
-          Array.from(map.values()).sort((a, b) => b.date.localeCompare(a.date)),
-        );
-      },
-    );
+    Promise.all([
+      getInputsRange(start, end).catch(() => [] as DailyInputs[]),
+      getFlowRange(start, end).catch(() => [] as DailyFlow[]),
+    ]).then(([inputs, flow]) => {
+      const map = new Map<string, LogRow>();
+      for (let n = 0; n < days; n++) {
+        const date = offsetDateStr(n);
+        map.set(date, { date });
+      }
+      for (const i of inputs) {
+        const r = map.get(i.date);
+        if (r) r.inputs = i;
+      }
+      for (const f of flow) {
+        const r = map.get(f.date);
+        if (r) r.flow = f;
+      }
+      setRows(
+        Array.from(map.values()).sort((a, b) => b.date.localeCompare(a.date)),
+      );
+    });
   }, [days]);
 
   const stats = useMemo(() => {

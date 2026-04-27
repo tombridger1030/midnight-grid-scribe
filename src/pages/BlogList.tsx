@@ -29,12 +29,17 @@ const BlogList: React.FC = () => {
   const navigate = useNavigate();
   const [posts, setPosts] = useState<BlogPost[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    listPosts().then((p) => {
-      setPosts(p);
-      setLoading(false);
-    });
+    listPosts()
+      .then(setPosts)
+      .catch((err) =>
+        setError(
+          err?.message || (err instanceof Error ? err.message : String(err)),
+        ),
+      )
+      .finally(() => setLoading(false));
   }, []);
 
   const newPost = async () => {
@@ -59,6 +64,9 @@ const BlogList: React.FC = () => {
           </div>
         </div>
 
+        {error && (
+          <div className={`text-xs ${ACCENT.red} mb-4`}>error: {error}</div>
+        )}
         {loading ? (
           <div className={`text-xs ${ACCENT.dim}`}>loading...</div>
         ) : posts.length === 0 ? (
