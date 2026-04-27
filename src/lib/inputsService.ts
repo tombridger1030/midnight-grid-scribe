@@ -3,9 +3,10 @@ import { supabase } from "./supabase";
 export interface DailyInputs {
   user_id: string;
   date: string;
+  sleep_start_at: string | null;
+  sleep_end_at: string | null;
   sleep_hours: number | null;
   sleep_sigma_7d: number | null;
-  sleep_source: "whoop" | "self" | null;
   exercise: boolean | null;
   diet: boolean | null;
 }
@@ -37,7 +38,7 @@ export async function getInputsRange(
 async function upsertField(
   date: string,
   patch: Partial<
-    Pick<DailyInputs, "sleep_hours" | "sleep_source" | "exercise" | "diet">
+    Pick<DailyInputs, "sleep_start_at" | "sleep_end_at" | "exercise" | "diet">
   >,
 ): Promise<void> {
   const { data: u } = await supabase.auth.getUser();
@@ -51,11 +52,65 @@ async function upsertField(
   if (error) throw error;
 }
 
-export async function setSleepHours(
+/**
+ * Compute sleep_start_at and sleep_end_at ISO timestamps from HH:MM strings.
+ * `wakeDate` = the calendar date you woke up on (== daily_inputs.date row key).
+ * If bedtime hour >= wake hour, bedtime is treated as the prior day.
+ */
+function computeSleepTimestamps(
+  wakeDate: string,
+  bedTime: string | null,
+  wakeTime: string | null,
+): { sleep_start_at: string | null; sleep_end_at: string | null } {
+  const wakeAt = wakeTime ? new Date(`${wakeDate}T${wakeTime}:00`) : null;
+  let bedAt: Date | null = null;
+
+  if (bedTime) {
+    const [bH, bM] = bedTime.split(":").map(Number);
+    if (wakeAt) {
+      const wH = wakeAt.getHours();
+      const wM = wakeAt.getMinutes();
+      const isOvernight = bH * 60 + bM >= wH * 60 + wM;
+      bedAt = new Date(wakeAt);
+      if (isOvernight) bedAt.setDate(bedAt.getDate() - 1);
+      bedAt.setHours(bH, bM, 0, 0);
+    } else {
+      // No wake set yet — store as today + bedtime as a placeholder.
+      // When wake is later set, the next setBedTime/setWakeTime call will rebalance.
+      bedAt = new Date(`${wakeDate}T${bedTime}:00`);
+    }
+  }
+
+  return {
+    sleep_start_at: bedAt?.toISOString() ?? null,
+    sleep_end_at: wakeAt?.toISOString() ?? null,
+  };
+}
+
+/** Set bedtime, preserving (and if needed re-anchoring) the existing wake time. */
+export async function setBedTime(
   date: string,
-  hours: number | null,
+  bedTime: string | null,
 ): Promise<void> {
-  return upsertField(date, { sleep_hours: hours, sleep_source: "self" });
+  const current = await getInputs(date);
+  const wakeTime = current?.sleep_end_at
+    ? formatLocalHHMM(current.sleep_end_at)
+    : null;
+  const ts = computeSleepTimestamps(date, bedTime, wakeTime);
+  return upsertField(date, ts);
+}
+
+/** Set wake time, preserving (and if needed re-anchoring) the existing bedtime. */
+export async function setWakeTime(
+  date: string,
+  wakeTime: string | null,
+): Promise<void> {
+  const current = await getInputs(date);
+  const bedTime = current?.sleep_start_at
+    ? formatLocalHHMM(current.sleep_start_at)
+    : null;
+  const ts = computeSleepTimestamps(date, bedTime, wakeTime);
+  return upsertField(date, ts);
 }
 
 export async function setExercise(
@@ -70,4 +125,11 @@ export async function setDiet(
   value: boolean | null,
 ): Promise<void> {
   return upsertField(date, { diet: value });
+}
+
+/** HH:MM extracted from an ISO timestamp in local time, for editor display. */
+export function formatLocalHHMM(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }

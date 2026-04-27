@@ -11,11 +11,13 @@ import {
 } from "@/lib/blockService";
 import {
   type DailyInputs,
+  formatLocalHHMM,
   getInputs,
   getInputsRange,
+  setBedTime,
   setDiet,
   setExercise,
-  setSleepHours,
+  setWakeTime,
 } from "@/lib/inputsService";
 import {
   type DailyFlow,
@@ -186,35 +188,24 @@ function YNToggle({
   );
 }
 
-function SleepInput({
+function TimeField({
   value,
   onChange,
 }: {
-  value: number | null;
-  onChange: (v: number | null) => void;
+  value: string;
+  onChange: (v: string) => void;
 }) {
-  const [v, setV] = useState(value !== null ? String(value) : "");
-  useEffect(() => setV(value !== null ? String(value) : ""), [value]);
-
-  const commit = () => {
-    const trimmed = v.trim();
-    if (!trimmed) return onChange(null);
-    const n = parseFloat(trimmed);
-    if (Number.isNaN(n)) return;
-    onChange(Math.round(n * 10) / 10);
-  };
-
+  const [v, setV] = useState(value);
+  useEffect(() => setV(value), [value]);
   return (
     <input
-      type="text"
+      type="time"
       value={v}
-      onChange={(e) => setV(e.target.value)}
-      onBlur={commit}
-      onKeyDown={(e) =>
-        e.key === "Enter" && (e.target as HTMLInputElement).blur()
-      }
-      placeholder="—"
-      className="w-12 bg-transparent text-white text-center border-b border-[#444] focus:border-[#00D4FF] focus:outline-none"
+      onChange={(e) => {
+        setV(e.target.value);
+        if (e.target.value !== value) onChange(e.target.value);
+      }}
+      className="bg-transparent text-white border-b border-[#444] focus:border-[#00D4FF] focus:outline-none px-1"
     />
   );
 }
@@ -348,16 +339,32 @@ const Terminal: React.FC = () => {
         {/* INPUTS */}
         <section className="mb-6">
           <div className={`text-xs ${ACCENT.cyan} mb-2`}>INPUTS · TODAY</div>
-          <div className="flex gap-8 text-sm pl-4">
+          <div className="flex flex-wrap gap-x-8 gap-y-2 text-sm pl-4">
             <span>
-              <span className={ACCENT.muted}>SLEEP </span>
-              <SleepInput
-                value={inputs?.sleep_hours ?? null}
-                onChange={async (v) => {
-                  await setSleepHours(today, v);
+              <span className={ACCENT.muted}>BED </span>
+              <TimeField
+                value={formatLocalHHMM(inputs?.sleep_start_at ?? null)}
+                onChange={async (bed) => {
+                  await setBedTime(today, bed || null);
                   setInputs(await getInputs(today));
                 }}
               />
+            </span>
+            <span>
+              <span className={ACCENT.muted}>WAKE </span>
+              <TimeField
+                value={formatLocalHHMM(inputs?.sleep_end_at ?? null)}
+                onChange={async (wake) => {
+                  await setWakeTime(today, wake || null);
+                  setInputs(await getInputs(today));
+                }}
+              />
+            </span>
+            <span>
+              <span className={ACCENT.muted}>SLP </span>
+              <span className="text-white">
+                {inputs?.sleep_hours?.toFixed(1) ?? "—"}
+              </span>
               <span className={ACCENT.muted}>H</span>
             </span>
             <span>

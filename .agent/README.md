@@ -20,7 +20,7 @@ A private platform that tracks how the operator **works**, **sleeps**, and **thi
 
 ## What it tracks
 
-- **Sleep**: hours + 7-day rolling σ. Whoop sync → `mission_control_health` → fed into `daily_inputs`. Self-report fallback.
+- **Sleep**: bedtime + wake time. `sleep_hours` is a generated column derived from those two timestamps. 7-day rolling σ shows consistency. No Whoop integration — fully self-reported.
 - **Exercise**: Y/N daily.
 - **Diet**: Y/N daily (followed plan or didn't).
 - **Schedule blocks**: recurring weekly template; per-day instances captured at end-of-block with "what did you accomplish?" results.
@@ -48,7 +48,6 @@ If feature creep starts pulling toward any of the above: stop and revisit `/User
   - `flow-judge` — `summarize_block` (Haiku 4.5, prompt-cached) + `score_day` (Sonnet 4.6 via tool_use)
   - `accountability-digest` — Bloomberg-styled plain-text email via Resend, cron + manual modes
   - `operator-cron` — nightly: compute_sleep_sigma_7d, materialize today's block_instances, refresh monthly_goals.status
-  - `whoop-sync` / `whoop-callback` — preserved from prior arch, feeds `mission_control_health.recovery_score`/sleep
   - `ai-proxy` — preserved
 - **Visual language**: pure black `#000`, JetBrains Mono everywhere. Amber=active/today, cyan=data labels, red=missed/at-risk, green=hit. No rounded corners, shadows, gradients. ═══ ─── separators, `▶ ◀ ✗ ✓ ·` glyphs.
 

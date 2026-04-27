@@ -8,4 +8,3 @@ export { ProfileSection } from "./ProfileSection";
 export { SecuritySection } from "./SecuritySection";
 export { AdminSection } from "./AdminSection";
 export { NavigationSection } from "./NavigationSection";
-export { WhoopSection } from "./WhoopSection";

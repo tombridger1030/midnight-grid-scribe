@@ -4,7 +4,6 @@ import { useAuth } from "@/contexts/AuthContext";
 import {
   ProfileSection,
   SecuritySection,
-  WhoopSection,
   AdminSection,
 } from "@/components/settings";
 import {
@@ -463,12 +462,6 @@ const Settings: React.FC = () => {
 
         <Section title="ACCOUNTABILITY">
           <AccountabilityEditor />
-        </Section>
-
-        <Section title="WHOOP">
-          <div className="text-white">
-            <WhoopSection />
-          </div>
         </Section>
 
         <Section title="PROFILE">
