@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/lib/supabase";
 import {
   type BlockInstanceWithLabel,
   captureResults,
@@ -263,10 +264,24 @@ const Terminal: React.FC = () => {
   }, [today]);
 
   useEffect(() => {
-    loadAll();
+    // Once-per-day idempotent cron: materialize today's block_instances,
+    // refresh sigma7, refresh monthly_goals.status. Safe to call on every load.
+    const cronMarker = localStorage.getItem("noctisium:cron:date");
+    const ranToday = cronMarker === today;
+    const runCron = async () => {
+      if (ranToday) return;
+      try {
+        await supabase.functions.invoke("operator-cron", { body: {} });
+        localStorage.setItem("noctisium:cron:date", today);
+      } catch (err) {
+        console.warn("operator-cron invoke failed:", err);
+      }
+    };
+    runCron().finally(loadAll);
+
     const t = setInterval(() => setNow(new Date()), 30_000);
     return () => clearInterval(t);
-  }, [loadAll]);
+  }, [loadAll, today]);
 
   const active = findActive(blocks);
   const endedPending = findEndedPending(blocks);
