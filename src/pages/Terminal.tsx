@@ -37,7 +37,17 @@ const todayStr = () => new Date().toISOString().slice(0, 10);
 const offsetDateStr = (n: number) =>
   new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 10);
 const fmtClock = (d: Date) =>
-  `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:${String(d.getSeconds()).padStart(2, "0")}`;
+
+const fmtElapsed = (startedAtIso: string | null): string => {
+  if (!startedAtIso) return "00:00:00";
+  const ms = Date.now() - new Date(startedAtIso).getTime();
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+};
 const fmtDateLong = (d: Date) =>
   d
     .toLocaleString("en-US", {
@@ -117,9 +127,11 @@ function ClockOutModal({
     }
   };
 
-  const elapsed = block.started_at
-    ? Math.round((Date.now() - new Date(block.started_at).getTime()) / 60000)
-    : 0;
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setTick((n) => n + 1), 1000);
+    return () => clearInterval(t);
+  }, []);
 
   return (
     <div className="fixed inset-0 bg-black/80 flex items-start justify-center pt-24 z-50 px-4">
@@ -127,7 +139,8 @@ function ClockOutModal({
         <div className={`text-xs ${ACCENT.cyan} mb-1`}>CLOCK OUT</div>
         <div className="text-sm text-white mb-4">
           {block.label.toUpperCase()} · planned {trimSec(block.start_time)}–
-          {trimSec(block.end_time)} · clocked in {elapsed}m
+          {trimSec(block.end_time)} ·{" "}
+          <span className="tabular-nums">{fmtElapsed(block.started_at)}</span>
         </div>
         <div className={`text-xs ${ACCENT.muted} mb-2`}>
           WHAT DID YOU DO? (THE LLM JUDGES IF IT WAS A GOOD USE OF TIME)
@@ -274,10 +287,16 @@ const Terminal: React.FC = () => {
       }
     };
     runCron().finally(loadAll);
-
-    const t = setInterval(() => setNow(new Date()), 30_000);
-    return () => clearInterval(t);
   }, [loadAll, today]);
+
+  // Clock tick: 1s when a block is active (drives the elapsed timer),
+  // 30s otherwise (just keeps the wall clock fresh).
+  const hasActive = blocks.some((b) => b.status === "active");
+  useEffect(() => {
+    const interval = hasActive ? 1000 : 30_000;
+    const t = setInterval(() => setNow(new Date()), interval);
+    return () => clearInterval(t);
+  }, [hasActive]);
 
   const active = findActiveBlock(blocks);
   const captured = blocks.filter(
@@ -308,39 +327,33 @@ const Terminal: React.FC = () => {
   );
 
   return (
-    <div className="min-h-screen bg-black text-white font-mono px-6 py-6 text-sm">
-      <div className="max-w-5xl mx-auto">
+    <div className="min-h-screen bg-black text-white font-mono px-4 py-3 text-sm">
+      <div className="w-full mx-auto">
         {/* Header */}
-        <div className={`border-t-2 border-b-2 ${ACCENT.rule} py-2 mb-6`}>
+        <div className={`border-t-2 border-b-2 ${ACCENT.rule} py-1.5 mb-3`}>
           <div className="flex items-center justify-between text-xs">
             <span>
               <span className={ACCENT.cyan}>NOCTISIUM TERMINAL</span> ·{" "}
               <span className="text-white">{dayLabel}</span> ·{" "}
               <span className={ACCENT.muted}>{fmtDateLong(now)}</span>
             </span>
-            <span className={ACCENT.muted}>{fmtClock(now)} LOCAL</span>
+            <span className={`${ACCENT.muted} tabular-nums`}>
+              {fmtClock(now)} LOCAL
+            </span>
           </div>
         </div>
 
         {/* Active block banner */}
         {active && !captureBlock && (
           <div
-            className={`border ${ACCENT.amber} border-current p-3 mb-6 flex items-center justify-between`}
+            className={`border ${ACCENT.amber} border-current p-2 mb-3 flex items-center justify-between`}
           >
             <span className="text-xs">
               <span className={ACCENT.amber}>▶</span>{" "}
-              {active.label.toUpperCase()} · CLOCKED IN
-              {active.started_at && (
-                <span className={ACCENT.muted}>
-                  {" "}
-                  ·{" "}
-                  {Math.round(
-                    (Date.now() - new Date(active.started_at).getTime()) /
-                      60000,
-                  )}
-                  m elapsed
-                </span>
-              )}
+              {active.label.toUpperCase()} ·{" "}
+              <span className="text-white tabular-nums">
+                {fmtElapsed(active.started_at)}
+              </span>
             </span>
             <button
               onClick={() => setCaptureBlock(active)}
@@ -351,10 +364,10 @@ const Terminal: React.FC = () => {
           </div>
         )}
 
-        {/* INPUTS */}
-        <section className="mb-6">
-          <div className={`text-xs ${ACCENT.cyan} mb-2`}>INPUTS · TODAY</div>
-          <div className="flex flex-wrap gap-x-8 gap-y-2 text-sm pl-4">
+        {/* INPUTS — single horizontal strip */}
+        <section className="mb-3 border border-[#222] p-2">
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
+            <span className={`text-xs ${ACCENT.cyan} mr-2`}>INPUTS</span>
             <span>
               <span className={ACCENT.muted}>BED </span>
               <TimeField
@@ -424,207 +437,216 @@ const Terminal: React.FC = () => {
           </div>
         </section>
 
-        {/* SCHEDULE */}
-        <section className="mb-6">
-          <div className={`text-xs ${ACCENT.cyan} mb-2`}>SCHEDULE</div>
-          {blocks.length === 0 ? (
-            <div className={`pl-4 text-xs ${ACCENT.dim}`}>
-              no blocks defined ·{" "}
-              <Link to="/settings" className={`underline ${ACCENT.amber}`}>
-                configure schedule
-              </Link>
-            </div>
-          ) : (
-            <div className="space-y-1 pl-4">
-              {blocks.map((b) => {
-                const isActive = b.status === "active";
-                const accent = isActive ? ACCENT.amber : "";
-                const qualityColor =
-                  b.quality_score === null
-                    ? ""
-                    : b.quality_score >= 80
-                      ? ACCENT.green
-                      : b.quality_score >= 60
-                        ? "text-white"
-                        : b.quality_score >= 40
-                          ? ACCENT.amber
-                          : ACCENT.red;
-                return (
-                  <div
-                    key={b.id}
-                    className={`flex items-center gap-4 text-xs ${accent}`}
-                  >
-                    <span className={`w-24 ${accent || ACCENT.muted}`}>
-                      {trimSec(b.start_time)}–{trimSec(b.end_time)}
-                    </span>
-                    <span className={`w-40 truncate ${accent || "text-white"}`}>
-                      {b.label.toUpperCase()}
-                    </span>
-                    <span className="flex-1 truncate">
-                      {b.status === "active" && (
-                        <span className={ACCENT.amber}>▶ ACTIVE</span>
-                      )}
-                      {b.status === "captured" && (
-                        <>
-                          {b.quality_score !== null && (
-                            <span className={`${qualityColor} mr-2`}>
-                              {b.quality_score}
+        {/* Main grid: SCHEDULE left, FLOW + GOALS + RESULTS right */}
+        <div className="grid grid-cols-1 lg:grid-cols-[1.6fr_1fr] gap-3 mb-3">
+          <div>
+            {/* SCHEDULE */}
+            <section className="mb-3">
+              <div className={`text-xs ${ACCENT.cyan} mb-2`}>SCHEDULE</div>
+              {blocks.length === 0 ? (
+                <div className={`pl-4 text-xs ${ACCENT.dim}`}>
+                  no blocks defined ·{" "}
+                  <Link to="/settings" className={`underline ${ACCENT.amber}`}>
+                    configure schedule
+                  </Link>
+                </div>
+              ) : (
+                <div className="space-y-1 pl-4">
+                  {blocks.map((b) => {
+                    const isActive = b.status === "active";
+                    const accent = isActive ? ACCENT.amber : "";
+                    const qualityColor =
+                      b.quality_score === null
+                        ? ""
+                        : b.quality_score >= 80
+                          ? ACCENT.green
+                          : b.quality_score >= 60
+                            ? "text-white"
+                            : b.quality_score >= 40
+                              ? ACCENT.amber
+                              : ACCENT.red;
+                    return (
+                      <div
+                        key={b.id}
+                        className={`flex items-center gap-4 text-xs ${accent}`}
+                      >
+                        <span className={`w-24 ${accent || ACCENT.muted}`}>
+                          {trimSec(b.start_time)}–{trimSec(b.end_time)}
+                        </span>
+                        <span
+                          className={`w-40 truncate ${accent || "text-white"}`}
+                        >
+                          {b.label.toUpperCase()}
+                        </span>
+                        <span className="flex-1 truncate">
+                          {b.status === "active" && (
+                            <span className={ACCENT.amber}>▶ ACTIVE</span>
+                          )}
+                          {b.status === "captured" && (
+                            <>
+                              {b.quality_score !== null && (
+                                <span className={`${qualityColor} mr-2`}>
+                                  {b.quality_score}
+                                </span>
+                              )}
+                              <span className={ACCENT.muted}>
+                                {b.quality_verdict ??
+                                  b.results_summary ??
+                                  "captured"}
+                              </span>
+                            </>
+                          )}
+                          {b.status === "missed" && (
+                            <span className={ACCENT.red}>MISSED</span>
+                          )}
+                          {b.status === "skipped" && (
+                            <span className={ACCENT.dim}>SKIPPED</span>
+                          )}
+                          {b.status === "pending" && (
+                            <span className={ACCENT.dim}>PENDING</span>
+                          )}
+                          {b.status === "adhoc" && (
+                            <span className={ACCENT.muted}>
+                              {b.results_summary ?? "ad-hoc"}
                             </span>
                           )}
-                          <span className={ACCENT.muted}>
-                            {b.quality_verdict ??
-                              b.results_summary ??
-                              "captured"}
-                          </span>
-                        </>
-                      )}
-                      {b.status === "missed" && (
-                        <span className={ACCENT.red}>MISSED</span>
-                      )}
-                      {b.status === "skipped" && (
-                        <span className={ACCENT.dim}>SKIPPED</span>
-                      )}
-                      {b.status === "pending" && (
-                        <span className={ACCENT.dim}>PENDING</span>
-                      )}
-                      {b.status === "adhoc" && (
-                        <span className={ACCENT.muted}>
-                          {b.results_summary ?? "ad-hoc"}
                         </span>
-                      )}
-                    </span>
-                    {b.status === "pending" && (
-                      <>
-                        <button
-                          onClick={async () => {
-                            await clockIn(b.id);
-                            loadAll();
-                          }}
-                          className={`text-xs ${ACCENT.cyan} hover:underline`}
-                        >
-                          [ ▶ CLOCK IN ]
-                        </button>
-                        <button
-                          onClick={async () => {
-                            await markSkipped(b.id);
-                            loadAll();
-                          }}
-                          className={`text-xs ${ACCENT.dim} hover:text-[#FF3344]`}
-                        >
-                          ✗
-                        </button>
-                      </>
-                    )}
-                    {b.status === "active" && (
-                      <button
-                        onClick={() => setCaptureBlock(b)}
-                        className={`text-xs ${ACCENT.amber} hover:underline`}
-                      >
-                        [ ⏹ CLOCK OUT ]
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </section>
-
-        {/* RESULTS COUNT */}
-        <section className="mb-6">
-          <div className="flex items-baseline justify-between text-xs">
-            <span className={ACCENT.cyan}>RESULTS LOGGED</span>
-            <span className="text-white">
-              {captured}/{blocks.length}
-            </span>
-          </div>
-        </section>
-
-        {/* DAILY FLOW */}
-        <section className="mb-6">
-          <div
-            className={`text-xs ${ACCENT.cyan} mb-2 flex items-baseline justify-between`}
-          >
-            <span>DAILY FLOW</span>
-            <button
-              onClick={triggerScore}
-              disabled={scoring}
-              className={`text-xs ${ACCENT.amber} hover:underline disabled:opacity-30`}
-            >
-              [ {scoring ? "scoring..." : "score now"} ]
-            </button>
-          </div>
-          <div className="pl-4 text-xs">
-            {flow ? (
-              <div>
-                <span className="text-white text-2xl mr-3">
-                  {flow.flow_score}
-                </span>
-                <span className={ACCENT.muted}>{flow.verdict}</span>
-              </div>
-            ) : (
-              <div className={ACCENT.dim}>—</div>
-            )}
-          </div>
-        </section>
-
-        {/* MONTH GOALS */}
-        <section className="mb-8">
-          <div
-            className={`text-xs ${ACCENT.cyan} mb-2 flex items-baseline justify-between`}
-          >
-            <span>MONTH GOALS · {monthLabel(now)}</span>
-            <span className={ACCENT.muted}>
-              {daysRemainingInMonth(now)} DAYS REMAINING
-            </span>
-          </div>
-          {goals.length === 0 ? (
-            <div className={`pl-4 text-xs ${ACCENT.dim}`}>
-              no goals set ·{" "}
-              <Link to="/settings" className={`underline ${ACCENT.amber}`}>
-                set goals
-              </Link>
-            </div>
-          ) : (
-            <div className="space-y-1 pl-4">
-              {goals.map((g, i) => {
-                const statusColor =
-                  g.status === "hit"
-                    ? ACCENT.green
-                    : g.status === "missed"
-                      ? ACCENT.red
-                      : g.status === "at_risk"
-                        ? ACCENT.amber
-                        : ACCENT.muted;
-                return (
-                  <div
-                    key={g.id}
-                    className="flex items-baseline justify-between text-xs"
-                  >
-                    <span>
-                      <span className={ACCENT.muted}>{i + 1}</span>{" "}
-                      <span className="text-white">{g.claim}</span>
-                    </span>
-                    <span className={statusColor}>
-                      {g.status.toUpperCase().replace("_", " ")}
-                      {g.threshold_numeric !== null &&
-                        g.current_value !== null && (
-                          <span className={`${ACCENT.muted} ml-2`}>
-                            · {g.current_value}/{g.threshold_numeric}
-                          </span>
+                        {b.status === "pending" && (
+                          <>
+                            <button
+                              onClick={async () => {
+                                await clockIn(b.id);
+                                loadAll();
+                              }}
+                              className={`text-xs ${ACCENT.cyan} hover:underline`}
+                            >
+                              [ ▶ CLOCK IN ]
+                            </button>
+                            <button
+                              onClick={async () => {
+                                await markSkipped(b.id);
+                                loadAll();
+                              }}
+                              className={`text-xs ${ACCENT.dim} hover:text-[#FF3344]`}
+                            >
+                              ✗
+                            </button>
+                          </>
                         )}
-                    </span>
+                        {b.status === "active" && (
+                          <button
+                            onClick={() => setCaptureBlock(b)}
+                            className={`text-xs ${ACCENT.amber} hover:underline`}
+                          >
+                            [ ⏹ CLOCK OUT ]
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+          </div>
+          <div>
+            {/* DAILY FLOW */}
+            <section className="mb-3 border border-[#222] p-3">
+              <div
+                className={`text-xs ${ACCENT.cyan} mb-2 flex items-baseline justify-between`}
+              >
+                <span>DAILY FLOW</span>
+                <button
+                  onClick={triggerScore}
+                  disabled={scoring}
+                  className={`text-xs ${ACCENT.amber} hover:underline disabled:opacity-30`}
+                >
+                  [ {scoring ? "scoring..." : "score now"} ]
+                </button>
+              </div>
+              {flow ? (
+                <div>
+                  <div className="text-white text-4xl tabular-nums leading-none">
+                    {flow.flow_score}
                   </div>
-                );
-              })}
-            </div>
-          )}
-        </section>
+                  <div className={`mt-1 text-xs ${ACCENT.muted}`}>
+                    {flow.verdict}
+                  </div>
+                </div>
+              ) : (
+                <div className={`text-xs ${ACCENT.dim}`}>—</div>
+              )}
+            </section>
+
+            {/* RESULTS LOGGED */}
+            <section className="mb-3 border border-[#222] p-3">
+              <div className="flex items-baseline justify-between text-xs">
+                <span className={ACCENT.cyan}>RESULTS LOGGED</span>
+                <span className="text-white tabular-nums text-base">
+                  {captured}/{blocks.length}
+                </span>
+              </div>
+            </section>
+
+            {/* MONTH GOALS */}
+            <section className="mb-3 border border-[#222] p-3">
+              <div
+                className={`text-xs ${ACCENT.cyan} mb-2 flex items-baseline justify-between`}
+              >
+                <span>MONTH GOALS · {monthLabel(now)}</span>
+                <span className={ACCENT.muted}>
+                  {daysRemainingInMonth(now)} DAYS REMAINING
+                </span>
+              </div>
+              {goals.length === 0 ? (
+                <div className={`pl-4 text-xs ${ACCENT.dim}`}>
+                  no goals set ·{" "}
+                  <Link to="/settings" className={`underline ${ACCENT.amber}`}>
+                    set goals
+                  </Link>
+                </div>
+              ) : (
+                <div className="space-y-1 pl-4">
+                  {goals.map((g, i) => {
+                    const statusColor =
+                      g.status === "hit"
+                        ? ACCENT.green
+                        : g.status === "missed"
+                          ? ACCENT.red
+                          : g.status === "at_risk"
+                            ? ACCENT.amber
+                            : ACCENT.muted;
+                    return (
+                      <div
+                        key={g.id}
+                        className="flex items-baseline justify-between text-xs"
+                      >
+                        <span>
+                          <span className={ACCENT.muted}>{i + 1}</span>{" "}
+                          <span className="text-white">{g.claim}</span>
+                        </span>
+                        <span className={statusColor}>
+                          {g.status.toUpperCase().replace("_", " ")}
+                          {g.threshold_numeric !== null &&
+                            g.current_value !== null && (
+                              <span className={`${ACCENT.muted} ml-2`}>
+                                · {g.current_value}/{g.threshold_numeric}
+                              </span>
+                            )}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+          </div>
+        </div>
+        {/* end main grid */}
 
         {/* LAST 7 DAYS TABLE */}
-        <section className="mb-6">
-          <div className={`border-t ${ACCENT.rule} pt-3 mb-3`}>
-            <div className={`text-xs ${ACCENT.cyan} mb-2`}>LAST 7 DAYS</div>
+        <section className="mb-3">
+          <div className={`border-t ${ACCENT.rule} pt-2 mb-2`}>
+            <div className={`text-xs ${ACCENT.cyan}`}>LAST 7 DAYS</div>
           </div>
           <table className="w-full text-xs">
             <thead>
