@@ -313,13 +313,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         });
 
         loadUserProfile(session.user.id).then(setProfile);
-
-        // Migrate KPI targets from localStorage to database (one-time)
-        import("@/lib/kpiTargetMigration").then(
-          ({ migrateKpiTargetsToDatabase }) => {
-            migrateKpiTargetsToDatabase(session.user.id);
-          },
-        );
       }
 
       setLoading(false);
@@ -338,11 +331,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         userStorage.setUserId(session.user.id);
         let userProfile = await loadUserProfile(session.user.id);
         setProfile(userProfile);
-
-        // Migrate KPI targets from localStorage to database (one-time)
-        const { migrateKpiTargetsToDatabase } =
-          await import("@/lib/kpiTargetMigration");
-        migrateKpiTargetsToDatabase(session.user.id);
       } else {
         // Clear user ID when signing out
         const { userStorage } = await import("@/lib/userStorage");

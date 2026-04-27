@@ -12,6 +12,7 @@ import {
   Activity,
   Network,
   FileText,
+  BookOpen,
   Settings,
   Calendar,
   TrendingUp,
@@ -44,6 +45,7 @@ const iconMap: Record<string, LucideIcon> = {
   progression: TrendingUp,
   cash: Network,
   content: FileText,
+  blog: BookOpen,
   "daily-review": Calendar,
 };
 
@@ -57,6 +59,7 @@ const pathMap: Record<string, string> = {
   progression: "/progression",
   cash: "/cash",
   content: "/content",
+  blog: "/blog",
   "daily-review": "/daily-review",
 };
 

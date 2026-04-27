@@ -12,7 +12,6 @@ import {
   ProfileSection,
   SecuritySection,
   NavigationSection,
-  GitHubSection,
   WhoopSection,
   AdminSection,
 } from "@/components/settings";
@@ -54,7 +53,6 @@ const Settings: React.FC = () => {
         <ProfileSection />
         <SecuritySection />
         <NavigationSection />
-        <GitHubSection />
         <WhoopSection />
         {profile?.is_admin && <AdminSection />}
       </div>
