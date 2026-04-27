@@ -1,238 +1,73 @@
-/**
- * Sidebar Component
- * Collapsible navigation sidebar with smooth animations
- */
-
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { Link, useLocation } from "react-router-dom";
-import { motion } from "framer-motion";
-import {
-  LayoutDashboard,
-  BarChart3,
-  Activity,
-  Network,
-  FileText,
-  BookOpen,
-  Settings,
-  Calendar,
-  TrendingUp,
-  TimerReset,
-  LucideIcon,
-} from "lucide-react";
 import { cn } from "@/lib/utils";
-import { preferencesManager } from "@/lib/userPreferences";
-import { useAuth } from "@/contexts/AuthContext";
-
-interface NavItem {
-  path: string;
-  icon: LucideIcon;
-  label: string;
-  id: string;
-}
 
 interface SidebarProps {
   expanded: boolean;
   className?: string;
 }
 
-// Icon mapping for module IDs
-const iconMap: Record<string, LucideIcon> = {
-  dashboard: LayoutDashboard,
-  kpis: BarChart3,
-  activity: Activity,
-  focus: TimerReset,
-  visualizer: TrendingUp,
-  progression: TrendingUp,
-  cash: Network,
-  content: FileText,
-  blog: BookOpen,
-  "daily-review": Calendar,
-};
+interface NavItem {
+  path: string;
+  label: string;
+  glyph: string;
+}
 
-// Path mapping for module IDs
-const pathMap: Record<string, string> = {
-  dashboard: "/",
-  kpis: "/kpis",
-  activity: "/activity",
-  focus: "/focus",
-  visualizer: "/visualizer",
-  progression: "/progression",
-  cash: "/cash",
-  content: "/content",
-  blog: "/blog",
-  "daily-review": "/daily-review",
-};
+const NAV: NavItem[] = [
+  { path: "/", label: "TERMINAL", glyph: "▣" },
+  { path: "/log", label: "LOG", glyph: "≡" },
+  { path: "/blog", label: "BLOG", glyph: "✎" },
+  { path: "/cash", label: "CASH", glyph: "$" },
+];
 
 export const Sidebar: React.FC<SidebarProps> = ({ expanded, className }) => {
   const location = useLocation();
-  const { user } = useAuth();
-  const [navItems, setNavItems] = useState<NavItem[]>([]);
-
-  // Load enabled navigation items
-  useEffect(() => {
-    const loadNavItems = async () => {
-      if (!user) return;
-
-      try {
-        const preferences = await preferencesManager.getUserPreferences();
-        const allModules = preferencesManager.getAvailableModules();
-
-        const enabledItems = allModules
-          .filter((module) => preferences.enabled_modules.includes(module.id))
-          .map((module) => ({
-            id: module.id,
-            path: pathMap[module.id] || `/${module.id}`,
-            icon: iconMap[module.id] || BarChart3,
-            label: module.name,
-          }));
-
-        setNavItems(enabledItems);
-      } catch (error) {
-        console.error("Failed to load nav items:", error);
-      }
-    };
-
-    loadNavItems();
-
-    // Listen for preference updates
-    const handlePreferenceUpdate = () => loadNavItems();
-    window.addEventListener("preferencesUpdated", handlePreferenceUpdate);
-    return () =>
-      window.removeEventListener("preferencesUpdated", handlePreferenceUpdate);
-  }, [user]);
-
-  const isActive = (path: string) => {
-    if (path === "/") {
-      return location.pathname === "/";
-    }
-    return location.pathname.startsWith(path);
-  };
+  const isActive = (path: string) =>
+    path === "/"
+      ? location.pathname === "/"
+      : location.pathname.startsWith(path);
 
   return (
-    <motion.aside
-      initial={false}
-      animate={{ width: expanded ? 220 : 56 }}
-      transition={{ type: "spring", stiffness: 300, damping: 30 }}
+    <aside
+      style={{ width: expanded ? 200 : 56 }}
       className={cn(
-        "h-full flex flex-col",
-        "bg-surface-secondary border-r border-line",
-        "overflow-hidden",
+        "h-full flex flex-col bg-black border-r border-[#222] font-mono text-xs overflow-hidden transition-[width] duration-150",
         className,
       )}
     >
       {/* Logo */}
       <Link
         to="/"
-        className={cn(
-          "flex items-center h-14 px-4",
-          "border-b border-line",
-          "hover:bg-surface-hover transition-colors",
-        )}
+        className="flex items-center h-12 px-4 border-b border-[#222] hover:bg-white/[0.02] transition-colors"
       >
-        <motion.div
-          initial={false}
-          animate={{ opacity: 1 }}
-          className="flex items-center gap-3"
-        >
-          {/* Logo Mark */}
-          <div
-            className={cn(
-              "w-6 h-6 flex items-center justify-center",
-              "text-neon-cyan font-display font-bold text-lg",
-            )}
-          >
-            ◆
-          </div>
-
-          {/* Logo Text - Only when expanded */}
-          <motion.span
-            initial={false}
-            animate={{
-              opacity: expanded ? 1 : 0,
-              width: expanded ? "auto" : 0,
-            }}
-            transition={{ duration: 0.2 }}
-            className={cn(
-              "font-display font-bold text-sm tracking-wider",
-              "text-content-primary whitespace-nowrap overflow-hidden",
-            )}
-          >
+        <span className="text-[#00D4FF] text-sm">◆</span>
+        {expanded && (
+          <span className="ml-3 text-white text-xs tracking-[0.2em]">
             NOCTISIUM
-          </motion.span>
-        </motion.div>
+          </span>
+        )}
       </Link>
 
-      {/* Navigation */}
-      <nav className="flex-1 py-4 px-2">
-        <ul className="space-y-1">
-          {navItems.map((item) => {
+      {/* Nav */}
+      <nav className="flex-1 py-3 px-2">
+        <ul className="space-y-0.5">
+          {NAV.map((item) => {
             const active = isActive(item.path);
-            const Icon = item.icon;
-
             return (
-              <li key={item.id}>
+              <li key={item.path}>
                 <Link
                   to={item.path}
                   className={cn(
-                    "flex items-center gap-3 px-3 py-2.5 rounded-md",
-                    "transition-all duration-200",
-                    "relative group",
+                    "flex items-center gap-3 px-3 py-2 transition-colors",
                     active
-                      ? "bg-neon-cyan/10 text-neon-cyan"
-                      : "text-content-secondary hover:text-content-primary hover:bg-surface-hover",
+                      ? "text-[#FFB800] bg-[#FFB800]/5"
+                      : "text-[#888] hover:text-white",
                   )}
+                  title={!expanded ? item.label : undefined}
                 >
-                  {/* Active Indicator */}
-                  {active && (
-                    <motion.div
-                      layoutId="sidebar-active-indicator"
-                      className="absolute -left-2 w-0.5 h-5 bg-neon-cyan rounded-full"
-                      style={{ top: "50%", marginTop: "-10px" }}
-                      transition={{
-                        type: "spring",
-                        stiffness: 400,
-                        damping: 30,
-                      }}
-                    />
-                  )}
-
-                  {/* Icon */}
-                  <Icon
-                    size={20}
-                    className={cn(
-                      "shrink-0 transition-colors",
-                      active && "drop-shadow-[0_0_8px_rgba(0,240,255,0.5)]",
-                    )}
-                  />
-
-                  {/* Label */}
-                  <motion.span
-                    initial={false}
-                    animate={{
-                      opacity: expanded ? 1 : 0,
-                      width: expanded ? "auto" : 0,
-                    }}
-                    transition={{ duration: 0.2 }}
-                    className={cn(
-                      "text-sm font-medium whitespace-nowrap overflow-hidden",
-                    )}
-                  >
-                    {item.label}
-                  </motion.span>
-
-                  {/* Tooltip when collapsed */}
-                  {!expanded && (
-                    <div
-                      className={cn(
-                        "absolute left-full ml-2 px-2 py-1 rounded",
-                        "bg-surface-tertiary text-content-primary text-xs",
-                        "opacity-0 group-hover:opacity-100 pointer-events-none",
-                        "transition-opacity whitespace-nowrap z-50",
-                        "border border-line",
-                      )}
-                    >
-                      {item.label}
-                    </div>
+                  <span className="shrink-0 w-4 text-center">{item.glyph}</span>
+                  {expanded && (
+                    <span className="tracking-wider">{item.label}</span>
                   )}
                 </Link>
               </li>
@@ -241,49 +76,23 @@ export const Sidebar: React.FC<SidebarProps> = ({ expanded, className }) => {
         </ul>
       </nav>
 
-      {/* Bottom Section - Settings */}
-      <div className="py-4 px-2 border-t border-line">
+      {/* Settings */}
+      <div className="py-3 px-2 border-t border-[#222]">
         <Link
           to="/settings"
           className={cn(
-            "flex items-center gap-3 px-3 py-2.5 rounded-md",
-            "transition-all duration-200",
-            "text-content-secondary hover:text-content-primary hover:bg-surface-hover",
-            "relative group",
-            isActive("/settings") && "bg-neon-cyan/10 text-neon-cyan",
+            "flex items-center gap-3 px-3 py-2 transition-colors",
+            isActive("/settings")
+              ? "text-[#FFB800] bg-[#FFB800]/5"
+              : "text-[#888] hover:text-white",
           )}
+          title={!expanded ? "SETTINGS" : undefined}
         >
-          <Settings size={20} className="shrink-0" />
-
-          <motion.span
-            initial={false}
-            animate={{
-              opacity: expanded ? 1 : 0,
-              width: expanded ? "auto" : 0,
-            }}
-            transition={{ duration: 0.2 }}
-            className="text-sm font-medium whitespace-nowrap overflow-hidden"
-          >
-            Settings
-          </motion.span>
-
-          {/* Tooltip when collapsed */}
-          {!expanded && (
-            <div
-              className={cn(
-                "absolute left-full ml-2 px-2 py-1 rounded",
-                "bg-surface-tertiary text-content-primary text-xs",
-                "opacity-0 group-hover:opacity-100 pointer-events-none",
-                "transition-opacity whitespace-nowrap z-50",
-                "border border-line",
-              )}
-            >
-              Settings
-            </div>
-          )}
+          <span className="shrink-0 w-4 text-center">⚙</span>
+          {expanded && <span className="tracking-wider">SETTINGS</span>}
         </Link>
       </div>
-    </motion.aside>
+    </aside>
   );
 };
 
