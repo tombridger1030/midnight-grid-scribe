@@ -4,10 +4,11 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
 import {
   type BlockInstanceWithLabel,
-  captureResults,
-  findActive,
-  findEndedPending,
+  clockIn,
+  clockOut,
+  findActiveBlock,
   listForDate,
+  markSkipped,
 } from "@/lib/blockService";
 import {
   type DailyInputs,
@@ -89,7 +90,7 @@ function StatusBadge({
   );
 }
 
-function CaptureModal({
+function ClockOutModal({
   block,
   onClose,
   onSaved,
@@ -106,7 +107,7 @@ function CaptureModal({
     setBusy(true);
     setError(null);
     try {
-      await captureResults(block.id, text);
+      await clockOut(block.id, text);
       onSaved();
       onClose();
     } catch (err) {
@@ -116,28 +117,32 @@ function CaptureModal({
     }
   };
 
+  const elapsed = block.started_at
+    ? Math.round((Date.now() - new Date(block.started_at).getTime()) / 60000)
+    : 0;
+
   return (
     <div className="fixed inset-0 bg-black/80 flex items-start justify-center pt-24 z-50 px-4">
       <div className="w-full max-w-xl bg-black border border-[#444] p-6 font-mono">
-        <div className={`text-xs ${ACCENT.cyan} mb-1`}>CAPTURE RESULTS</div>
+        <div className={`text-xs ${ACCENT.cyan} mb-1`}>CLOCK OUT</div>
         <div className="text-sm text-white mb-4">
-          {block.label.toUpperCase()} · {trimSec(block.start_time)}–
-          {trimSec(block.end_time)}
+          {block.label.toUpperCase()} · planned {trimSec(block.start_time)}–
+          {trimSec(block.end_time)} · clocked in {elapsed}m
         </div>
         <div className={`text-xs ${ACCENT.muted} mb-2`}>
-          WHAT DID YOU ACCOMPLISH? (RESULTS, NOT ACTIVITY)
+          WHAT DID YOU DO? (THE LLM JUDGES IF IT WAS A GOOD USE OF TIME)
         </div>
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
-          maxLength={280}
-          rows={4}
+          maxLength={500}
+          rows={5}
           autoFocus
-          placeholder="shipped X · debugged Y · drafted Z"
+          placeholder="be specific. artifacts, decisions, distractions"
           className="w-full bg-black border border-[#444] text-white p-3 text-sm focus:border-[#00D4FF] focus:outline-none resize-none"
         />
         <div className={`text-xs ${ACCENT.dim} text-right mt-1`}>
-          {text.length}/280
+          {text.length}/500
         </div>
         {error && <div className={`text-xs ${ACCENT.red} mt-2`}>{error}</div>}
         <div className="flex gap-2 mt-4">
@@ -146,7 +151,7 @@ function CaptureModal({
             disabled={busy || !text.trim()}
             className={`flex-1 border ${ACCENT.cyan} border-current py-2 text-xs hover:bg-[#00D4FF]/10 disabled:opacity-30`}
           >
-            {busy ? "..." : "▶ CAPTURE"}
+            {busy ? "judging..." : "⏹ CLOCK OUT"}
           </button>
           <button
             onClick={onClose}
@@ -274,8 +279,7 @@ const Terminal: React.FC = () => {
     return () => clearInterval(t);
   }, [loadAll, today]);
 
-  const active = findActive(blocks);
-  const endedPending = findEndedPending(blocks);
+  const active = findActiveBlock(blocks);
   const captured = blocks.filter(
     (b) => b.status === "captured" || b.status === "adhoc",
   ).length;
@@ -318,20 +322,31 @@ const Terminal: React.FC = () => {
           </div>
         </div>
 
-        {/* End-of-block banner */}
-        {endedPending && !captureBlock && (
+        {/* Active block banner */}
+        {active && !captureBlock && (
           <div
-            className={`border ${ACCENT.cyan} border-current p-3 mb-6 flex items-center justify-between`}
+            className={`border ${ACCENT.amber} border-current p-3 mb-6 flex items-center justify-between`}
           >
             <span className="text-xs">
-              <span className={ACCENT.cyan}>▶</span> END{" "}
-              {endedPending.label.toUpperCase()} · CAPTURE RESULTS
+              <span className={ACCENT.amber}>▶</span>{" "}
+              {active.label.toUpperCase()} · CLOCKED IN
+              {active.started_at && (
+                <span className={ACCENT.muted}>
+                  {" "}
+                  ·{" "}
+                  {Math.round(
+                    (Date.now() - new Date(active.started_at).getTime()) /
+                      60000,
+                  )}
+                  m elapsed
+                </span>
+              )}
             </span>
             <button
-              onClick={() => setCaptureBlock(endedPending)}
-              className={`px-3 py-1 text-xs ${ACCENT.cyan} hover:bg-[#00D4FF]/10`}
+              onClick={() => setCaptureBlock(active)}
+              className={`px-3 py-1 text-xs ${ACCENT.amber} hover:bg-[#FFB800]/10`}
             >
-              [ CAPTURE ]
+              [ ⏹ CLOCK OUT ]
             </button>
           </div>
         )}
@@ -368,11 +383,23 @@ const Terminal: React.FC = () => {
               <span className={ACCENT.muted}>H</span>
             </span>
             <span>
-              <span className={ACCENT.muted}>σ7 </span>
-              <span className="text-white">
-                {inputs?.sleep_sigma_7d?.toFixed(2) ?? "—"}
+              <span className={ACCENT.muted}>OFF </span>
+              <span
+                className={
+                  inputs?.sleep_sigma_7d == null
+                    ? ACCENT.dim
+                    : inputs.sleep_sigma_7d <= 15
+                      ? ACCENT.green
+                      : inputs.sleep_sigma_7d <= 45
+                        ? "text-white"
+                        : inputs.sleep_sigma_7d <= 90
+                          ? ACCENT.amber
+                          : ACCENT.red
+                }
+              >
+                {inputs?.sleep_sigma_7d?.toFixed(0) ?? "—"}
               </span>
-              <span className={ACCENT.muted}>H</span>
+              <span className={ACCENT.muted}>m</span>
             </span>
             <span>
               <span className={ACCENT.muted}>EX </span>
@@ -410,42 +437,90 @@ const Terminal: React.FC = () => {
           ) : (
             <div className="space-y-1 pl-4">
               {blocks.map((b) => {
-                const isActive = active?.id === b.id;
-                const isEndedPending = endedPending?.id === b.id;
-                const accent = isActive
-                  ? ACCENT.amber
-                  : isEndedPending
-                    ? ACCENT.cyan
-                    : "";
+                const isActive = b.status === "active";
+                const accent = isActive ? ACCENT.amber : "";
+                const qualityColor =
+                  b.quality_score === null
+                    ? ""
+                    : b.quality_score >= 80
+                      ? ACCENT.green
+                      : b.quality_score >= 60
+                        ? "text-white"
+                        : b.quality_score >= 40
+                          ? ACCENT.amber
+                          : ACCENT.red;
                 return (
                   <div
                     key={b.id}
-                    className={`flex items-center gap-6 text-xs ${accent}`}
+                    className={`flex items-center gap-4 text-xs ${accent}`}
                   >
-                    <span className={accent || ACCENT.muted}>
+                    <span className={`w-24 ${accent || ACCENT.muted}`}>
                       {trimSec(b.start_time)}–{trimSec(b.end_time)}
                     </span>
-                    <span
-                      className={`flex-shrink-0 w-32 ${accent || "text-white"}`}
-                    >
+                    <span className={`w-40 truncate ${accent || "text-white"}`}>
                       {b.label.toUpperCase()}
                     </span>
-                    <span className="flex-1">
-                      {isActive ? (
+                    <span className="flex-1 truncate">
+                      {b.status === "active" && (
                         <span className={ACCENT.amber}>▶ ACTIVE</span>
-                      ) : (
-                        <StatusBadge
-                          status={b.status}
-                          results_summary={b.results_summary}
-                        />
+                      )}
+                      {b.status === "captured" && (
+                        <>
+                          {b.quality_score !== null && (
+                            <span className={`${qualityColor} mr-2`}>
+                              {b.quality_score}
+                            </span>
+                          )}
+                          <span className={ACCENT.muted}>
+                            {b.quality_verdict ??
+                              b.results_summary ??
+                              "captured"}
+                          </span>
+                        </>
+                      )}
+                      {b.status === "missed" && (
+                        <span className={ACCENT.red}>MISSED</span>
+                      )}
+                      {b.status === "skipped" && (
+                        <span className={ACCENT.dim}>SKIPPED</span>
+                      )}
+                      {b.status === "pending" && (
+                        <span className={ACCENT.dim}>PENDING</span>
+                      )}
+                      {b.status === "adhoc" && (
+                        <span className={ACCENT.muted}>
+                          {b.results_summary ?? "ad-hoc"}
+                        </span>
                       )}
                     </span>
-                    {b.status === "pending" && (isEndedPending || isActive) && (
+                    {b.status === "pending" && (
+                      <>
+                        <button
+                          onClick={async () => {
+                            await clockIn(b.id);
+                            loadAll();
+                          }}
+                          className={`text-xs ${ACCENT.cyan} hover:underline`}
+                        >
+                          [ ▶ CLOCK IN ]
+                        </button>
+                        <button
+                          onClick={async () => {
+                            await markSkipped(b.id);
+                            loadAll();
+                          }}
+                          className={`text-xs ${ACCENT.dim} hover:text-[#FF3344]`}
+                        >
+                          ✗
+                        </button>
+                      </>
+                    )}
+                    {b.status === "active" && (
                       <button
                         onClick={() => setCaptureBlock(b)}
-                        className={`text-xs ${ACCENT.cyan} hover:underline`}
+                        className={`text-xs ${ACCENT.amber} hover:underline`}
                       >
-                        [ CAPTURE ]
+                        [ ⏹ CLOCK OUT ]
                       </button>
                     )}
                   </div>
@@ -615,7 +690,7 @@ const Terminal: React.FC = () => {
       </div>
 
       {captureBlock && (
-        <CaptureModal
+        <ClockOutModal
           block={captureBlock}
           onClose={() => setCaptureBlock(null)}
           onSaved={loadAll}

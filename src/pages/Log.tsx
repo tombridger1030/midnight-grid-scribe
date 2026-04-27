@@ -176,7 +176,7 @@ const Log: React.FC = () => {
             <tr className={`${ACCENT.muted} border-b ${ACCENT.rule}`}>
               <th className="text-left font-normal py-1">DATE</th>
               <th className="text-right font-normal">SLP</th>
-              <th className="text-right font-normal">σ7</th>
+              <th className="text-right font-normal">OFF</th>
               <th className="text-center font-normal">EX</th>
               <th className="text-center font-normal">DT</th>
               <th className="text-right font-normal">FLOW</th>
@@ -192,7 +192,7 @@ const Log: React.FC = () => {
                 <td className="py-0.5">{r.date}</td>
                 <td className="text-right">{r.inputs?.sleep_hours ?? "—"}</td>
                 <td className="text-right">
-                  {r.inputs?.sleep_sigma_7d?.toFixed(2) ?? "—"}
+                  {r.inputs?.sleep_sigma_7d?.toFixed(0) ?? "—"}
                 </td>
                 <td
                   className={`text-center ${r.inputs?.exercise === false ? ACCENT.red : ""}`}

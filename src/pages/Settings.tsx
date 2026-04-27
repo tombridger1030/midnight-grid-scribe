@@ -27,6 +27,11 @@ import {
   sendNow,
   updateRecipient,
 } from "@/lib/accountabilityService";
+import {
+  type OperatorSettings,
+  getOperatorSettings,
+  upsertOperatorSettings,
+} from "@/lib/operatorSettingsService";
 
 const ACCENT = {
   cyan: "text-[#00D4FF]",
@@ -435,6 +440,65 @@ function AccountabilityEditor() {
   );
 }
 
+function SleepTargetEditor() {
+  const [settings, setSettings] = useState<OperatorSettings | null>(null);
+  const [bed, setBed] = useState("23:00");
+  const [wake, setWake] = useState("07:00");
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    getOperatorSettings()
+      .then((s) => {
+        setSettings(s);
+        if (s) {
+          setBed(s.target_bedtime.slice(0, 5));
+          setWake(s.target_wake_time.slice(0, 5));
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const save = async () => {
+    await upsertOperatorSettings({
+      target_bedtime: bed,
+      target_wake_time: wake,
+    });
+    setSaved(true);
+    setTimeout(() => setSaved(false), 1500);
+  };
+
+  return (
+    <div className="text-xs">
+      <div className={`${ACCENT.muted} mb-2`}>
+        target schedule for sleep variance. zero offset = perfect adherence.
+      </div>
+      <div className="flex gap-3 items-baseline">
+        <span className={ACCENT.muted}>BED</span>
+        <input
+          type="time"
+          value={bed}
+          onChange={(e) => setBed(e.target.value)}
+          className="bg-black border border-[#444] px-2 py-1 text-white focus:border-[#00D4FF] focus:outline-none"
+        />
+        <span className={ACCENT.muted}>WAKE</span>
+        <input
+          type="time"
+          value={wake}
+          onChange={(e) => setWake(e.target.value)}
+          className="bg-black border border-[#444] px-2 py-1 text-white focus:border-[#00D4FF] focus:outline-none"
+        />
+        <button
+          onClick={save}
+          className={`px-3 py-1 border ${ACCENT.cyan} border-current hover:bg-[#00D4FF]/10`}
+        >
+          ▶ SAVE
+        </button>
+        {saved && <span className="text-[#00C853]">saved</span>}
+      </div>
+    </div>
+  );
+}
+
 const Settings: React.FC = () => {
   const { profile } = useAuth();
 
@@ -451,6 +515,10 @@ const Settings: React.FC = () => {
             </Link>
           </div>
         </div>
+
+        <Section title="SLEEP TARGET">
+          <SleepTargetEditor />
+        </Section>
 
         <Section title="SCHEDULE">
           <ScheduleEditor />

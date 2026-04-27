@@ -1,5 +1,13 @@
 import { supabase } from "./supabase";
 
+export type BlockStatus =
+  | "pending"
+  | "active"
+  | "captured"
+  | "missed"
+  | "adhoc"
+  | "skipped";
+
 export interface BlockInstance {
   id: string;
   user_id: string;
@@ -9,7 +17,9 @@ export interface BlockInstance {
   ended_at: string | null;
   results_text: string | null;
   results_summary: string | null;
-  status: "pending" | "captured" | "missed" | "adhoc";
+  quality_score: number | null;
+  quality_verdict: string | null;
+  status: BlockStatus;
   schedule_blocks?: {
     label: string;
     start_time: string;
@@ -38,134 +48,87 @@ export async function listForDate(
   const { data, error } = await supabase
     .from("block_instances")
     .select("*, schedule_blocks(label, start_time, end_time)")
-    .eq("date", date)
-    .order("started_at", { ascending: true, nullsFirst: false });
+    .eq("date", date);
   if (error) throw error;
-  const sorted = (data ?? []).map(joinLabel);
-  // Sort by start_time when available, otherwise by started_at
-  sorted.sort((a, b) => {
-    const aTime = a.start_time ?? a.started_at ?? "";
-    const bTime = b.start_time ?? b.started_at ?? "";
+  const rows = (data ?? []).map(joinLabel);
+  rows.sort((a, b) => {
+    const aTime = a.start_time ?? a.started_at ?? "99:99";
+    const bTime = b.start_time ?? b.started_at ?? "99:99";
     return aTime.localeCompare(bTime);
   });
-  return sorted;
+  return rows;
 }
 
-export async function captureResults(
-  blockInstanceId: string,
-  resultsText: string,
-): Promise<{ results_summary: string | null }> {
-  const trimmed = resultsText.trim();
-  if (!trimmed) throw new Error("results required");
-
-  // Save raw text + mark started/ended timestamps if missing
+/** Clock in: mark a pending block as active with started_at = now. */
+export async function clockIn(blockInstanceId: string): Promise<void> {
   const now = new Date().toISOString();
   const { error } = await supabase
     .from("block_instances")
-    .update({
-      results_text: trimmed,
-      ended_at: now,
-      status: "captured",
-    })
+    .update({ started_at: now, status: "active" })
+    .eq("id", blockInstanceId);
+  if (error) throw error;
+}
+
+/**
+ * Clock out: save results_text + ended_at, mark as captured (pending judgment).
+ * Then fire-and-forget the LLM judge call which fills in quality_score/verdict.
+ */
+export async function clockOut(
+  blockInstanceId: string,
+  resultsText: string,
+): Promise<{ quality_score: number | null; quality_verdict: string | null }> {
+  const trimmed = resultsText.trim();
+  if (!trimmed) throw new Error("results required");
+
+  const now = new Date().toISOString();
+  const { error } = await supabase
+    .from("block_instances")
+    .update({ results_text: trimmed, ended_at: now, status: "captured" })
     .eq("id", blockInstanceId);
   if (error) throw error;
 
-  // Fire-and-forget AI summarization (best-effort)
   try {
     const { data, error: fnError } = await supabase.functions.invoke(
       "flow-judge",
       {
-        body: { action: "summarize_block", block_id: blockInstanceId },
+        body: { action: "judge_block", block_id: blockInstanceId },
       },
     );
     if (fnError) {
-      console.warn("flow-judge summarize_block failed:", fnError);
-      return { results_summary: null };
+      console.warn("flow-judge judge_block failed:", fnError);
+      return { quality_score: null, quality_verdict: null };
     }
+    const r = data as { quality_score?: number; quality_verdict?: string };
     return {
-      results_summary:
-        (data as { results_summary?: string })?.results_summary ?? null,
+      quality_score: r.quality_score ?? null,
+      quality_verdict: r.quality_verdict ?? null,
     };
   } catch (err) {
     console.warn("flow-judge invoke failed:", err);
-    return { results_summary: null };
+    return { quality_score: null, quality_verdict: null };
   }
 }
 
 export async function markMissed(blockInstanceId: string): Promise<void> {
+  const now = new Date().toISOString();
   const { error } = await supabase
     .from("block_instances")
-    .update({ status: "missed", ended_at: new Date().toISOString() })
+    .update({ status: "missed", ended_at: now })
     .eq("id", blockInstanceId);
   if (error) throw error;
 }
 
-export async function createAdhoc(input: {
-  date: string;
-  results_text: string;
-}): Promise<string> {
-  const { data: u } = await supabase.auth.getUser();
-  if (!u.user) throw new Error("not authenticated");
-  const now = new Date().toISOString();
-  const { data, error } = await supabase
+export async function markSkipped(blockInstanceId: string): Promise<void> {
+  const { error } = await supabase
     .from("block_instances")
-    .insert({
-      user_id: u.user.id,
-      date: input.date,
-      status: "adhoc",
-      results_text: input.results_text.trim(),
-      started_at: now,
-      ended_at: now,
-    })
-    .select("id")
-    .single();
+    .update({ status: "skipped" })
+    .eq("id", blockInstanceId);
   if (error) throw error;
-  return data.id;
 }
 
-/**
- * Find the next block needing capture: pending status with end_time already passed.
- * Returns null if none.
- */
-export function findEndedPending(
+/** Find the currently clocked-in (active) block, if any. */
+export function findActiveBlock(
   blocks: BlockInstanceWithLabel[],
 ): BlockInstanceWithLabel | null {
-  const now = new Date();
-  const today = now.toISOString().slice(0, 10);
-  const nowMinutes = now.getHours() * 60 + now.getMinutes();
-
-  for (const b of blocks) {
-    if (b.status !== "pending" || b.date !== today || !b.end_time) continue;
-    const [h, m] = b.end_time.split(":").map(Number);
-    const endMinutes = (h ?? 0) * 60 + (m ?? 0);
-    if (nowMinutes >= endMinutes) return b;
-  }
-  return null;
-}
-
-/**
- * Find the currently active block (now between start_time and end_time, status pending).
- */
-export function findActive(
-  blocks: BlockInstanceWithLabel[],
-): BlockInstanceWithLabel | null {
-  const now = new Date();
-  const today = now.toISOString().slice(0, 10);
-  const nowMinutes = now.getHours() * 60 + now.getMinutes();
-
-  for (const b of blocks) {
-    if (
-      b.status !== "pending" ||
-      b.date !== today ||
-      !b.start_time ||
-      !b.end_time
-    )
-      continue;
-    const [sh, sm] = b.start_time.split(":").map(Number);
-    const [eh, em] = b.end_time.split(":").map(Number);
-    const start = (sh ?? 0) * 60 + (sm ?? 0);
-    const end = (eh ?? 0) * 60 + (em ?? 0);
-    if (nowMinutes >= start && nowMinutes < end) return b;
-  }
-  return null;
+  return blocks.find((b) => b.status === "active") ?? null;
 }
