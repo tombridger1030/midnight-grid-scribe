@@ -19,6 +19,15 @@ export const formatLocalDate = (date: Date): string => {
 export const getCurrentLocalDate = (): string => formatLocalDate(new Date());
 
 /**
+ * YYYY-MM-DD for the local-calendar date `n` days before today (DST-safe).
+ */
+export const offsetLocalDate = (n: number): string => {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return formatLocalDate(d);
+};
+
+/**
  * Check if a date string represents today in local timezone
  */
 export const isToday = (dateString: string): boolean => {

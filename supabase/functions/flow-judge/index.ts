@@ -223,7 +223,7 @@ async function scoreDay(userId: string, dateStr?: string) {
         .eq("date", date),
       supabase
         .from("daily_inputs")
-        .select("sleep_hours, sleep_sigma_7d, exercise, diet")
+        .select("sleep_hours, exercise, diet")
         .eq("user_id", userId)
         .eq("date", date)
         .maybeSingle(),
@@ -247,7 +247,6 @@ async function scoreDay(userId: string, dateStr?: string) {
     })) satisfies BlockData[],
     inputs: {
       sleep_hours: inputs?.sleep_hours ?? null,
-      sleep_offset_min: inputs?.sleep_sigma_7d ?? null,
       exercise: inputs?.exercise ?? null,
       diet: inputs?.diet ?? null,
     },

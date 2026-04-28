@@ -10,6 +10,7 @@ import {
   type OperatorSettings,
   getOperatorSettings,
 } from "@/lib/operatorSettingsService";
+import { offsetLocalDate as offsetDateStr } from "@/lib/dateUtils";
 
 const ACCENT = {
   cyan: "text-[#00D4FF]",
@@ -19,9 +20,6 @@ const ACCENT = {
   dim: "text-[#666666]",
   rule: "border-[#333333]",
 } as const;
-
-const offsetDateStr = (n: number) =>
-  new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 10);
 
 interface LogRow {
   date: string;
@@ -52,7 +50,7 @@ function downloadCsv(
   targetWake: string,
 ) {
   const header =
-    "date,sleep_hours,sleep_sigma_7d,exercise,diet,flow_score,verdict";
+    "date,sleep_hours,sleep_off_target_min,exercise,diet,flow_score,verdict";
   const body = rows
     .map((r) =>
       rowToCsv(
@@ -77,8 +75,8 @@ const Log: React.FC = () => {
   const [settings, setSettings] = useState<OperatorSettings | null>(null);
 
   useEffect(() => {
-    // Fetch days+6 worth of inputs so the rolling 7-day σ for the oldest
-    // displayed row has its full window available.
+    // Fetch days+6 worth of inputs so the rolling 7-day off-target avg for the
+    // oldest displayed row has its full window available.
     const fetchStart = offsetDateStr(days - 1 + 6);
     const start = offsetDateStr(days - 1);
     const end = offsetDateStr(0);

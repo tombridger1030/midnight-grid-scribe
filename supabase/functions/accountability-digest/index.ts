@@ -21,7 +21,6 @@ interface DigestData {
   flow_avg_7d: number | null;
   verdict: string | null;
   sleep_hours: number | null;
-  sleep_sigma_7d: number | null;
   exercise: boolean | null;
   diet: boolean | null;
   blocks: { label: string; status: string; results_summary: string | null }[];
@@ -68,9 +67,7 @@ function buildBody(d: DigestData): string {
   lines.push(`NOCTISIUM DAILY · ${d.user_label.toUpperCase()} · ${dateLong}`);
   lines.push("");
   lines.push(`  FLOW              ${formatNumber(d.flow_score)}${flowDelta}`);
-  lines.push(
-    `  SLEEP             ${formatNumber(d.sleep_hours, "H")} · σ7 ${formatNumber(d.sleep_sigma_7d, "H")}`,
-  );
+  lines.push(`  SLEEP             ${formatNumber(d.sleep_hours, "H")}`);
   lines.push(`  EXERCISE          ${formatBoolean(d.exercise)}`);
   lines.push(
     `  DIET              ${formatBoolean(d.diet)}${d.diet === false ? "    (slipped)" : ""}`,
@@ -201,7 +198,6 @@ async function gatherDigestData(
     flow_avg_7d: flowAvg7d,
     verdict: flow?.verdict ?? null,
     sleep_hours: inputs?.sleep_hours ?? null,
-    sleep_sigma_7d: inputs?.sleep_sigma_7d ?? null,
     exercise: inputs?.exercise ?? null,
     diet: inputs?.diet ?? null,
     blocks: sortedBlocks,

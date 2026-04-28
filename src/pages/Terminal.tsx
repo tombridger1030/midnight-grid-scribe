@@ -42,10 +42,10 @@ import {
   listGoalsForMonth,
   monthLabel,
 } from "@/lib/goalsService";
+import { getCurrentLocalDate, offsetLocalDate } from "@/lib/dateUtils";
 
-const todayStr = () => new Date().toISOString().slice(0, 10);
-const offsetDateStr = (n: number) =>
-  new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 10);
+const todayStr = getCurrentLocalDate;
+const offsetDateStr = offsetLocalDate;
 const fmtClock = (d: Date) =>
   `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:${String(d.getSeconds()).padStart(2, "0")}`;
 
@@ -247,7 +247,7 @@ function TimeField({
         if (e.target.value !== value) onChange(e.target.value);
       }}
       className={`bg-transparent text-white border-b border-[#444] focus:border-[#00D4FF] focus:outline-none ${
-        compact ? "px-0.5 text-xs w-16" : "px-1"
+        compact ? "px-0.5 text-xs w-24" : "px-1"
       }`}
     />
   );
@@ -434,8 +434,8 @@ const Terminal: React.FC = () => {
   const [settings, setSettings] = useState<OperatorSettings | null>(null);
 
   const loadAll = useCallback(async () => {
-    // Fetch 13 days so the rolling 7-day σ for the oldest displayed row
-    // (today-6) has its full window (today-12 .. today-6) available.
+    // Fetch 13 days so the rolling 7-day off-target avg for the oldest displayed
+    // row (today-6) has its full window (today-12 .. today-6) available.
     const start = offsetDateStr(12);
     let b: BlockInstanceWithLabel[] = [],
       i: DailyInputs | null = null,
@@ -814,7 +814,7 @@ const Terminal: React.FC = () => {
               <tr className={ACCENT.muted}>
                 <th className="text-left font-normal">DATE</th>
                 <th className="text-right font-normal">SLP</th>
-                <th className="text-right font-normal">σ7</th>
+                <th className="text-right font-normal">OFF</th>
                 <th className="text-center font-normal">EX</th>
                 <th className="text-center font-normal">DT</th>
                 <th className="text-right font-normal">FLOW</th>

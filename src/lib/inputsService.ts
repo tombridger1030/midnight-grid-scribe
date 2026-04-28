@@ -6,7 +6,6 @@ export interface DailyInputs {
   sleep_start_at: string | null;
   sleep_end_at: string | null;
   sleep_hours: number | null;
-  sleep_sigma_7d: number | null;
   exercise: boolean | null;
   diet: boolean | null;
 }
@@ -164,13 +163,8 @@ export function computeSleepOffsetMin(
 
 /**
  * 7-day rolling avg of off-target minutes ending at targetDate (inclusive).
- * Computed client-side over the provided inputs window, in local time.
+ * Pure local-time math; pass at least the 7 days ending at targetDate.
  * Returns null if no day in the window has both bed + wake set.
- *
- * The DB-stored sleep_sigma_7d column is computed in SQL using UTC time
- * extraction, which is wrong for non-UTC users — so we always compute
- * client-side for display. Pass enough inputs (at least the 7 days ending
- * at targetDate) for an accurate result; missing days are skipped.
  */
 export function computeSleepSigma7d(
   inputs: Pick<DailyInputs, "date" | "sleep_start_at" | "sleep_end_at">[],

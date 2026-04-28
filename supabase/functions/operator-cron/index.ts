@@ -1,7 +1,6 @@
 // operator-cron — nightly tasks (run via Supabase scheduled function or pg_cron):
-//   1. compute sleep_sigma_7d for every user with daily_inputs in the last 7d
-//   2. for each user, materialize today's block_instances from their schedule_blocks
-//   3. refresh monthly_goals.status (basic: numeric goals → threshold check)
+//   1. for each user, materialize today's block_instances from their schedule_blocks
+//   2. refresh monthly_goals.status (basic: numeric goals → threshold check)
 //
 // Idempotent — safe to run multiple times per day.
 
@@ -11,45 +10,6 @@ import {
   errorResponse,
   jsonResponse,
 } from "../_shared/utils.ts";
-
-async function computeSleepSigma(
-  supabase: ReturnType<typeof createServiceClient>,
-  today: string,
-) {
-  // Find all users with input in last 7 days, recompute σ7 for today's row
-  const { data: users } = await supabase
-    .from("daily_inputs")
-    .select("user_id")
-    .gte(
-      "date",
-      new Date(Date.parse(today) - 6 * 86400000).toISOString().slice(0, 10),
-    )
-    .not("sleep_hours", "is", null);
-
-  const uniqueUsers = Array.from(
-    new Set((users ?? []).map((u: any) => u.user_id)),
-  );
-  let updated = 0;
-
-  for (const userId of uniqueUsers) {
-    const { data } = await supabase.rpc("compute_sleep_sigma_7d", {
-      target_user: userId,
-      target_date: today,
-    });
-    const sigma = data as number | null;
-    if (sigma === null) continue;
-
-    // Upsert sigma into today's daily_inputs row (if exists; otherwise skip — input row required first)
-    await supabase
-      .from("daily_inputs")
-      .update({ sleep_sigma_7d: sigma })
-      .eq("user_id", userId)
-      .eq("date", today);
-    updated++;
-  }
-
-  return { sleep_sigma_updated: updated };
-}
 
 async function materializeBlockInstances(
   supabase: ReturnType<typeof createServiceClient>,
@@ -143,13 +103,12 @@ Deno.serve(async (req) => {
     const supabase = createServiceClient();
     const today = new Date().toISOString().slice(0, 10);
 
-    const [sigma, blocks, goals] = await Promise.all([
-      computeSleepSigma(supabase, today),
+    const [blocks, goals] = await Promise.all([
       materializeBlockInstances(supabase, today),
       refreshMonthlyGoals(supabase, today),
     ]);
 
-    return jsonResponse({ date: today, ...sigma, ...blocks, ...goals });
+    return jsonResponse({ date: today, ...blocks, ...goals });
   } catch (err) {
     console.error("operator-cron error:", err);
     return errorResponse(
