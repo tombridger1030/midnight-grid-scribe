@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   type AnalyticsBundle,
   type BlockTrendRow,
+  type DayDetail,
   type DowCell,
   type FlowPoint,
   type LatencyRow,
@@ -195,6 +197,8 @@ function LineSparkline({
   color = HEX.cyan,
   showDots = true,
   refLines = [],
+  selectedDate = null,
+  onSelectDate,
 }: {
   series: { date: string; score: number }[];
   startDate: string;
@@ -206,6 +210,8 @@ function LineSparkline({
   color?: string;
   showDots?: boolean;
   refLines?: { y: number; color: string }[];
+  selectedDate?: string | null;
+  onSelectDate?: (date: string) => void;
 }) {
   const m = { l: 22, r: 4, t: 6, b: 14 };
   const pw = width - m.l - m.r;
@@ -255,19 +261,55 @@ function LineSparkline({
           strokeWidth={0.7}
         />
       ))}
+      {/* Selected-date crosshair */}
+      {selectedDate &&
+        dateMs(selectedDate) >= dateMs(startDate) &&
+        dateMs(selectedDate) <= dateMs(endDate) && (
+          <line
+            x1={xScale(dateMs(selectedDate))}
+            y1={m.t}
+            x2={xScale(dateMs(selectedDate))}
+            y2={height - m.b}
+            stroke={HEX.amber}
+            strokeWidth={0.8}
+            strokeDasharray="3 2"
+          />
+        )}
       {series.length > 1 && (
         <path d={path} stroke={color} strokeWidth={1.2} fill="none" />
       )}
       {showDots &&
-        series.map((p, i) => (
-          <circle
-            key={i}
-            cx={xScale(dateMs(p.date))}
-            cy={yScale(p.score)}
-            r={1.6}
-            fill={scoreColorHex(p.score)}
-          />
-        ))}
+        series.map((p) => {
+          const cx = xScale(dateMs(p.date));
+          const cy = yScale(p.score);
+          const isSel = p.date === selectedDate;
+          return (
+            <g key={p.date}>
+              {/* invisible larger hit target so the tiny dots are easy to click */}
+              <circle
+                cx={cx}
+                cy={cy}
+                r={6}
+                fill="transparent"
+                style={{ cursor: onSelectDate ? "pointer" : "default" }}
+                onClick={() => onSelectDate?.(p.date)}
+              >
+                <title>
+                  {p.date} · {p.score}
+                </title>
+              </circle>
+              <circle
+                cx={cx}
+                cy={cy}
+                r={isSel ? 3 : 1.6}
+                fill={scoreColorHex(p.score)}
+                stroke={isSel ? HEX.amber : "none"}
+                strokeWidth={isSel ? 1.2 : 0}
+                pointerEvents="none"
+              />
+            </g>
+          );
+        })}
     </svg>
   );
 }
@@ -278,11 +320,15 @@ function FlowLineChart({
   startDate,
   endDate,
   height = 220,
+  selectedDate = null,
+  onSelectDate,
 }: {
   points: FlowPoint[];
   startDate: string;
   endDate: string;
   height?: number;
+  selectedDate?: string | null;
+  onSelectDate?: (date: string) => void;
 }) {
   const width = 900;
   const m = { l: 32, r: 12, t: 12, b: 22 };
@@ -361,6 +407,20 @@ function FlowLineChart({
         strokeDasharray="3 3"
         strokeWidth={0.6}
       />
+      {/* Selected-date crosshair */}
+      {selectedDate &&
+        dateMs(selectedDate) >= xMin &&
+        dateMs(selectedDate) <= xMax && (
+          <line
+            x1={xScale(dateMs(selectedDate))}
+            y1={m.t}
+            x2={xScale(dateMs(selectedDate))}
+            y2={height - m.b}
+            stroke={HEX.amber}
+            strokeWidth={0.8}
+            strokeDasharray="3 2"
+          />
+        )}
       {filtered.length > 1 && (
         <path
           d={path}
@@ -370,15 +430,37 @@ function FlowLineChart({
           strokeLinejoin="round"
         />
       )}
-      {filtered.map((p, i) => (
-        <circle
-          key={i}
-          cx={xScale(dateMs(p.date))}
-          cy={yScale(p.flow_score!)}
-          r={2}
-          fill={scoreColorHex(p.flow_score)}
-        />
-      ))}
+      {filtered.map((p) => {
+        const cx = xScale(dateMs(p.date));
+        const cy = yScale(p.flow_score!);
+        const isSel = p.date === selectedDate;
+        return (
+          <g key={p.date}>
+            <circle
+              cx={cx}
+              cy={cy}
+              r={7}
+              fill="transparent"
+              style={{ cursor: onSelectDate ? "pointer" : "default" }}
+              onClick={() => onSelectDate?.(p.date)}
+            >
+              <title>
+                {p.date} · FLOW {p.flow_score}
+                {p.flow_verdict ? ` · ${p.flow_verdict}` : ""}
+              </title>
+            </circle>
+            <circle
+              cx={cx}
+              cy={cy}
+              r={isSel ? 3.5 : 2}
+              fill={scoreColorHex(p.flow_score)}
+              stroke={isSel ? HEX.amber : "none"}
+              strokeWidth={isSel ? 1.4 : 0}
+              pointerEvents="none"
+            />
+          </g>
+        );
+      })}
     </svg>
   );
 }
@@ -573,7 +655,15 @@ function DowBarChart({ row }: { row: DowCell }) {
 }
 
 // Scatter plot: sleep_hours (X) vs flow_score (Y), colored by exercise.
-function SleepFlowScatter({ points }: { points: FlowPoint[] }) {
+function SleepFlowScatter({
+  points,
+  selectedDate = null,
+  onSelectDate,
+}: {
+  points: FlowPoint[];
+  selectedDate?: string | null;
+  onSelectDate?: (date: string) => void;
+}) {
   const width = 600;
   const height = 280;
   const m = { l: 40, r: 12, t: 12, b: 32 };
@@ -652,16 +742,39 @@ function SleepFlowScatter({ points }: { points: FlowPoint[] }) {
         strokeWidth={0.5}
       />
       {/* Points */}
-      {valid.map((p, i) => (
-        <circle
-          key={i}
-          cx={xScale(Math.max(xMin, Math.min(xMax, p.sleep_hours!)))}
-          cy={yScale(p.flow_score!)}
-          r={2.6}
-          fill={exColor(p.exercise)}
-          fillOpacity={0.85}
-        />
-      ))}
+      {valid.map((p) => {
+        const cx = xScale(Math.max(xMin, Math.min(xMax, p.sleep_hours!)));
+        const cy = yScale(p.flow_score!);
+        const isSel = p.date === selectedDate;
+        return (
+          <g key={p.date}>
+            <circle
+              cx={cx}
+              cy={cy}
+              r={8}
+              fill="transparent"
+              style={{ cursor: onSelectDate ? "pointer" : "default" }}
+              onClick={() => onSelectDate?.(p.date)}
+            >
+              <title>
+                {p.date} · SLP {p.sleep_hours?.toFixed(1)}H · FLOW{" "}
+                {p.flow_score} · EX{" "}
+                {p.exercise === true ? "Y" : p.exercise === false ? "N" : "·"}
+              </title>
+            </circle>
+            <circle
+              cx={cx}
+              cy={cy}
+              r={isSel ? 4 : 2.6}
+              fill={exColor(p.exercise)}
+              fillOpacity={0.85}
+              stroke={isSel ? HEX.amber : "none"}
+              strokeWidth={isSel ? 1.4 : 0}
+              pointerEvents="none"
+            />
+          </g>
+        );
+      })}
       {/* X axis label */}
       <text
         x={(m.l + width - m.r) / 2}
@@ -708,6 +821,202 @@ function EmptyHint({ msg }: { msg: string }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Day-detail panel — shown when a chart point is clicked
+// ─────────────────────────────────────────────────────────────────────────────
+
+const fmtClock = (iso: string | null) => {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+};
+
+function DayDetailPanel({
+  detail,
+  onClose,
+}: {
+  detail: DayDetail;
+  onClose: () => void;
+}) {
+  const i = detail.inputs;
+  const judged = detail.blocks.filter((b) => b.kind === "judged");
+  const note = detail.blocks.filter((b) => b.kind === "note");
+  const routine = detail.blocks.filter((b) => b.kind === "routine");
+  const sleepStart = i?.sleep_offset_min ?? null;
+  return (
+    <section className="border border-[#FFB800] p-3 mb-3">
+      <div className="flex items-baseline justify-between mb-2">
+        <span className={`text-xs ${ACCENT.amber}`}>
+          DAY DETAIL · {detail.date}
+        </span>
+        <span className="flex gap-3 text-xs">
+          <Link to="/log" className={`${ACCENT.cyan} hover:underline`}>
+            ▶ LOG
+          </Link>
+          <button
+            onClick={onClose}
+            className={`${ACCENT.muted} hover:text-white`}
+          >
+            ✗ CLOSE
+          </button>
+        </span>
+      </div>
+
+      {/* INPUTS */}
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-xs mb-2 pl-1">
+        <span>
+          <span className={ACCENT.muted}>SLP </span>
+          <span className="text-white tabular-nums">
+            {i?.sleep_hours?.toFixed(1) ?? "—"}H
+          </span>
+        </span>
+        <span>
+          <span className={ACCENT.muted}>OFF </span>
+          <span
+            className={`tabular-nums ${
+              sleepStart === null
+                ? ACCENT.dim
+                : sleepStart <= 15
+                  ? ACCENT.green
+                  : sleepStart <= 90
+                    ? "text-white"
+                    : ACCENT.red
+            }`}
+          >
+            {sleepStart === null ? "—" : Math.round(sleepStart)}M
+          </span>
+        </span>
+        <span>
+          <span className={ACCENT.muted}>EX </span>
+          <span
+            className={
+              i?.exercise === true
+                ? ACCENT.green
+                : i?.exercise === false
+                  ? ACCENT.red
+                  : ACCENT.dim
+            }
+          >
+            {i?.exercise === true ? "Y" : i?.exercise === false ? "N" : "·"}
+          </span>
+        </span>
+        <span>
+          <span className={ACCENT.muted}>DIET </span>
+          <span
+            className={
+              i?.diet === true
+                ? ACCENT.green
+                : i?.diet === false
+                  ? ACCENT.red
+                  : ACCENT.dim
+            }
+          >
+            {i?.diet === true ? "Y" : i?.diet === false ? "N" : "·"}
+          </span>
+        </span>
+        <span>
+          <span className={ACCENT.muted}>FLOW </span>
+          <span className={`tabular-nums ${scoreColor(i?.flow_score ?? null)}`}>
+            {i?.flow_score ?? "—"}
+          </span>
+          {i?.flow_verdict && (
+            <span className={`${ACCENT.muted} ml-2`}>· {i.flow_verdict}</span>
+          )}
+        </span>
+      </div>
+
+      {/* JUDGED BLOCKS */}
+      {judged.length > 0 && (
+        <table className="w-full text-xs">
+          <thead>
+            <tr className={ACCENT.muted}>
+              <th className="text-left font-normal pb-1">JUDGED BLOCK</th>
+              <th className="text-left font-normal pb-1">PLANNED</th>
+              <th className="text-left font-normal pb-1">ACTUAL</th>
+              <th className="text-right font-normal pb-1">SCORE</th>
+              <th className="text-left font-normal pb-1 pl-3">VERDICT</th>
+            </tr>
+          </thead>
+          <tbody>
+            {judged.map((b, idx) => (
+              <tr key={idx}>
+                <td className="text-white py-0.5">{b.label.toUpperCase()}</td>
+                <td className={`${ACCENT.muted} tabular-nums`}>
+                  {b.planned_start?.slice(0, 5)}–{b.planned_end?.slice(0, 5)}
+                </td>
+                <td className="tabular-nums">
+                  {b.started_at && b.ended_at
+                    ? `${fmtClock(b.started_at)}–${fmtClock(b.ended_at)}`
+                    : b.status.toUpperCase()}
+                </td>
+                <td
+                  className={`text-right tabular-nums ${scoreColor(b.quality_score)}`}
+                >
+                  {b.quality_score ?? "—"}
+                </td>
+                <td className={`pl-3 ${ACCENT.muted}`}>
+                  {b.quality_verdict ?? b.results_text ?? ""}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      {/* NOTE BLOCKS */}
+      {note.length > 0 && (
+        <div className="mt-2">
+          <div className={`text-[10px] ${ACCENT.muted} mb-1`}>NOTE BLOCKS</div>
+          {note.map((b, idx) => (
+            <div key={idx} className="text-xs flex gap-3">
+              <span className="text-white w-32 truncate">
+                {b.label.toUpperCase()}
+              </span>
+              <span className={ACCENT.muted}>{b.results_text ?? b.status}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ROUTINE BLOCKS */}
+      {routine.length > 0 && (
+        <div className="mt-2 text-xs">
+          <span className={`text-[10px] ${ACCENT.muted}`}>ROUTINE · </span>
+          {routine.map((b, idx) => {
+            const color =
+              b.status === "captured"
+                ? ACCENT.green
+                : b.status === "skipped"
+                  ? ACCENT.red
+                  : ACCENT.dim;
+            const mark =
+              b.status === "captured"
+                ? "Y"
+                : b.status === "skipped"
+                  ? "N"
+                  : "·";
+            return (
+              <span key={idx} className={ACCENT.muted}>
+                {idx > 0 && " · "}
+                {b.label.toUpperCase()} <span className={color}>{mark}</span>
+              </span>
+            );
+          })}
+        </div>
+      )}
+
+      {!i &&
+        judged.length === 0 &&
+        note.length === 0 &&
+        routine.length === 0 && (
+          <div className={`text-xs ${ACCENT.dim} pl-1`}>
+            no data for this day.
+          </div>
+        )}
+    </section>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Page
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -717,11 +1026,19 @@ const Analytics: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const onSelectDate = (date: string) =>
+    setSelectedDate((cur) => (cur === date ? null : date));
+  const selectedDetail =
+    selectedDate && bundle?.dayDetails[selectedDate]
+      ? bundle.dayDetails[selectedDate]
+      : null;
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
+    setSelectedDate(null);
     getAnalytics(range)
       .then((b) => {
         if (!cancelled) setBundle(b);
@@ -806,6 +1123,13 @@ const Analytics: React.FC = () => {
           </div>
         )}
 
+        {selectedDetail && (
+          <DayDetailPanel
+            detail={selectedDetail}
+            onClose={() => setSelectedDate(null)}
+          />
+        )}
+
         {loading && !bundle ? (
           <div className={`text-xs ${ACCENT.dim} pl-1`}>loading…</div>
         ) : bundle ? (
@@ -839,6 +1163,8 @@ const Analytics: React.FC = () => {
                         startDate={bundle.start_date}
                         endDate={bundle.end_date}
                         refLines={[{ y: 75, color: HEX.green }]}
+                        selectedDate={selectedDate}
+                        onSelectDate={onSelectDate}
                       />
                     </div>
                   ))}
@@ -887,7 +1213,11 @@ const Analytics: React.FC = () => {
                 <EmptyHint msg="no flow scores in this range." />
               ) : (
                 <div className="grid grid-cols-1 lg:grid-cols-[1fr_18rem] gap-4">
-                  <SleepFlowScatter points={bundle.flowSeries} />
+                  <SleepFlowScatter
+                    points={bundle.flowSeries}
+                    selectedDate={selectedDate}
+                    onSelectDate={onSelectDate}
+                  />
                   <table className="text-xs h-fit">
                     <tbody>
                       <tr>
@@ -958,6 +1288,8 @@ const Analytics: React.FC = () => {
                   points={bundle.flowSeries}
                   startDate={bundle.start_date}
                   endDate={bundle.end_date}
+                  selectedDate={selectedDate}
+                  onSelectDate={onSelectDate}
                 />
               )}
             </Panel>

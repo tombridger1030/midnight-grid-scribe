@@ -36,10 +36,32 @@ export interface LatencyRow {
 export interface FlowPoint {
   date: string;
   flow_score: number | null;
+  flow_verdict: string | null;
   sleep_hours: number | null;
   sleep_offset_min: number | null;
   exercise: boolean | null;
   diet: boolean | null;
+}
+
+/** All judged block_instances for a given date, used by the day-detail panel. */
+export interface DayBlockEntry {
+  label: string;
+  status: string;
+  quality_score: number | null;
+  quality_verdict: string | null;
+  results_text: string | null;
+  results_summary: string | null;
+  started_at: string | null;
+  ended_at: string | null;
+  planned_start: string | null;
+  planned_end: string | null;
+  kind: BlockKind;
+}
+
+export interface DayDetail {
+  date: string;
+  inputs: FlowPoint | null;
+  blocks: DayBlockEntry[];
 }
 
 export interface FlowSummary {
@@ -78,6 +100,8 @@ export interface AnalyticsBundle {
   flowSeries: FlowPoint[];
   flowSummary: FlowSummary;
   consistency: ConsistencyStats;
+  /** All days in range keyed by YYYY-MM-DD, used for click-to-inspect. */
+  dayDetails: Record<string, DayDetail>;
 }
 
 const todayLocalISO = () => {
@@ -119,6 +143,9 @@ interface RawInstance {
   started_at: string | null;
   ended_at: string | null;
   quality_score: number | null;
+  quality_verdict: string | null;
+  results_text: string | null;
+  results_summary: string | null;
   status: string;
   schedule_blocks: {
     label: string;
@@ -140,6 +167,7 @@ interface RawInputs {
 interface RawFlow {
   date: string;
   flow_score: number | null;
+  verdict: string | null;
 }
 
 interface RawSettings {
@@ -203,7 +231,7 @@ export async function getAnalytics(range: Range): Promise<AnalyticsBundle> {
     supabase
       .from("block_instances")
       .select(
-        "id, date, started_at, ended_at, quality_score, status, schedule_blocks(label, kind, start_time, end_time)",
+        "id, date, started_at, ended_at, quality_score, quality_verdict, results_text, results_summary, status, schedule_blocks(label, kind, start_time, end_time)",
       )
       .gte("date", start)
       .lte("date", today),
@@ -214,7 +242,7 @@ export async function getAnalytics(range: Range): Promise<AnalyticsBundle> {
       .lte("date", today),
     supabase
       .from("daily_flow")
-      .select("date, flow_score")
+      .select("date, flow_score, verdict")
       .gte("date", start)
       .lte("date", today),
     supabase
@@ -325,6 +353,7 @@ export async function getAnalytics(range: Range): Promise<AnalyticsBundle> {
     return {
       date,
       flow_score: f?.flow_score ?? null,
+      flow_verdict: f?.verdict ?? null,
       sleep_hours: i?.sleep_hours ?? null,
       sleep_offset_min: computeSleepOffsetMin(
         i?.sleep_start_at ?? null,
@@ -405,6 +434,43 @@ export async function getAnalytics(range: Range): Promise<AnalyticsBundle> {
     all_judged_longest: longestStreak(allJudgedDates, allJudgedHit),
   };
 
+  // === 6. Day-detail lookup (used by the click-to-inspect panel) ===
+  const flowByDateMap = new Map(flowSeries.map((p) => [p.date, p]));
+  const blocksByDate = new Map<string, DayBlockEntry[]>();
+  for (const r of instances) {
+    if (!r.schedule_blocks) continue;
+    const arr = blocksByDate.get(r.date) ?? [];
+    arr.push({
+      label: r.schedule_blocks.label,
+      kind: r.schedule_blocks.kind,
+      status: r.status,
+      quality_score: r.quality_score,
+      quality_verdict: r.quality_verdict,
+      results_text: r.results_text,
+      results_summary: r.results_summary,
+      started_at: r.started_at,
+      ended_at: r.ended_at,
+      planned_start: r.schedule_blocks.start_time,
+      planned_end: r.schedule_blocks.end_time,
+    });
+    blocksByDate.set(r.date, arr);
+  }
+  const allDayDates = new Set<string>([
+    ...flowByDateMap.keys(),
+    ...blocksByDate.keys(),
+  ]);
+  const dayDetails: Record<string, DayDetail> = {};
+  for (const date of allDayDates) {
+    const blocks = (blocksByDate.get(date) ?? []).sort((a, b) =>
+      (a.planned_start ?? "").localeCompare(b.planned_start ?? ""),
+    );
+    dayDetails[date] = {
+      date,
+      inputs: flowByDateMap.get(date) ?? null,
+      blocks,
+    };
+  }
+
   return {
     range,
     start_date: start,
@@ -421,6 +487,7 @@ export async function getAnalytics(range: Range): Promise<AnalyticsBundle> {
     flowSeries,
     flowSummary,
     consistency,
+    dayDetails,
   };
 }
 
