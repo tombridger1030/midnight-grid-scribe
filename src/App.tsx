@@ -14,6 +14,7 @@ import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 
 const Terminal = lazy(() => import("./pages/Terminal"));
 const Log = lazy(() => import("./pages/Log"));
+const Analytics = lazy(() => import("./pages/Analytics"));
 const BlogList = lazy(() => import("./pages/BlogList"));
 const BlogEditor = lazy(() => import("./pages/BlogEditor"));
 const Cash = lazy(() => import("./pages/Cash"));
@@ -139,6 +140,7 @@ const AppContent = () => {
           >
             <Route index element={<Terminal />} />
             <Route path="log" element={<Log />} />
+            <Route path="analytics" element={<Analytics />} />
             <Route path="blog" element={<BlogList />} />
             <Route path="blog/new" element={<BlogEditor />} />
             <Route path="blog/:id" element={<BlogEditor />} />

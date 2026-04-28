@@ -142,6 +142,73 @@ export async function markSkipped(blockInstanceId: string): Promise<void> {
   if (error) throw error;
 }
 
+/**
+ * Routine Y/N toggle: binary "did I do the walk / eat the meal" with revert.
+ *   true  → status='captured', no times, no LLM
+ *   false → status='skipped'
+ *   null  → status='pending' (revert)
+ * Routine blocks never store started_at/ended_at — they're not time-tracked.
+ */
+export async function setRoutineState(
+  blockInstanceId: string,
+  value: boolean | null,
+): Promise<void> {
+  const status: BlockStatus =
+    value === true ? "captured" : value === false ? "skipped" : "pending";
+  const { error } = await supabase
+    .from("block_instances")
+    .update({
+      status,
+      started_at: null,
+      ended_at: null,
+      results_text: null,
+    })
+    .eq("id", blockInstanceId);
+  if (error) throw error;
+}
+
+/**
+ * Combine a HH:MM time with a YYYY-MM-DD date in the user's local timezone
+ * and return an ISO timestamp suitable for a timestamptz column.
+ */
+function combineLocalDateTime(date: string, hhmm: string): string {
+  const [h, m] = hhmm.split(":").map(Number);
+  const [y, mo, d] = date.split("-").map(Number);
+  return new Date(y, mo - 1, d, h, m, 0, 0).toISOString();
+}
+
+/**
+ * Edit started_at retroactively. For when you clocked in late, or forgot to
+ * clock in at all and want to backfill the actual start.
+ */
+export async function setStartedAt(
+  blockInstanceId: string,
+  date: string,
+  hhmm: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from("block_instances")
+    .update({ started_at: combineLocalDateTime(date, hhmm) })
+    .eq("id", blockInstanceId);
+  if (error) throw error;
+}
+
+/**
+ * Edit ended_at retroactively. For when you forgot to clock out and the
+ * actual end time was earlier than "now".
+ */
+export async function setEndedAt(
+  blockInstanceId: string,
+  date: string,
+  hhmm: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from("block_instances")
+    .update({ ended_at: combineLocalDateTime(date, hhmm) })
+    .eq("id", blockInstanceId);
+  if (error) throw error;
+}
+
 /** Find the currently clocked-in (active) block, if any. */
 export function findActiveBlock(
   blocks: BlockInstanceWithLabel[],

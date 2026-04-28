@@ -16,6 +16,7 @@ interface NavItem {
 const NAV: NavItem[] = [
   { path: "/", label: "TERMINAL", glyph: "▣" },
   { path: "/log", label: "LOG", glyph: "≡" },
+  { path: "/analytics", label: "ANALYTICS", glyph: "▲" },
   { path: "/blog", label: "BLOG", glyph: "✎" },
   { path: "/cash", label: "CASH", glyph: "$" },
 ];

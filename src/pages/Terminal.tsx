@@ -10,6 +10,9 @@ import {
   findActiveBlock,
   listForDate,
   markSkipped,
+  setEndedAt,
+  setRoutineState,
+  setStartedAt,
 } from "@/lib/blockService";
 import {
   type DailyInputs,
@@ -226,9 +229,11 @@ function YNToggle({
 function TimeField({
   value,
   onChange,
+  compact,
 }: {
   value: string;
   onChange: (v: string) => void;
+  compact?: boolean;
 }) {
   const [v, setV] = useState(value);
   useEffect(() => setV(value), [value]);
@@ -240,8 +245,173 @@ function TimeField({
         setV(e.target.value);
         if (e.target.value !== value) onChange(e.target.value);
       }}
-      className="bg-transparent text-white border-b border-[#444] focus:border-[#00D4FF] focus:outline-none px-1"
+      className={`bg-transparent text-white border-b border-[#444] focus:border-[#00D4FF] focus:outline-none ${
+        compact ? "px-0.5 text-xs w-16" : "px-1"
+      }`}
     />
+  );
+}
+
+const localHHMM = (iso: string | null): string => {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+};
+
+function qualityClass(score: number | null): string {
+  if (score === null) return "";
+  if (score >= 80) return ACCENT.green;
+  if (score >= 60) return "text-white";
+  if (score >= 40) return ACCENT.amber;
+  return ACCENT.red;
+}
+
+function BlockRow({
+  block: b,
+  today,
+  onClockIn,
+  onClockOut,
+  onSkip,
+  onRoutineToggle,
+  onEditStart,
+  onEditEnd,
+}: {
+  block: BlockInstanceWithLabel;
+  today: string;
+  onClockIn: () => void;
+  onClockOut: () => void;
+  onSkip: () => void;
+  onRoutineToggle: (v: boolean | null) => void;
+  onEditStart: (hhmm: string) => void;
+  onEditEnd: (hhmm: string) => void;
+}) {
+  const isRoutine = b.kind === "routine";
+  const isActive = b.status === "active";
+  const accent = isActive ? ACCENT.amber : "";
+  const isToday = b.date === today;
+
+  // Routine row: planned time · label · [Y][N] · status text. No clock in/out.
+  if (isRoutine) {
+    const value: boolean | null =
+      b.status === "captured" ? true : b.status === "skipped" ? false : null;
+    const statusText =
+      b.status === "captured" ? (
+        <span className={ACCENT.green}>DONE</span>
+      ) : b.status === "skipped" ? (
+        <span className={ACCENT.red}>SKIPPED</span>
+      ) : b.status === "missed" ? (
+        <span className={ACCENT.red}>MISSED</span>
+      ) : (
+        <span className={ACCENT.dim}>—</span>
+      );
+    return (
+      <div className="flex items-center gap-4 text-xs">
+        <span className={`w-24 ${ACCENT.muted}`}>
+          {trimSec(b.start_time)}–{trimSec(b.end_time)}
+        </span>
+        <span className="w-40 truncate text-white">
+          {b.label.toUpperCase()}
+        </span>
+        <span className="flex-1">{statusText}</span>
+        <YNToggle value={value} onChange={onRoutineToggle} />
+      </div>
+    );
+  }
+
+  // Non-routine (judged + note): keep clock in/out, but make times editable.
+  return (
+    <div className={`flex items-center gap-4 text-xs ${accent}`}>
+      <span className={`w-24 ${accent || ACCENT.muted}`}>
+        {trimSec(b.start_time)}–{trimSec(b.end_time)}
+      </span>
+      <span className={`w-40 truncate ${accent || "text-white"}`}>
+        {b.label.toUpperCase()}
+      </span>
+      <span className="flex-1 truncate flex items-center gap-2">
+        {b.status === "active" && (
+          <>
+            <span className={ACCENT.amber}>▶ ACTIVE</span>
+            <span className={ACCENT.muted}>started</span>
+            {isToday ? (
+              <TimeField
+                value={localHHMM(b.started_at)}
+                onChange={onEditStart}
+                compact
+              />
+            ) : (
+              <span className="text-white">{localHHMM(b.started_at)}</span>
+            )}
+          </>
+        )}
+        {b.status === "captured" && (
+          <>
+            {b.kind === "judged" && b.quality_score !== null && (
+              <span className={`${qualityClass(b.quality_score)} font-bold`}>
+                {b.quality_score}
+              </span>
+            )}
+            <span className={`${ACCENT.muted} truncate max-w-[24rem]`}>
+              {b.kind === "judged"
+                ? (b.quality_verdict ?? b.results_summary ?? "captured")
+                : (b.results_text ?? "noted")}
+            </span>
+            {(b.started_at || b.ended_at) && (
+              <span className={`${ACCENT.dim} flex items-center gap-1 ml-2`}>
+                {isToday ? (
+                  <>
+                    <TimeField
+                      value={localHHMM(b.started_at)}
+                      onChange={onEditStart}
+                      compact
+                    />
+                    <span>→</span>
+                    <TimeField
+                      value={localHHMM(b.ended_at)}
+                      onChange={onEditEnd}
+                      compact
+                    />
+                  </>
+                ) : (
+                  <span>
+                    {localHHMM(b.started_at)} → {localHHMM(b.ended_at)}
+                  </span>
+                )}
+              </span>
+            )}
+          </>
+        )}
+        {b.status === "missed" && <span className={ACCENT.red}>MISSED</span>}
+        {b.status === "skipped" && <span className={ACCENT.dim}>SKIPPED</span>}
+        {b.status === "pending" && <span className={ACCENT.dim}>PENDING</span>}
+        {b.status === "adhoc" && (
+          <span className={ACCENT.muted}>{b.results_summary ?? "ad-hoc"}</span>
+        )}
+      </span>
+      {b.status === "pending" && (
+        <>
+          <button
+            onClick={onClockIn}
+            className={`text-xs ${ACCENT.cyan} hover:underline`}
+          >
+            [ ▶ CLOCK IN ]
+          </button>
+          <button
+            onClick={onSkip}
+            className={`text-xs ${ACCENT.dim} hover:text-[#FF3344]`}
+          >
+            ✗
+          </button>
+        </>
+      )}
+      {b.status === "active" && (
+        <button
+          onClick={onClockOut}
+          className={`text-xs ${ACCENT.amber} hover:underline`}
+        >
+          [ ⏹ CLOCK OUT ]
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -389,12 +559,22 @@ const Terminal: React.FC = () => {
           <div
             className={`border ${ACCENT.amber} border-current p-2 mb-3 flex items-center justify-between`}
           >
-            <span className="text-xs">
-              <span className={ACCENT.amber}>▶</span>{" "}
-              {active.label.toUpperCase()} ·{" "}
+            <span className="text-xs flex items-center gap-2">
+              <span className={ACCENT.amber}>▶</span>
+              <span>{active.label.toUpperCase()}</span>
+              <span className={ACCENT.muted}>·</span>
               <span className="text-white tabular-nums">
                 {fmtElapsed(active.started_at)}
               </span>
+              <span className={ACCENT.muted}>· started</span>
+              <TimeField
+                value={localHHMM(active.started_at)}
+                onChange={async (hhmm) => {
+                  await setStartedAt(active.id, today, hhmm);
+                  loadAll();
+                }}
+                compact
+              />
             </span>
             <button
               onClick={() => handleClockOut(active)}
@@ -494,107 +674,34 @@ const Terminal: React.FC = () => {
                 </div>
               ) : (
                 <div className="space-y-1 pl-4">
-                  {blocks.map((b) => {
-                    const isActive = b.status === "active";
-                    const accent = isActive ? ACCENT.amber : "";
-                    const qualityColor =
-                      b.quality_score === null
-                        ? ""
-                        : b.quality_score >= 80
-                          ? ACCENT.green
-                          : b.quality_score >= 60
-                            ? "text-white"
-                            : b.quality_score >= 40
-                              ? ACCENT.amber
-                              : ACCENT.red;
-                    return (
-                      <div
-                        key={b.id}
-                        className={`flex items-center gap-4 text-xs ${accent}`}
-                      >
-                        <span className={`w-24 ${accent || ACCENT.muted}`}>
-                          {trimSec(b.start_time)}–{trimSec(b.end_time)}
-                        </span>
-                        <span
-                          className={`w-40 truncate ${accent || "text-white"}`}
-                        >
-                          {b.label.toUpperCase()}
-                        </span>
-                        <span className="flex-1 truncate">
-                          {b.status === "active" && (
-                            <span className={ACCENT.amber}>▶ ACTIVE</span>
-                          )}
-                          {b.status === "captured" && b.kind === "routine" && (
-                            <span className={ACCENT.green}>DONE</span>
-                          )}
-                          {b.status === "captured" && b.kind === "note" && (
-                            <span className={ACCENT.muted}>
-                              {b.results_text ?? "noted"}
-                            </span>
-                          )}
-                          {b.status === "captured" && b.kind === "judged" && (
-                            <>
-                              {b.quality_score !== null && (
-                                <span className={`${qualityColor} font-bold`}>
-                                  {b.quality_score}
-                                </span>
-                              )}
-                              {b.quality_score !== null && " "}
-                              <span className={ACCENT.muted}>
-                                {b.quality_verdict ??
-                                  b.results_summary ??
-                                  "captured"}
-                              </span>
-                            </>
-                          )}
-                          {b.status === "missed" && (
-                            <span className={ACCENT.red}>MISSED</span>
-                          )}
-                          {b.status === "skipped" && (
-                            <span className={ACCENT.dim}>SKIPPED</span>
-                          )}
-                          {b.status === "pending" && (
-                            <span className={ACCENT.dim}>PENDING</span>
-                          )}
-                          {b.status === "adhoc" && (
-                            <span className={ACCENT.muted}>
-                              {b.results_summary ?? "ad-hoc"}
-                            </span>
-                          )}
-                        </span>
-                        {b.status === "pending" && (
-                          <>
-                            <button
-                              onClick={async () => {
-                                await clockIn(b.id);
-                                loadAll();
-                              }}
-                              className={`text-xs ${ACCENT.cyan} hover:underline`}
-                            >
-                              [ ▶ CLOCK IN ]
-                            </button>
-                            <button
-                              onClick={async () => {
-                                await markSkipped(b.id);
-                                loadAll();
-                              }}
-                              className={`text-xs ${ACCENT.dim} hover:text-[#FF3344]`}
-                            >
-                              ✗
-                            </button>
-                          </>
-                        )}
-                        {b.status === "active" && (
-                          <button
-                            onClick={() => handleClockOut(b)}
-                            className={`text-xs ${ACCENT.amber} hover:underline`}
-                          >
-                            [ ⏹ CLOCK OUT ]
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })}
+                  {blocks.map((b) => (
+                    <BlockRow
+                      key={b.id}
+                      block={b}
+                      today={today}
+                      onClockIn={async () => {
+                        await clockIn(b.id);
+                        loadAll();
+                      }}
+                      onClockOut={() => handleClockOut(b)}
+                      onSkip={async () => {
+                        await markSkipped(b.id);
+                        loadAll();
+                      }}
+                      onRoutineToggle={async (v) => {
+                        await setRoutineState(b.id, v);
+                        loadAll();
+                      }}
+                      onEditStart={async (hhmm) => {
+                        await setStartedAt(b.id, today, hhmm);
+                        loadAll();
+                      }}
+                      onEditEnd={async (hhmm) => {
+                        await setEndedAt(b.id, today, hhmm);
+                        loadAll();
+                      }}
+                    />
+                  ))}
                 </div>
               )}
             </section>
