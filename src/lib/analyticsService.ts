@@ -10,8 +10,8 @@ export interface BlockTrendRow {
   count: number;
   avg_score: number | null;
   latest_score: number | null;
-  /** Last 14 days of scores, chronological. null = no captured judged instance that day. */
-  trend14: (number | null)[];
+  /** Sparse list of (date, score) pairs sorted by date ASC for the current range. */
+  series: { date: string; score: number }[];
 }
 
 export interface DowCell {
@@ -240,36 +240,24 @@ export async function getAnalytics(range: Range): Promise<AnalyticsBundle> {
     byLabel.get(key)!.rows.push(r);
   }
 
-  // === 1. Block trends (judged + note: anything captured, but score only for judged) ===
-  const trend14Dates: string[] = [];
-  for (let i = 13; i >= 0; i--) {
-    const d = new Date(today);
-    d.setDate(d.getDate() - i);
-    trend14Dates.push(
-      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`,
-    );
-  }
+  // === 1. Block trends (judged only — score required) ===
   const blockTrends: BlockTrendRow[] = [];
   for (const [label, { kind, rows }] of byLabel.entries()) {
-    if (kind !== "judged") continue; // trends only meaningful for judged blocks
-    const captured = rows.filter(
-      (r) => r.status === "captured" && r.quality_score !== null,
-    );
+    if (kind !== "judged") continue;
+    const captured = rows
+      .filter((r) => r.status === "captured" && r.quality_score !== null)
+      .sort((a, b) => a.date.localeCompare(b.date));
     const scores = captured.map((r) => r.quality_score!);
-    const dateToScore = new Map<string, number>();
-    for (const r of captured) dateToScore.set(r.date, r.quality_score!);
-    const sortedByDate = [...captured].sort((a, b) =>
-      a.date.localeCompare(b.date),
-    );
     blockTrends.push({
       label,
       kind,
       count: scores.length,
       avg_score: avg(scores),
-      latest_score: sortedByDate.length
-        ? sortedByDate[sortedByDate.length - 1].quality_score
-        : null,
-      trend14: trend14Dates.map((d) => dateToScore.get(d) ?? null),
+      latest_score: scores.length ? scores[scores.length - 1] : null,
+      series: captured.map((r) => ({
+        date: r.date,
+        score: r.quality_score!,
+      })),
     });
   }
   blockTrends.sort((a, b) => a.label.localeCompare(b.label));
