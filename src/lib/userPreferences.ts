@@ -46,6 +46,7 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
     "progression",
     "cash",
     "content",
+    "blog",
     "daily-review",
   ],
   default_view: "dashboard",
@@ -118,6 +119,12 @@ export const AVAILABLE_MODULES = [
     description: "Content creation and management",
   },
   {
+    id: "blog",
+    name: "Blog",
+    icon: "BookOpen",
+    description: "Private drafts and public writing",
+  },
+  {
     id: "daily-review",
     name: "Daily Review",
     icon: "Calendar",
@@ -165,6 +172,15 @@ export class UserPreferencesManager {
           enabledModules.splice(activityIndex + 1, 0, "focus");
         } else {
           enabledModules.push("focus");
+        }
+      }
+
+      if (!enabledModules.includes("blog")) {
+        const contentIndex = enabledModules.indexOf("content");
+        if (contentIndex !== -1) {
+          enabledModules.splice(contentIndex + 1, 0, "blog");
+        } else {
+          enabledModules.push("blog");
         }
       }
 
@@ -256,7 +272,7 @@ export class UserPreferencesManager {
     themeUpdates: Partial<UserPreferences["theme_settings"]>,
   ): Promise<void> {
     await this.updatePreferences({
-      theme_settings: themeUpdates,
+      theme_settings: themeUpdates as UserPreferences["theme_settings"],
     });
   }
 
@@ -265,7 +281,7 @@ export class UserPreferencesManager {
     kpiUpdates: Partial<UserPreferences["kpi_preferences"]>,
   ): Promise<void> {
     await this.updatePreferences({
-      kpi_preferences: kpiUpdates,
+      kpi_preferences: kpiUpdates as UserPreferences["kpi_preferences"],
     });
   }
 
@@ -274,7 +290,7 @@ export class UserPreferencesManager {
     layoutUpdates: Partial<UserPreferences["dashboard_layout"]>,
   ): Promise<void> {
     await this.updatePreferences({
-      dashboard_layout: layoutUpdates,
+      dashboard_layout: layoutUpdates as UserPreferences["dashboard_layout"],
     });
   }
 
@@ -283,7 +299,7 @@ export class UserPreferencesManager {
     layoutUpdates: Partial<UserPreferences["cash_layout"]>,
   ): Promise<void> {
     await this.updatePreferences({
-      cash_layout: layoutUpdates,
+      cash_layout: layoutUpdates as UserPreferences["cash_layout"],
     });
   }
 

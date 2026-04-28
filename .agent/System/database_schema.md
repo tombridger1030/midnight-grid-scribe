@@ -1,5 +1,28 @@
 # Database Schema Documentation
 
+> **v3 (2026-04-27)** — Operator Terminal rewrite. Migration `066_operator_terminal.sql` adds 8 new tables and DROPs ~25 bloat tables (`deep_work_sessions`, `focus_sessions`, `content_items`, `content_metrics`, `weekly_kpi_entries`, `user_kpis`, `training_sessions`, `user_skills`, `skill_progression`, `user_ranks`, `rank_history`, `weekly_rank_assessments`, `sprints`, `kanban_*`, `daily_review_entries`, `daily_metrics`, `weekly_logs`, `activities`, `books`, `nutrition/weight/sleep_logs`).
+>
+> **v3 active tables** (per Wave 1):
+>
+> | Table                       | Purpose                                                            |
+> | --------------------------- | ------------------------------------------------------------------ |
+> | `daily_inputs`              | Sleep h, σ7, exercise Y/N, diet Y/N (1 row per user/day)           |
+> | `schedule_blocks`           | Recurring weekly template (label, start/end time, days_of_week[])  |
+> | `block_instances`           | Per-day instance of a block; results_text + AI-cleaned summary     |
+> | `daily_flow`                | AI-emitted flow_score (0-100) + verdict (1 row per user/day)       |
+> | `monthly_goals`             | Binary hit/missed at end-of-month, on_track/at_risk during         |
+> | `accountability_recipients` | External accountability email config (one+ per user, daily/weekly) |
+> | `accountability_sends`      | Audit log of digest sends                                          |
+> | `blog_posts`                | 5 fields: title, body_md, word_count, created_at, updated_at       |
+>
+> **v3 preserved tables** (still used by Cash and Whoop pipeline): `mission_control_health` (Whoop recovery/sleep, feeds `daily_inputs.sleep_hours`), `subscriptions` and related `cash_*` schema, `profiles`, `auth.users`.
+>
+> **v3 SQL helpers**: `compute_sleep_sigma_7d(user, date)` (rolling 7d std-dev), `set_updated_at` trigger function (on `daily_inputs` and `blog_posts`).
+>
+> All v3 tables have RLS enabled with `auth.uid() = user_id` owner-only policies. Sections below describe the legacy v1/v2 schema for historical context — most of those tables are dropped in v3.
+
+---
+
 ## Overview
 
 Noctisium uses Supabase (PostgreSQL) as its database backend with a comprehensive schema designed for flexible personal metrics tracking. The database supports multi-user tenancy with Row Level Security (RLS) and provides both structured and flexible data storage options.
@@ -20,6 +43,31 @@ Noctisium uses Supabase (PostgreSQL) as its database backend with a comprehensiv
 - **Audit Trail**: Automatic timestamp management with triggers
 
 ## Main Schema Tables
+
+### Flow Coach Tables (`deep_work_sessions`, `flow_coach_daily`)
+
+`deep_work_sessions` is now the canonical focus/output session table. The legacy `focus_sessions` table is consolidated into it by migration `063_flow_coach.sql`, then dropped.
+
+New coach fields on `deep_work_sessions`:
+
+- `output_summary`: one-sentence end-of-session output note
+- `flow_score`: 0-100 AI-scored output quality
+- `flow_tag`: `deep_flow`, `solid`, `shallow`, `scattered`, or `wasted`
+- `coach_feedback`: one-line feedback from the flow coach
+- `coach_status`: `pending`, `scoring`, `scored`, `failed`, or `skipped`
+- `coach_model`, `coach_input_hash`, `coach_scored_at`: scoring metadata and idempotency
+
+`flow_coach_daily` stores one row per user/date with daily average flow score, total session count, total seconds, coach note, highlights, model, and generation timestamp. RLS restricts rows to the owner.
+
+### Blog Posts (`blog_posts`)
+
+`blog_posts` powers private drafts and public writing pages:
+
+- Owner-only CRUD under `/blog`, `/blog/new`, and `/blog/:id/edit`
+- Public read-only published posts under `/writing/:slug`
+- `status` is `draft` or `published`; drafts are private by RLS
+- `slug` is unique per user; public slug lookup only returns published rows
+- `published_at` is managed when status changes
 
 ### 1. Goals Table (`goals`)
 

@@ -1202,13 +1202,7 @@ export class UserStorage {
       console.error("Error getting current weekly constraint:", error);
 
       // Fallback to old localStorage method
-      try {
-        const { getCurrentWeeklyConstraint } = await import("./storage");
-        return getCurrentWeeklyConstraint();
-      } catch (fallbackError) {
-        console.error("Fallback to storage.ts also failed:", fallbackError);
-        return null;
-      }
+      return null;
     }
   }
 
@@ -1266,13 +1260,7 @@ export class UserStorage {
       console.error("Error saving weekly constraint:", error);
 
       // Fallback to old localStorage method
-      try {
-        const { setWeeklyConstraint } = await import("./storage");
-        return setWeeklyConstraint(constraint, reason);
-      } catch (fallbackError) {
-        console.error("Fallback to storage.ts also failed:", fallbackError);
-        return null;
-      }
+      return null;
     }
   }
 
@@ -1324,13 +1312,7 @@ export class UserStorage {
       console.error("Error getting avoidance items:", error);
 
       // Fallback to old localStorage method
-      try {
-        const { getAvoidanceItems } = await import("./storage");
-        return getAvoidanceItems();
-      } catch (fallbackError) {
-        console.error("Fallback to storage.ts also failed:", fallbackError);
-        return [];
-      }
+      return [];
     }
   }
 
@@ -1359,13 +1341,7 @@ export class UserStorage {
       console.error("Error adding avoidance item:", error);
 
       // Fallback to old localStorage method
-      try {
-        const { addAvoidanceItem } = await import("./storage");
-        return addAvoidanceItem(text);
-      } catch (fallbackError) {
-        console.error("Fallback to storage.ts also failed:", fallbackError);
-        return null;
-      }
+      return null;
     }
   }
 
@@ -1387,9 +1363,7 @@ export class UserStorage {
 
       // Fallback to old localStorage method
       try {
-        const { toggleAvoidanceItem } = await import("./storage");
-        toggleAvoidanceItem(itemId);
-        return true;
+        return false;
       } catch (fallbackError) {
         console.error("Fallback to storage.ts also failed:", fallbackError);
         return false;
@@ -1416,14 +1390,7 @@ export class UserStorage {
       console.error("Error deleting avoidance item:", error);
 
       // Fallback to old localStorage method
-      try {
-        const { deleteAvoidanceItem } = await import("./storage");
-        deleteAvoidanceItem(itemId);
-        return true;
-      } catch (fallbackError) {
-        console.error("Fallback to storage.ts also failed:", fallbackError);
-        return false;
-      }
+      return false;
     }
   }
 }

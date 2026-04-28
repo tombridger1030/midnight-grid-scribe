@@ -1,176 +1,68 @@
-# Noctisium Documentation Hub
+# Noctisium — Operator Terminal
 
-Welcome to the Noctisium project documentation. This directory contains comprehensive documentation about the system architecture, development processes, and feature specifications.
-
-## Quick Navigation
-
-### 🏗️ System Documentation
-
-- **[Project Architecture](./System/project_architecture.md)** - Complete overview of system design, tech stack, and architecture patterns
-- **[Database Schema](./System/database_schema.md)** - Detailed database structure, relationships, and migration strategy
-
-### 📋 Tasks & Features
-
-- **[Tasks Overview](./tasks/README.md)** - Product requirements and implementation plans for all features
-
-### 📖 Development Standards & Procedures (SOP)
-
-- **[Development SOP](./SOP/development_sop.md)** - Standard operating procedures for development workflow
-
-## Getting Started
-
-### For New Developers
-
-1. Start with [Project Architecture](./System/project_architecture.md) to understand the system
-2. Review [Development SOP](./SOP/development_sop.md) for coding standards and workflow
-3. Check [Tasks Overview](./tasks/README.md) to see current feature development status
-
-### For Feature Development
-
-1. Read the specific feature documentation in `./tasks/`
-2. Understand the database impact from [Database Schema](./System/database_schema.md)
-3. Follow [Development SOP](./SOP/development_sop.md) for implementation guidelines
-
-### For Database Changes
-
-1. Review [Database Schema](./System/database_schema.md) for current structure
-2. Follow migration procedures in [Development SOP](./SOP/development_sop.md)
-3. Update documentation after schema changes
-
-## Documentation Structure
-
-```
-.agent/
-├── README.md                    # This file - documentation hub
-├── System/                      # System architecture and database
-│   ├── project_architecture.md  # System design and tech stack
-│   └── database_schema.md       # Database structure and relationships
-├── SOP/                         # Development standards and procedures
-│   └── development_sop.md       # Development workflow and best practices
-└── tasks/                       # Feature specifications and PRDs
-    ├── README.md               # Tasks overview and index
-    ├── metrics-input.md        # Daily metrics input system
-    ├── data-visualization.md   # Charts and analytics
-    ├── sprint-management.md    # Sprint cycle tracking
-    └── [other features...]
-```
-
-## Key Concepts
-
-### System Philosophy
-
-- **Terminal-Inspired Design**: Minimal, efficient interface for power users
-- **Flexible Metrics**: Configurable KPIs for personalized tracking
-- **Sprint-Based Productivity**: 21-day ON / 7-day OFF work cycles
-- **Data Portability**: Import/export functionality for user ownership
-
-### Technical Pillars
-
-- **Multi-Tenant Architecture**: Secure user data isolation
-- **Real-Time Sync**: Live data updates across devices
-- **Progressive Web App**: Offline-first with sync capabilities
-- **Component-Based Design**: Modular, reusable React components
-
-### Data Management
-
-- **Structured + Flexible**: Hybrid approach with traditional tables and JSONB
-- **Migration Strategy**: Numbered, backward-compatible schema changes
-- **Security First**: Row-level security and proper access controls
-
-## Current Status
-
-### ✅ Completed Features
-
-- Core metrics tracking system
-- Sprint management with visual calendar
-- Goal tracking with progress calculation
-- Financial dashboard with MRR tracking
-- Content creation analytics
-- User authentication and profiles
-- Kanban task management
-- Data import/export functionality
-- Mission Control V2 dashboard (NASA/SpaceX 10-panel telemetry interface with navy + cyan design system, interactive commit heatmap, ring gauge, LoC sparkline, vitals panel, Whoop OAuth integration, pg_cron automated sync)
-
-### 🚧 In Development
-
-- Mobile responsiveness improvements
-- Advanced data visualizations
-- Real-time collaboration features
-
-### 📋 Planned Features
-
-- Team/workspace functionality
-- Advanced analytics and insights
-- Integration with external services
-- Mobile app development
-
-## Contributing to Documentation
-
-### Documentation Standards
-
-- **Consistency**: Use similar structure across documents
-- **Clarity**: Write for different audiences (developers, product managers, users)
-- **Currency**: Keep documentation up-to-date with code changes
-- **Cross-References**: Link related documents for context
-
-### Update Process
-
-1. Make code changes
-2. Update relevant documentation immediately
-3. Update this README if new documents are added
-4. Review all linked documents for accuracy
-
-### Document Templates
-
-- Use existing documents as templates
-- Include "Related Documentation" sections
-- Add table of contents for longer documents
-- Use consistent formatting and styling
-
-## Development Workflow Integration
-
-### Before Starting Development
-
-1. Read relevant feature documentation in `./tasks/`
-2. Understand database impact from `./System/database_schema.md`
-3. Review [Development SOP](./SOP/development_sop.md) for standards
-
-### During Development
-
-1. Update documentation as you implement features
-2. Document any schema changes in migration files
-3. Note any deviations from planned implementation
-
-### After Development
-
-1. Update feature documentation with final implementation details
-2. Add any new architectural patterns to `./System/project_architecture.md`
-3. Update [Development SOP](./SOP/development_sop.md) if new processes are introduced
-
-## Support and Questions
-
-### Getting Help
-
-1. Check existing documentation first
-2. Look in related documents for cross-references
-3. Review Git history for recent changes
-4. Check issue tracker for known problems
-
-### Providing Feedback
-
-1. Create issues for documentation gaps
-2. Suggest improvements to existing documents
-3. Report outdated information
-4. Contribute to documentation updates
+**v3 (2026-04-27)**: Bloomberg-style data tracker. Bloated KPI/sprint/skill/content/focus system replaced with 5 routes, 8 tables, 3 edge functions.
 
 ---
 
-## Related Resources
+## What it is
 
-- **Main Project README** (../README.md) - Project overview and setup
-- **Code Repository** - Source code and implementation
-- **Database Schema** (database/) - SQL schema files and migrations
-- **Component Library** (src/components/ui/) - shadcn/ui components
+A private platform that tracks how the operator **works**, **sleeps**, and **thinks-on-paper**, derives a daily flow score from those inputs via an LLM, and sends an external accountability digest by email.
 
-**Last Updated**: 2026-03-26
-**Documentation Version**: 1.0.0
+## Surfaces (5 routes)
+
+| Route       | Purpose                                                                                                         |
+| ----------- | --------------------------------------------------------------------------------------------------------------- |
+| `/`         | Terminal home: INPUTS row · today's schedule with end-of-block capture · DAILY FLOW · MONTH GOALS · 7-day table |
+| `/log`      | Historical data table, 7/30/90/365d, summary stats, CSV export                                                  |
+| `/blog`     | Free writing — `<textarea>` + react-markdown preview, debounced autosave, no AI critique                        |
+| `/cash`     | Subscriptions + investments (untouched from prior architecture)                                                 |
+| `/settings` | Schedule editor · monthly goals · accountability email · Whoop OAuth · profile/security                         |
+
+## What it tracks
+
+- **Sleep**: bedtime + wake time. `sleep_hours` is a generated column derived from those two timestamps. 7-day rolling σ shows consistency. No Whoop integration — fully self-reported.
+- **Exercise**: Y/N daily.
+- **Diet**: Y/N daily (followed plan or didn't).
+- **Schedule blocks**: recurring weekly template; per-day instances captured at end-of-block with "what did you accomplish?" results.
+- **Daily flow score**: 0-100 + one-line verdict, emitted by `flow-judge` edge function (Claude Sonnet 4.6 via tool_use).
+- **Monthly goals**: binary hit/missed end-of-month, naive on-track/at-risk heuristic during the month.
+
+## What it intentionally does NOT do
+
+- XP, levels, ranks, streaks
+- Habit tracking ceremony
+- Memory/prediction/firewall/learning surfaces (prior plan iterations rejected)
+- AI critique on blog (free writing only)
+- Public-facing pages
+- Celebration UX (no green checkmarks, confetti, "great work!" toasts)
+
+If feature creep starts pulling toward any of the above: stop and revisit `/Users/tombridger/.claude/plans/there-are-a-couple-snug-scone.md`.
+
+---
+
+## System
+
+- **Stack**: React + Vite + Supabase + Tailwind. Bun, not npm.
+- **Auth**: Supabase email/password; minimal `<TerminalLogin />` in `App.tsx`.
+- **Edge functions** (`supabase/functions/`):
+  - `flow-judge` — `summarize_block` (Haiku 4.5, prompt-cached) + `score_day` (Sonnet 4.6 via tool_use)
+  - `accountability-digest` — Bloomberg-styled plain-text email via Resend, cron + manual modes
+  - `operator-cron` — nightly: compute_sleep_sigma_7d, materialize today's block_instances, refresh monthly_goals.status
+  - `ai-proxy` — preserved
+- **Visual language**: pure black `#000`, JetBrains Mono everywhere. Amber=active/today, cyan=data labels, red=missed/at-risk, green=hit. No rounded corners, shadows, gradients. ═══ ─── separators, `▶ ◀ ✗ ✓ ·` glyphs.
+
+## Documentation
+
+- **System/database_schema.md** — current schema (v3 + legacy)
+- **SOP/development_sop.md** — coding standards
+- **tasks/** — feature specs (mostly v1/v2 history, deprecated)
+
+## Cleaned up in Wave 0 (2026-04-27)
+
+~110-130 src/ files deleted (~33% reduction): MissionControl, Visualizer, Activity, Focus, Content (all nested), Dashboard, DailyReview, WeeklyLog, KPIManage, Kanban, Schedule, Progression pages; mission-control/, analytics/, focus/, content/, cyberpunk/, dashboard/, daily/, weekly/, schedule/, progression/, activity/ component dirs; 17 of 20 hooks; KPI/sprint/skill/rank/weekly/storage lib code (storage.ts alone was 3788 lines). All Codex v1 scaffolding (BlogPublic, flow-coach edge fn) also removed.
+
+## Status
+
+**v3 in feature branch `feat/wave-0-deletion`** (Wave 0+1+2+3 stacked). Pre-merge review pending.
+
+**Last updated**: 2026-04-27
