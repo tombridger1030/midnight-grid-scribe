@@ -161,3 +161,35 @@ export function computeSleepOffsetMin(
   };
   return circDist(bedMin, tBed) + circDist(wakeMin, tWake);
 }
+
+/**
+ * 7-day rolling avg of off-target minutes ending at targetDate (inclusive).
+ * Computed client-side over the provided inputs window, in local time.
+ * Returns null if no day in the window has both bed + wake set.
+ *
+ * The DB-stored sleep_sigma_7d column is computed in SQL using UTC time
+ * extraction, which is wrong for non-UTC users — so we always compute
+ * client-side for display. Pass enough inputs (at least the 7 days ending
+ * at targetDate) for an accurate result; missing days are skipped.
+ */
+export function computeSleepSigma7d(
+  inputs: Pick<DailyInputs, "date" | "sleep_start_at" | "sleep_end_at">[],
+  targetDate: string,
+  targetBedtime: string,
+  targetWakeTime: string,
+): number | null {
+  const offsets: number[] = [];
+  for (const i of inputs) {
+    const days = (Date.parse(targetDate) - Date.parse(i.date)) / 86_400_000;
+    if (days < 0 || days > 6) continue;
+    const off = computeSleepOffsetMin(
+      i.sleep_start_at,
+      i.sleep_end_at,
+      targetBedtime,
+      targetWakeTime,
+    );
+    if (off !== null) offsets.push(off);
+  }
+  if (offsets.length === 0) return null;
+  return offsets.reduce((a, b) => a + b, 0) / offsets.length;
+}

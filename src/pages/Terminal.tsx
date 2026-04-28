@@ -17,6 +17,7 @@ import {
 import {
   type DailyInputs,
   computeSleepOffsetMin,
+  computeSleepSigma7d,
   formatLocalHHMM,
   getInputs,
   getInputsRange,
@@ -433,7 +434,9 @@ const Terminal: React.FC = () => {
   const [settings, setSettings] = useState<OperatorSettings | null>(null);
 
   const loadAll = useCallback(async () => {
-    const start = offsetDateStr(6);
+    // Fetch 13 days so the rolling 7-day σ for the oldest displayed row
+    // (today-6) has its full window (today-12 .. today-6) available.
+    const start = offsetDateStr(12);
     let b: BlockInstanceWithLabel[] = [],
       i: DailyInputs | null = null,
       f: DailyFlow | null = null,
@@ -827,7 +830,12 @@ const Terminal: React.FC = () => {
                   <td className="py-0.5">{date.slice(5).replace("-", "")}</td>
                   <td className="text-right">{i?.sleep_hours ?? "—"}</td>
                   <td className="text-right">
-                    {i?.sleep_sigma_7d?.toFixed(1) ?? "—"}
+                    {computeSleepSigma7d(
+                      last7Inputs,
+                      date,
+                      targetBed,
+                      targetWake,
+                    )?.toFixed(0) ?? "—"}
                   </td>
                   <td
                     className={`text-center ${i?.exercise === false ? ACCENT.red : ""}`}

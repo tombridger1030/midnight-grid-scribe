@@ -1,7 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { type DailyInputs, getInputsRange } from "@/lib/inputsService";
+import {
+  type DailyInputs,
+  computeSleepSigma7d,
+  getInputsRange,
+} from "@/lib/inputsService";
 import { type DailyFlow, getFlowRange } from "@/lib/dailyFlowService";
+import {
+  type OperatorSettings,
+  getOperatorSettings,
+} from "@/lib/operatorSettingsService";
 
 const ACCENT = {
   cyan: "text-[#00D4FF]",
@@ -21,11 +29,11 @@ interface LogRow {
   flow?: DailyFlow;
 }
 
-function rowToCsv(row: LogRow): string {
+function rowToCsv(row: LogRow, sigma7: number | null): string {
   return [
     row.date,
     row.inputs?.sleep_hours ?? "",
-    row.inputs?.sleep_sigma_7d ?? "",
+    sigma7?.toFixed(0) ?? "",
     row.inputs?.exercise === true
       ? "Y"
       : row.inputs?.exercise === false
@@ -37,10 +45,22 @@ function rowToCsv(row: LogRow): string {
   ].join(",");
 }
 
-function downloadCsv(rows: LogRow[]) {
+function downloadCsv(
+  rows: LogRow[],
+  allInputs: DailyInputs[],
+  targetBed: string,
+  targetWake: string,
+) {
   const header =
     "date,sleep_hours,sleep_sigma_7d,exercise,diet,flow_score,verdict";
-  const body = rows.map(rowToCsv).join("\n");
+  const body = rows
+    .map((r) =>
+      rowToCsv(
+        r,
+        computeSleepSigma7d(allInputs, r.date, targetBed, targetWake),
+      ),
+    )
+    .join("\n");
   const blob = new Blob([`${header}\n${body}`], { type: "text/csv" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -53,14 +73,22 @@ function downloadCsv(rows: LogRow[]) {
 const Log: React.FC = () => {
   const [days, setDays] = useState(30);
   const [rows, setRows] = useState<LogRow[]>([]);
+  const [allInputs, setAllInputs] = useState<DailyInputs[]>([]);
+  const [settings, setSettings] = useState<OperatorSettings | null>(null);
 
   useEffect(() => {
+    // Fetch days+6 worth of inputs so the rolling 7-day σ for the oldest
+    // displayed row has its full window available.
+    const fetchStart = offsetDateStr(days - 1 + 6);
     const start = offsetDateStr(days - 1);
     const end = offsetDateStr(0);
     Promise.all([
-      getInputsRange(start, end).catch(() => [] as DailyInputs[]),
+      getInputsRange(fetchStart, end).catch(() => [] as DailyInputs[]),
       getFlowRange(start, end).catch(() => [] as DailyFlow[]),
-    ]).then(([inputs, flow]) => {
+      getOperatorSettings().catch(() => null),
+    ]).then(([inputs, flow, s]) => {
+      setAllInputs(inputs);
+      setSettings(s);
       const map = new Map<string, LogRow>();
       for (let n = 0; n < days; n++) {
         const date = offsetDateStr(n);
@@ -79,6 +107,9 @@ const Log: React.FC = () => {
       );
     });
   }, [days]);
+
+  const targetBed = settings?.target_bedtime?.slice(0, 5) ?? "23:00";
+  const targetWake = settings?.target_wake_time?.slice(0, 5) ?? "07:00";
 
   const stats = useMemo(() => {
     const withFlow = rows.filter(
@@ -163,7 +194,7 @@ const Log: React.FC = () => {
           ))}
           <span className="flex-1" />
           <button
-            onClick={() => downloadCsv(rows)}
+            onClick={() => downloadCsv(rows, allInputs, targetBed, targetWake)}
             className={`${ACCENT.cyan} hover:underline`}
           >
             ▼ EXPORT CSV
@@ -192,7 +223,12 @@ const Log: React.FC = () => {
                 <td className="py-0.5">{r.date}</td>
                 <td className="text-right">{r.inputs?.sleep_hours ?? "—"}</td>
                 <td className="text-right">
-                  {r.inputs?.sleep_sigma_7d?.toFixed(0) ?? "—"}
+                  {computeSleepSigma7d(
+                    allInputs,
+                    r.date,
+                    targetBed,
+                    targetWake,
+                  )?.toFixed(0) ?? "—"}
                 </td>
                 <td
                   className={`text-center ${r.inputs?.exercise === false ? ACCENT.red : ""}`}
