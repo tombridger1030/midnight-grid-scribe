@@ -19,3 +19,19 @@
 - Also fixed pre-existing `let cursor` → `const cursor` lint error in FocusHeatmap
 - Files: src/styles/focus-tokens.ts, src/components/focus/FocusHeatmap.tsx
 - Merged 3b3b9da, deployed via Vercel (bundle index-BupHSSn1.js), /focus verified 200
+
+## 2026-04-28: Noctisium v3 — Bloomberg Operator Terminal (PR #15)
+- Full rebuild. ~57k lines deleted in wave-0 cleanup (KPI/sprint/skill/rank/content/focus/mission-control)
+- 8 new tables (migration 066): daily_inputs, schedule_blocks, block_instances, daily_flow, monthly_goals, accountability_recipients/sends, blog_posts. RLS owner-only on every new table
+- 3 edge functions: flow-judge (Haiku 4.5 summarize + Sonnet 4.6 score_day), accountability-digest (Resend), operator-cron (daily idempotent)
+- 6 routes: / TERMINAL · /log · /analytics · /blog · /cash · /settings
+- Sleep model: bedtime + wake timestamps, sleep_hours generated, σ7 client-side (the SQL fn is UTC-broken). Whoop ripped out
+- Block kinds: routine (Y/N toggle no time tracking), note (clock in/out, free text), judged (clock in/out, LLM judges quality_score 0-100 + verdict)
+- Routine Y/N revertible — Wakeup, Walk, Meal, Shake+Walk, BJJ, Watch BJJ, Pack+Leave, Shower+Clean, Meal 3 (Migration 073 changed Meal from judged to routine)
+- Editable started_at + ended_at on judged/note blocks (clock in late, forget to clock out — just edit the time)
+- /analytics: SVG bar/line/scatter charts (no chart library). Per-block score trend small multiples, day-of-week bars, latency diverging bars (start vs end), sleep→flow scatter with regression line, daily flow time-series with reference bands at 50/75
+- Click-to-inspect on every chart point: amber crosshair across all time-series, DAY DETAIL panel pins at top with full context (inputs, judged blocks planned-vs-actual + verdict, note blocks, routine Y/N), ▶ LOG link to follow into history
+- Stacked commits on top of waves: bcf4ac6 realtime sync, 4fcc57a sleep window + Whoop drop, c9e66f3 clock-in/out + LLM, 898a39d HH:MM:SS timer + dense grid, 2191b9f per-kind clock-out + sleep offset, 9534d7b react-markdown deps fix (Vercel build), 4d2ce62 routine Y/N + analytics v0, 078c00c σ7 client-side, e7ac1c9 SVG charts, c1ecf25 click-to-inspect
+- Migration 073 applied to prod via supabase db push --linked
+- Merged 231ce5d → main · prod bundle index-VsVG_GAW.js · noctisium.com /analytics returns 200 with v3 sidebar nav (ANALYTICS / TERMINAL / BLOG / CASH)
+- 90 days of synthetic data was seeded for analytics testing during the session, then deleted (754 block_instances + 91 daily_inputs + 91 daily_flow rows). Today's real data preserved

@@ -1,6 +1,6 @@
 # Noctisium — Operator Terminal
 
-**v3 (2026-04-27)**: Bloomberg-style data tracker. Bloated KPI/sprint/skill/content/focus system replaced with 5 routes, 8 tables, 3 edge functions.
+**v3 (2026-04-28)**: Bloomberg-style data tracker. Bloated KPI/sprint/skill/content/focus system replaced with 6 routes, 8 tables, 3 edge functions, plus a click-to-inspect analytics surface.
 
 ---
 
@@ -8,23 +8,28 @@
 
 A private platform that tracks how the operator **works**, **sleeps**, and **thinks-on-paper**, derives a daily flow score from those inputs via an LLM, and sends an external accountability digest by email.
 
-## Surfaces (5 routes)
+## Surfaces (6 routes)
 
-| Route       | Purpose                                                                                                         |
-| ----------- | --------------------------------------------------------------------------------------------------------------- |
-| `/`         | Terminal home: INPUTS row · today's schedule with end-of-block capture · DAILY FLOW · MONTH GOALS · 7-day table |
-| `/log`      | Historical data table, 7/30/90/365d, summary stats, CSV export                                                  |
-| `/blog`     | Free writing — `<textarea>` + react-markdown preview, debounced autosave, no AI critique                        |
-| `/cash`     | Subscriptions + investments (untouched from prior architecture)                                                 |
-| `/settings` | Schedule editor · monthly goals · accountability email · Whoop OAuth · profile/security                         |
+| Route        | Purpose                                                                                                                                                                        |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `/`          | Terminal home: INPUTS row · today's schedule (clock-in/out for work, Y/N for routine) · DAILY FLOW · MONTH GOALS · 7-day table                                                 |
+| `/log`       | Historical data table, 7/30/90/365d, summary stats, CSV export. Sleep σ7 computed client-side (local time)                                                                     |
+| `/analytics` | Bloomberg-dense SVG charts: per-block score trends, day-of-week bars, latency, sleep→flow scatter, daily flow line. Every point clickable → DAY DETAIL panel with full context |
+| `/blog`      | Free writing — `<textarea>` + react-markdown preview, debounced autosave, no AI critique                                                                                       |
+| `/cash`      | Subscriptions + investments (untouched from prior architecture)                                                                                                                |
+| `/settings`  | Schedule editor · monthly goals · accountability email · sleep target · profile/security                                                                                       |
 
 ## What it tracks
 
-- **Sleep**: bedtime + wake time. `sleep_hours` is a generated column derived from those two timestamps. 7-day rolling σ shows consistency. No Whoop integration — fully self-reported.
+- **Sleep**: bedtime + wake time. `sleep_hours` is a generated column derived from those two timestamps. 7-day rolling σ shows consistency vs `operator_settings.target_bedtime/target_wake_time`, computed client-side (local-time-correct). No Whoop integration — fully self-reported.
 - **Exercise**: Y/N daily.
 - **Diet**: Y/N daily (followed plan or didn't).
-- **Schedule blocks**: recurring weekly template; per-day instances captured at end-of-block with "what did you accomplish?" results.
-- **Daily flow score**: 0-100 + one-line verdict, emitted by `flow-judge` edge function (Claude Sonnet 4.6 via tool_use).
+- **Schedule blocks** — three kinds:
+  - `routine` (Wakeup, Walk, Meal, BJJ, Shake+Walk, etc.): Y/N toggle, no time tracking, revertible. No LLM judgment.
+  - `note` (Read, CEO Interview): clock in/out + free-text notes, no LLM judgment.
+  - `judged` (Cortal Block I/II/III, Workout, Study): clock in/out + results text → `flow-judge` edge fn emits `quality_score` (0-100) + one-line verdict via Sonnet 4.6 tool_use.
+  - `started_at` and `ended_at` are inline-editable on judged/note rows for late clock-ins or forgotten clock-outs.
+- **Daily flow score**: 0-100 + one-line verdict, emitted by `flow-judge` edge function.
 - **Monthly goals**: binary hit/missed end-of-month, naive on-track/at-risk heuristic during the month.
 
 ## What it intentionally does NOT do
@@ -47,7 +52,7 @@ If feature creep starts pulling toward any of the above: stop and revisit `/User
 - **Edge functions** (`supabase/functions/`):
   - `flow-judge` — `summarize_block` (Haiku 4.5, prompt-cached) + `score_day` (Sonnet 4.6 via tool_use)
   - `accountability-digest` — Bloomberg-styled plain-text email via Resend, cron + manual modes
-  - `operator-cron` — nightly: compute_sleep_sigma_7d, materialize today's block_instances, refresh monthly_goals.status
+  - `operator-cron` — daily idempotent (Terminal calls once per day): materialize today's block_instances from schedule_blocks template, refresh monthly_goals.status. Sleep σ7 is computed client-side (the SQL helper exists but is UTC-broken for non-UTC users — display path bypasses it).
   - `ai-proxy` — preserved
 - **Visual language**: pure black `#000`, JetBrains Mono everywhere. Amber=active/today, cyan=data labels, red=missed/at-risk, green=hit. No rounded corners, shadows, gradients. ═══ ─── separators, `▶ ◀ ✗ ✓ ·` glyphs.
 
@@ -63,6 +68,6 @@ If feature creep starts pulling toward any of the above: stop and revisit `/User
 
 ## Status
 
-**v3 in feature branch `feat/wave-0-deletion`** (Wave 0+1+2+3 stacked). Pre-merge review pending.
+**v3 shipped to production** as commit `231ce5d` (PR #15, merged 2026-04-28). Site live at noctisium.com. 73 migrations applied to Supabase project `ojwugyeyecddsoecpffs`.
 
-**Last updated**: 2026-04-27
+**Last updated**: 2026-04-28
