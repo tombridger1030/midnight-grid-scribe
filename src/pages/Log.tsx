@@ -2,10 +2,23 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   type DailyInputs,
+  computeSleepOffsetMin,
   computeSleepSigma7d,
+  formatLocalHHMM,
+  getInputs,
   getInputsRange,
+  setBedTime,
+  setDiet,
+  setExercise,
+  setWakeTime,
 } from "@/lib/inputsService";
-import { type DailyFlow, getFlowRange } from "@/lib/dailyFlowService";
+import {
+  type DailyFlow,
+  getFlow,
+  getFlowRange,
+  scoreToday,
+} from "@/lib/dailyFlowService";
+import { type BlockInstanceWithLabel, listForDate } from "@/lib/blockService";
 import {
   type OperatorSettings,
   getOperatorSettings,
@@ -68,11 +81,277 @@ function downloadCsv(
   URL.revokeObjectURL(url);
 }
 
+function YNToggle({
+  value,
+  onChange,
+}: {
+  value: boolean | null;
+  onChange: (v: boolean | null) => void;
+}) {
+  const cell = (label: "Y" | "N", active: boolean) => (
+    <button
+      onClick={() =>
+        onChange(active && value === (label === "Y") ? null : label === "Y")
+      }
+      className={`px-2 ${
+        active ? (label === "Y" ? "text-[#00C853]" : ACCENT.red) : ACCENT.dim
+      } hover:text-white text-xs`}
+    >
+      [{active ? label : "·"}]
+    </button>
+  );
+  return (
+    <span className="inline-flex">
+      {cell("Y", value === true)}
+      {cell("N", value === false)}
+    </span>
+  );
+}
+
+function TimeInput({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const [v, setV] = useState(value);
+  useEffect(() => setV(value), [value]);
+  return (
+    <input
+      type="time"
+      value={v}
+      onChange={(e) => {
+        setV(e.target.value);
+        if (e.target.value !== value) onChange(e.target.value);
+      }}
+      className="bg-transparent text-white border-b border-[#444] focus:border-[#00D4FF] focus:outline-none px-1 text-xs w-24"
+    />
+  );
+}
+
+function DayEditorModal({
+  date,
+  targetBed,
+  targetWake,
+  onClose,
+  onSaved,
+}: {
+  date: string;
+  targetBed: string;
+  targetWake: string;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [inputs, setInputs] = useState<DailyInputs | null>(null);
+  const [flow, setFlow] = useState<DailyFlow | null>(null);
+  const [blocks, setBlocks] = useState<BlockInstanceWithLabel[]>([]);
+  const [scoring, setScoring] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = async () => {
+    const [i, f, b] = await Promise.all([
+      getInputs(date).catch(() => null),
+      getFlow(date).catch(() => null),
+      listForDate(date).catch(() => [] as BlockInstanceWithLabel[]),
+    ]);
+    setInputs(i);
+    setFlow(f);
+    setBlocks(b);
+  };
+
+  useEffect(() => {
+    refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [date]);
+
+  const offset = computeSleepOffsetMin(
+    inputs?.sleep_start_at ?? null,
+    inputs?.sleep_end_at ?? null,
+    targetBed,
+    targetWake,
+  );
+
+  const handleScore = async () => {
+    setScoring(true);
+    setError(null);
+    try {
+      const result = await scoreToday(date);
+      if (result) {
+        setFlow(result);
+        onSaved();
+      } else {
+        setError("score failed — check console");
+      }
+    } finally {
+      setScoring(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/80 flex items-start justify-center pt-24 z-50 px-4">
+      <div className="w-full max-w-xl bg-black border border-[#444] p-6 font-mono text-sm">
+        <div className="flex items-center justify-between mb-4">
+          <div className={`text-xs ${ACCENT.cyan}`}>DAY DETAIL · {date}</div>
+          <button
+            onClick={onClose}
+            className={`text-xs ${ACCENT.muted} hover:text-white`}
+          >
+            ✗ CLOSE
+          </button>
+        </div>
+
+        <div className={`text-xs ${ACCENT.muted} mb-1`}>INPUTS</div>
+        <div className="border border-[#222] p-3 mb-4 space-y-2">
+          <div className="flex items-center gap-3 text-xs flex-wrap">
+            <span>
+              <span className={ACCENT.muted}>BED </span>
+              <TimeInput
+                value={formatLocalHHMM(inputs?.sleep_start_at ?? null)}
+                onChange={async (bed) => {
+                  await setBedTime(date, bed || null);
+                  await refresh();
+                  onSaved();
+                }}
+              />
+            </span>
+            <span>
+              <span className={ACCENT.muted}>WAKE </span>
+              <TimeInput
+                value={formatLocalHHMM(inputs?.sleep_end_at ?? null)}
+                onChange={async (wake) => {
+                  await setWakeTime(date, wake || null);
+                  await refresh();
+                  onSaved();
+                }}
+              />
+            </span>
+            <span>
+              <span className={ACCENT.muted}>SLP </span>
+              <span className="text-white">
+                {inputs?.sleep_hours?.toFixed(1) ?? "—"}
+              </span>
+              <span className={ACCENT.muted}>H</span>
+            </span>
+            <span>
+              <span className={ACCENT.muted}>OFF </span>
+              <span className="text-white">{offset?.toFixed(0) ?? "—"}</span>
+              <span className={ACCENT.muted}>m</span>
+            </span>
+          </div>
+          <div className="flex items-center gap-4 text-xs">
+            <span>
+              <span className={ACCENT.muted}>EX </span>
+              <YNToggle
+                value={inputs?.exercise ?? null}
+                onChange={async (v) => {
+                  await setExercise(date, v);
+                  await refresh();
+                  onSaved();
+                }}
+              />
+            </span>
+            <span>
+              <span className={ACCENT.muted}>DIET </span>
+              <YNToggle
+                value={inputs?.diet ?? null}
+                onChange={async (v) => {
+                  await setDiet(date, v);
+                  await refresh();
+                  onSaved();
+                }}
+              />
+            </span>
+          </div>
+        </div>
+
+        <div className={`text-xs ${ACCENT.muted} mb-1`}>DAILY FLOW</div>
+        <div className="border border-[#222] p-3 mb-4">
+          {flow?.flow_score != null ? (
+            <div>
+              <div className="text-white text-3xl tabular-nums leading-none">
+                {flow.flow_score}
+              </div>
+              <div className={`mt-1 text-xs ${ACCENT.muted}`}>
+                {flow.verdict}
+              </div>
+            </div>
+          ) : (
+            <div className={`text-xs ${ACCENT.dim}`}>no score yet</div>
+          )}
+          <button
+            onClick={handleScore}
+            disabled={scoring}
+            className={`mt-3 text-xs ${ACCENT.amber} hover:underline disabled:opacity-30`}
+          >
+            [ {scoring ? "scoring..." : flow ? "rescore" : "score this day"} ]
+          </button>
+          {error && <div className={`text-xs ${ACCENT.red} mt-2`}>{error}</div>}
+        </div>
+
+        <div className={`text-xs ${ACCENT.muted} mb-1`}>JOURNAL</div>
+        <div className="border border-[#222] p-3 mb-4 max-h-72 overflow-y-auto">
+          {(() => {
+            const entries = blocks.filter((b) => (b.results_text ?? "").trim());
+            if (entries.length === 0) {
+              return (
+                <div className={`text-xs ${ACCENT.dim}`}>
+                  no clock-out notes for this day
+                </div>
+              );
+            }
+            return (
+              <div className="space-y-3 text-xs">
+                {entries.map((b) => {
+                  const t = b.started_at
+                    ? `${String(new Date(b.started_at).getHours()).padStart(2, "0")}:${String(new Date(b.started_at).getMinutes()).padStart(2, "0")}`
+                    : "--:--";
+                  return (
+                    <div key={b.id}>
+                      <div className={ACCENT.muted}>
+                        <span className="text-white tabular-nums">{t}</span>
+                        {" · "}
+                        <span className={ACCENT.cyan}>
+                          {b.label.toUpperCase()}
+                        </span>
+                        {b.kind === "judged" && b.quality_score !== null && (
+                          <span className="text-white">
+                            {" · "}
+                            {b.quality_score}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-white whitespace-pre-wrap mt-0.5">
+                        {b.results_text}
+                      </div>
+                      {b.kind === "judged" && b.quality_verdict && (
+                        <div className={`${ACCENT.dim} mt-0.5`}>
+                          ↳ {b.quality_verdict}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
+        </div>
+
+        <div className={`text-xs ${ACCENT.dim}`}>
+          edits save immediately · close when done
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const Log: React.FC = () => {
   const [days, setDays] = useState(30);
   const [rows, setRows] = useState<LogRow[]>([]);
   const [allInputs, setAllInputs] = useState<DailyInputs[]>([]);
   const [settings, setSettings] = useState<OperatorSettings | null>(null);
+  const [editDate, setEditDate] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     // Fetch days+6 worth of inputs so the rolling 7-day off-target avg for the
@@ -104,7 +383,7 @@ const Log: React.FC = () => {
         Array.from(map.values()).sort((a, b) => b.date.localeCompare(a.date)),
       );
     });
-  }, [days]);
+  }, [days, reloadKey]);
 
   const targetBed = settings?.target_bedtime?.slice(0, 5) ?? "23:00";
   const targetWake = settings?.target_wake_time?.slice(0, 5) ?? "07:00";
@@ -216,9 +495,12 @@ const Log: React.FC = () => {
             {rows.map((r, idx) => (
               <tr
                 key={r.date}
-                className={idx === 0 ? ACCENT.amber : "text-white"}
+                onClick={() => setEditDate(r.date)}
+                className={`cursor-pointer hover:bg-[#111] ${idx === 0 ? ACCENT.amber : "text-white"}`}
               >
-                <td className="py-0.5">{r.date}</td>
+                <td className="py-0.5 underline-offset-2 hover:underline">
+                  {r.date}
+                </td>
                 <td className="text-right">{r.inputs?.sleep_hours ?? "—"}</td>
                 <td className="text-right">
                   {computeSleepSigma7d(
@@ -255,6 +537,15 @@ const Log: React.FC = () => {
           </tbody>
         </table>
       </div>
+      {editDate && (
+        <DayEditorModal
+          date={editDate}
+          targetBed={targetBed}
+          targetWake={targetWake}
+          onClose={() => setEditDate(null)}
+          onSaved={() => setReloadKey((k) => k + 1)}
+        />
+      )}
     </div>
   );
 };
