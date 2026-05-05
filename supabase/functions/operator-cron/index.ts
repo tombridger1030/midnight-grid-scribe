@@ -3,6 +3,8 @@
 //   2. refresh monthly_goals.status (basic: numeric goals → threshold check)
 //
 // Idempotent — safe to run multiple times per day.
+// Accepts an explicit YYYY-MM-DD date from the caller; otherwise it falls back
+// to the configured mission timezone so scheduled runs stay aligned with the UI.
 
 import {
   corsHeaders,
@@ -11,11 +13,35 @@ import {
   jsonResponse,
 } from "../_shared/utils.ts";
 
+const DEFAULT_TIME_ZONE = Deno.env.get("MISSION_CONTROL_TIMEZONE") ?? "America/Vancouver";
+
+function formatDateInTimeZone(date: Date, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+  if (!year || !month || !day) throw new Error("failed to format date");
+  return `${year}-${month}-${day}`;
+}
+
+function isIsoDate(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    /^\d{4}-\d{2}-\d{2}$/.test(value)
+  );
+}
+
 async function materializeBlockInstances(
   supabase: ReturnType<typeof createServiceClient>,
   today: string,
 ) {
-  const dayOfWeek = new Date(today + "T00:00:00").getUTCDay(); // 0=Sun..6=Sat
+  const dayOfWeek = new Date(`${today}T00:00:00Z`).getUTCDay(); // 0=Sun..6=Sat
 
   const { data: blocks } = await supabase
     .from("schedule_blocks")
@@ -101,7 +127,17 @@ Deno.serve(async (req) => {
 
   try {
     const supabase = createServiceClient();
-    const today = new Date().toISOString().slice(0, 10);
+    const body = (await req.json().catch(() => ({}))) as {
+      date?: unknown;
+      timeZone?: unknown;
+    };
+    const timeZone =
+      typeof body.timeZone === "string" && body.timeZone.trim()
+        ? body.timeZone.trim()
+        : DEFAULT_TIME_ZONE;
+    const today = isIsoDate(body.date)
+      ? body.date
+      : formatDateInTimeZone(new Date(), timeZone);
 
     const [blocks, goals] = await Promise.all([
       materializeBlockInstances(supabase, today),

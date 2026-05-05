@@ -474,7 +474,12 @@ const Terminal: React.FC = () => {
     const runCron = async () => {
       if (ranToday) return;
       try {
-        await supabase.functions.invoke("operator-cron", { body: {} });
+        await supabase.functions.invoke("operator-cron", {
+          body: {
+            date: today,
+            timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          },
+        });
         localStorage.setItem("noctisium:cron:date", today);
       } catch (err) {
         console.warn("operator-cron invoke failed:", err);
