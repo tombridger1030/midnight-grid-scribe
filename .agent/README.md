@@ -28,7 +28,7 @@ A private platform that tracks how the operator **works**, **sleeps**, and **thi
   - `routine` (Wakeup, Walk, Meal, BJJ, Shake+Walk, etc.): Y/N toggle, no time tracking, revertible. No LLM judgment.
   - `note` (Read, CEO Interview): clock in/out + free-text notes, no LLM judgment.
   - `judged` (Cortal Block I/II/III, Workout, Study): clock in/out + results text → `flow-judge` edge fn emits `quality_score` (0-100) + one-line verdict via Sonnet 4.6 tool_use.
-  - `started_at` and `ended_at` are inline-editable on judged/note rows for late clock-ins or forgotten clock-outs.
+  - `started_at` and `ended_at` are inline-editable on judged/note rows for late clock-ins or forgotten clock-outs. Terminal home (`/`) gates this to today only; for any past date, click the row in `/log` to open DAY DETAIL — the BLOCKS section there exposes the same time + results editors plus a per-block `JUDGE` button. If the past date has no `block_instances` (you didn't open the app that day), the modal auto-materializes them from the current schedule template (idempotent via `materializeForDate`).
 - **Daily flow score**: 0-100 + one-line verdict, emitted by `flow-judge` edge function.
 - **Monthly goals**: binary hit/missed end-of-month, naive on-track/at-risk heuristic during the month.
 

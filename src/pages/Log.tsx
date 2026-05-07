@@ -18,7 +18,12 @@ import {
   getFlowRange,
   scoreToday,
 } from "@/lib/dailyFlowService";
-import { type BlockInstanceWithLabel, listForDate } from "@/lib/blockService";
+import {
+  type BlockInstanceWithLabel,
+  listForDate,
+  materializeForDate,
+} from "@/lib/blockService";
+import { BlockEditorRow } from "@/components/BlockEditorRow";
 import {
   type OperatorSettings,
   getOperatorSettings,
@@ -160,8 +165,25 @@ function DayEditorModal({
     setBlocks(b);
   };
 
+  // First load for a date: if no block_instances exist (user didn't open
+  // the app that day), materialize from the current schedule so they have
+  // rows to retroactively edit. Idempotent — safe if rows already exist.
   useEffect(() => {
-    refresh();
+    let cancelled = false;
+    (async () => {
+      const initial = await listForDate(date).catch(
+        () => [] as BlockInstanceWithLabel[],
+      );
+      if (initial.length === 0) {
+        await materializeForDate(date).catch((err) =>
+          console.warn("materializeForDate failed:", err),
+        );
+      }
+      if (!cancelled) await refresh();
+    })();
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date]);
 
@@ -289,52 +311,35 @@ function DayEditorModal({
           {error && <div className={`text-xs ${ACCENT.red} mt-2`}>{error}</div>}
         </div>
 
-        <div className={`text-xs ${ACCENT.muted} mb-1`}>JOURNAL</div>
-        <div className="border border-[#222] p-3 mb-4 max-h-72 overflow-y-auto">
-          {(() => {
-            const entries = blocks.filter((b) => (b.results_text ?? "").trim());
-            if (entries.length === 0) {
-              return (
-                <div className={`text-xs ${ACCENT.dim}`}>
-                  no clock-out notes for this day
-                </div>
-              );
-            }
-            return (
-              <div className="space-y-3 text-xs">
-                {entries.map((b) => {
-                  const t = b.started_at
-                    ? `${String(new Date(b.started_at).getHours()).padStart(2, "0")}:${String(new Date(b.started_at).getMinutes()).padStart(2, "0")}`
-                    : "--:--";
-                  return (
-                    <div key={b.id}>
-                      <div className={ACCENT.muted}>
-                        <span className="text-white tabular-nums">{t}</span>
-                        {" · "}
-                        <span className={ACCENT.cyan}>
-                          {b.label.toUpperCase()}
-                        </span>
-                        {b.kind === "judged" && b.quality_score !== null && (
-                          <span className="text-white">
-                            {" · "}
-                            {b.quality_score}
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-white whitespace-pre-wrap mt-0.5">
-                        {b.results_text}
-                      </div>
-                      {b.kind === "judged" && b.quality_verdict && (
-                        <div className={`${ACCENT.dim} mt-0.5`}>
-                          ↳ {b.quality_verdict}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            );
-          })()}
+        <div className={`text-xs ${ACCENT.muted} mb-1`}>BLOCKS</div>
+        <div className="border border-[#222] p-3 mb-4 max-h-96 overflow-y-auto">
+          {blocks.length === 0 ? (
+            <div className={`text-xs ${ACCENT.dim}`}>
+              no blocks scheduled for this day
+            </div>
+          ) : (
+            <div className="space-y-3 text-xs">
+              {blocks
+                .slice()
+                .sort((a, b) => {
+                  const at = a.start_time ?? a.started_at ?? "99:99";
+                  const bt = b.start_time ?? b.started_at ?? "99:99";
+                  return at.localeCompare(bt);
+                })
+                .map((b) => (
+                  <BlockEditorRow
+                    key={b.id}
+                    block={b}
+                    date={date}
+                    onChange={refresh}
+                  />
+                ))}
+            </div>
+          )}
+        </div>
+        <div className={`text-[10px] ${ACCENT.dim} mb-2`}>
+          blocks materialized from current schedule · if your schedule has
+          changed, older days reflect today's template
         </div>
 
         <div className={`text-xs ${ACCENT.dim}`}>

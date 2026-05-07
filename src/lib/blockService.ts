@@ -215,3 +215,95 @@ export function findActiveBlock(
 ): BlockInstanceWithLabel | null {
   return blocks.find((b) => b.status === "active") ?? null;
 }
+
+/**
+ * Idempotently materialize block_instances for any past or current date.
+ *
+ * Wraps the operator-cron edge function. Used by /log retro editor when the
+ * user opens a day they didn't open the app on — no rows exist yet, so the
+ * UI calls this to create them from the current schedule_blocks template.
+ *
+ * Pre:  date matches /^\d{4}-\d{2}-\d{2}$/; user is authenticated.
+ * Post: For every active schedule_blocks row whose days_of_week includes
+ *       date's weekday, exactly one block_instances row exists for
+ *       (user_id, block_id, date). Existing rows untouched (idempotent).
+ *
+ * Caveat: schedule_blocks is not versioned. Materializing a date from weeks
+ * ago uses the *current* schedule template, not the one that was active on
+ * that date. UI surfaces this caveat to the user.
+ */
+export async function materializeForDate(date: string): Promise<void> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    throw new Error(`materializeForDate: invalid date "${date}"`);
+  }
+  const { error } = await supabase.functions.invoke("operator-cron", {
+    body: {
+      date,
+      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    },
+  });
+  if (error) throw error;
+}
+
+/**
+ * Edit results_text retroactively without touching times. For when you
+ * forgot to clock out and want to backfill what you actually did.
+ *
+ * Pre:  kind !== 'routine' (routine blocks have no results_text — throws).
+ * Post: results_text = trim(text). If status was 'pending', it becomes
+ *       'captured'. Other statuses unchanged. started_at and ended_at
+ *       are NOT modified.
+ *
+ * Empty/whitespace-only text clears the field (results_text = null) and
+ * does not advance status.
+ */
+export async function setResultsText(
+  blockInstanceId: string,
+  kind: BlockKind,
+  text: string,
+): Promise<void> {
+  if (kind === "routine") {
+    throw new Error("setResultsText: routine blocks have no results_text");
+  }
+  const trimmed = text.trim();
+  const value = trimmed.length === 0 ? null : trimmed;
+
+  const { data: existing, error: readError } = await supabase
+    .from("block_instances")
+    .select("status")
+    .eq("id", blockInstanceId)
+    .single();
+  if (readError) throw readError;
+
+  const update: { results_text: string | null; status?: BlockStatus } = {
+    results_text: value,
+  };
+  if (value !== null && existing.status === "pending") {
+    update.status = "captured";
+  }
+
+  const { error } = await supabase
+    .from("block_instances")
+    .update(update)
+    .eq("id", blockInstanceId);
+  if (error) throw error;
+}
+
+/**
+ * Re-invoke flow-judge on a single judged block to (re)compute its
+ * quality_score and quality_verdict. Used after retroactive time/text
+ * edits when the existing summary no longer reflects the block.
+ *
+ * Pre:  block has kind='judged' and non-null results_text.
+ * Post: quality_score and quality_verdict populated. Other fields
+ *       (times, results_text, status) untouched.
+ *
+ * Errors from flow-judge propagate — caller decides UI feedback. Service
+ * does not swallow.
+ */
+export async function judgeBlock(blockInstanceId: string): Promise<void> {
+  const { error } = await supabase.functions.invoke("flow-judge", {
+    body: { action: "judge_block", block_id: blockInstanceId },
+  });
+  if (error) throw error;
+}
